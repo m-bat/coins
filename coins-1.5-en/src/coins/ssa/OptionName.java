@@ -10,7 +10,8 @@ package coins.ssa;
  **/
 public class OptionName{
 
-  public static final String PRINTFLOW = "printflow";
+	public static final String PRINTFLOW = "printflow";
+	public static final String PEEPHOLE = "peephole";	
   /** The name of the option for SSA **/
   public static final String SSA_OPT="ssa-opt";
   
@@ -127,6 +128,7 @@ public class OptionName{
   public static final int BOTH = 5;
   
   public static int typeOf(String name){
+	  if (name == PEEPHOLE) return NON_SSA;
 	  if (name == PRINTFLOW) return NON_SSA;
 	  if (name == MINI) return TO_SSA;
 	  if (name == SEMI) return TO_SSA;

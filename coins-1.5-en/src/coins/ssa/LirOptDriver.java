@@ -235,6 +235,9 @@ public class LirOptDriver  implements LocalTransformer{
 		else if (name == OptionName.PRINTFLOW) {
 			lt = new PrintFlow(env, sstab);
 		}
+		else if (name == OptionName.PEEPHOLE) {
+			lt = new PeepHole(env, sstab); 
+		}
 	    else if(name == OptionName.SEMI){ // semi-pruned
 	      boolean folding=!env.opt.isSet(OptionName.SSA_NO_COPY_FOLDING);
 	      lt=new TranslateToSsa(env,sstab,TranslateToSsa.SEMI_PRUNED,folding);

@@ -1,0 +1,11 @@
+int x;
+int main()
+{
+	int y;
+
+	x = 1;
+	y = x + 2;
+	printf("%d", y);
+}
+
+	

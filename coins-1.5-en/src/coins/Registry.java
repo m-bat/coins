@@ -322,6 +322,7 @@ public static final String
   "preqp", // Global Value Numbering and Partial Redundancy Elimination
            // with Efficient Question Propagation
   "printflow", //Print a control flow graph
+  "peephole", 
   "prun",  // Translation to Pruned SSA form (recommended for optimization)
   "rpe",   // Redundant Phi-function Elimination
   "semi",  // Translation to Semi-Pruned SSA form

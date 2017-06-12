@@ -1,0 +1,632 @@
+<?xml version="1.0" encoding="utf-8"?>
+<program name="coins snapsnot"
+         xmlns="coins"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="coins ./coins.xsd">
+  <module name="Generated HIR" src="/Users/sugimotomanabu/coins/coins-1.5-en/test.c">
+    <function name="main" line="0">
+      <graph displayName="Control Flow Graph">
+        <node>
+          <id displayName="_lab1">
+            <elem>_lab1</elem>
+          </id>
+          <statement>
+            <hir>
+              <exp>labeldSt 5 void</exp>
+              <exp line="6">(assign &lt;var x&gt;&lt;const 1&gt;)</exp>
+              <exp line="7">(assign &lt;var y&gt;(add &lt;var x&gt;&lt;const 2&gt;))</exp>
+              <exp line="8">(expStmt (call (addr &lt;subp printf&gt;)(list (decay &lt;const "%d"&gt;)&lt;var y&gt;)))</exp>
+            </hir>
+          </statement>
+          <info>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Dominator Tree">
+        <node>
+          <id displayName="_lab1">
+            <elem>_lab1</elem>
+          </id>
+          <statement>
+            <hir>
+              <exp>labeldSt 5 void</exp>
+              <exp line="6">(assign &lt;var x&gt;&lt;const 1&gt;)</exp>
+              <exp line="7">(assign &lt;var y&gt;(add &lt;var x&gt;&lt;const 2&gt;))</exp>
+              <exp line="8">(expStmt (call (addr &lt;subp printf&gt;)(list (decay &lt;const "%d"&gt;)&lt;var y&gt;)))</exp>
+            </hir>
+          </statement>
+          <info>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Postdominator Tree">
+        <node>
+          <id displayName="_lab1">
+            <elem>_lab1</elem>
+          </id>
+          <statement>
+            <hir>
+              <exp>labeldSt 5 void</exp>
+              <exp line="6">(assign &lt;var x&gt;&lt;const 1&gt;)</exp>
+              <exp line="7">(assign &lt;var y&gt;(add &lt;var x&gt;&lt;const 2&gt;))</exp>
+              <exp line="8">(expStmt (call (addr &lt;subp printf&gt;)(list (decay &lt;const "%d"&gt;)&lt;var y&gt;)))</exp>
+            </hir>
+          </statement>
+          <info>
+          </info>
+        </node>
+      </graph>
+    </function>
+  </module>
+  <module name="Optimized HIR" src="/Users/sugimotomanabu/coins/coins-1.5-en/test.c">
+    <function name="main" line="0">
+      <graph displayName="Control Flow Graph">
+        <node>
+          <id displayName="_lab1">
+            <elem>_lab1</elem>
+          </id>
+          <statement>
+            <hir>
+              <exp>labeldSt 5 void</exp>
+              <exp line="6">(assign &lt;var x&gt;&lt;const 1&gt;)</exp>
+              <exp line="7">(assign &lt;var y&gt;(add &lt;var x&gt;&lt;const 2&gt;))</exp>
+              <exp line="8">(expStmt (call (addr &lt;subp printf&gt;)(list (decay &lt;const "%d"&gt;)&lt;var y&gt;)))</exp>
+            </hir>
+          </statement>
+          <info>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Dominator Tree">
+        <node>
+          <id displayName="_lab1">
+            <elem>_lab1</elem>
+          </id>
+          <statement>
+            <hir>
+              <exp>labeldSt 5 void</exp>
+              <exp line="6">(assign &lt;var x&gt;&lt;const 1&gt;)</exp>
+              <exp line="7">(assign &lt;var y&gt;(add &lt;var x&gt;&lt;const 2&gt;))</exp>
+              <exp line="8">(expStmt (call (addr &lt;subp printf&gt;)(list (decay &lt;const "%d"&gt;)&lt;var y&gt;)))</exp>
+            </hir>
+          </statement>
+          <info>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Postdominator Tree">
+        <node>
+          <id displayName="_lab1">
+            <elem>_lab1</elem>
+          </id>
+          <statement>
+            <hir>
+              <exp>labeldSt 5 void</exp>
+              <exp line="6">(assign &lt;var x&gt;&lt;const 1&gt;)</exp>
+              <exp line="7">(assign &lt;var y&gt;(add &lt;var x&gt;&lt;const 2&gt;))</exp>
+              <exp line="8">(expStmt (call (addr &lt;subp printf&gt;)(list (decay &lt;const "%d"&gt;)&lt;var y&gt;)))</exp>
+            </hir>
+          </statement>
+          <info>
+          </info>
+        </node>
+      </graph>
+    </function>
+  </module>
+  <module name="Generated LIR" src="/Users/sugimotomanabu/coins/coins-1.5-en/test.c">
+    <function name="main" line="0">
+      <graph displayName="Control Flow Graph">
+        <node>
+          <id displayName=".L1">
+            <elem>.L1</elem>
+          </id>
+          <next displayName="Successors">
+            <elem>.L2</elem>
+          </next>
+          <statement>
+            <lir>
+              <exp>(PROLOGUE (0 0))</exp>
+              <exp>(JUMP (LABEL I64 ".L2"))</exp>
+            </lir>
+            <lir2c>
+              <exp>goto _L2</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L2</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L2">
+            <elem>.L2</elem>
+          </id>
+          <next displayName="Successors">
+            <elem>.L3</elem>
+          </next>
+          <prev displayName="Predecessors">
+            <elem>.L1</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(SET I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "y.1%") (ADD I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 2)))</exp>
+              <exp>(CALL (STATIC I64 "printf") ((STATIC I64 "string.4") (REG I32 "y.1%")) ((REG I32 "functionvalue.3%")))</exp>
+              <exp>(JUMP (LABEL I64 ".L3"))</exp>
+            </lir>
+            <lir2c>
+              <exp>((int)(*(((int *)(unsigned char *)&amp;(x))))) = ((int)( 1))</exp>
+              <exp>y_1_ = ((int)(((int)(((int)(*(((int *)(unsigned char *)&amp;(x))))) +  2))))</exp>
+              <exp>functionvalue_3_ = printf((unsigned char *)&amp;(string_4), y_1_)</exp>
+              <exp>goto _L3</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Predecessors">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L1</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L3">
+            <elem>.L3</elem>
+          </id>
+          <prev displayName="Predecessors">
+            <elem>.L2</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(EPILOGUE (0 0))</exp>
+            </lir>
+            <lir2c>
+              <exp>return</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Predecessors">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L2</elem>
+            </labelList>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Dominator Tree">
+        <node>
+          <id displayName=".L1">
+            <elem>.L1</elem>
+          </id>
+          <next displayName="Dominated Children">
+            <elem>.L2</elem>
+          </next>
+          <statement>
+            <lir>
+              <exp>(PROLOGUE (0 0))</exp>
+              <exp>(JUMP (LABEL I64 ".L2"))</exp>
+            </lir>
+            <lir2c>
+              <exp>goto _L2</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L2</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L2">
+            <elem>.L2</elem>
+          </id>
+          <next displayName="Dominated Children">
+            <elem>.L3</elem>
+          </next>
+          <prev displayName="Immediate Dominator">
+            <elem>.L1</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(SET I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "y.1%") (ADD I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 2)))</exp>
+              <exp>(CALL (STATIC I64 "printf") ((STATIC I64 "string.4") (REG I32 "y.1%")) ((REG I32 "functionvalue.3%")))</exp>
+              <exp>(JUMP (LABEL I64 ".L3"))</exp>
+            </lir>
+            <lir2c>
+              <exp>((int)(*(((int *)(unsigned char *)&amp;(x))))) = ((int)( 1))</exp>
+              <exp>y_1_ = ((int)(((int)(((int)(*(((int *)(unsigned char *)&amp;(x))))) +  2))))</exp>
+              <exp>functionvalue_3_ = printf((unsigned char *)&amp;(string_4), y_1_)</exp>
+              <exp>goto _L3</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Predecessors">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L1</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L3">
+            <elem>.L3</elem>
+          </id>
+          <prev displayName="Immediate Dominator">
+            <elem>.L2</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(EPILOGUE (0 0))</exp>
+            </lir>
+            <lir2c>
+              <exp>return</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Predecessors">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L2</elem>
+            </labelList>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Postdominator Tree">
+        <node>
+          <id displayName=".L1">
+            <elem>.L1</elem>
+          </id>
+          <prev displayName="Immediate Postdominator">
+            <elem>.L2</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(PROLOGUE (0 0))</exp>
+              <exp>(JUMP (LABEL I64 ".L2"))</exp>
+            </lir>
+            <lir2c>
+              <exp>goto _L2</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L2</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L2">
+            <elem>.L2</elem>
+          </id>
+          <next displayName="Postdominated Children">
+            <elem>.L1</elem>
+          </next>
+          <prev displayName="Immediate Postdominator">
+            <elem>.L3</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(SET I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "y.1%") (ADD I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 2)))</exp>
+              <exp>(CALL (STATIC I64 "printf") ((STATIC I64 "string.4") (REG I32 "y.1%")) ((REG I32 "functionvalue.3%")))</exp>
+              <exp>(JUMP (LABEL I64 ".L3"))</exp>
+            </lir>
+            <lir2c>
+              <exp>((int)(*(((int *)(unsigned char *)&amp;(x))))) = ((int)( 1))</exp>
+              <exp>y_1_ = ((int)(((int)(((int)(*(((int *)(unsigned char *)&amp;(x))))) +  2))))</exp>
+              <exp>functionvalue_3_ = printf((unsigned char *)&amp;(string_4), y_1_)</exp>
+              <exp>goto _L3</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Predecessors">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L1</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L3">
+            <elem>.L3</elem>
+          </id>
+          <next displayName="Postdominated Children">
+            <elem>.L2</elem>
+          </next>
+          <statement>
+            <lir>
+              <exp>(EPILOGUE (0 0))</exp>
+            </lir>
+            <lir2c>
+              <exp>return</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Predecessors">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L2</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L2</elem>
+            </labelList>
+          </info>
+        </node>
+      </graph>
+    </function>
+  </module>
+  <module name="Optimized LIR" src="/Users/sugimotomanabu/coins/coins-1.5-en/test.c">
+    <function name="main" line="0">
+      <graph displayName="Control Flow Graph">
+        <node>
+          <id displayName=".L1">
+            <elem>.L1</elem>
+          </id>
+          <next displayName="Successors">
+            <elem>.L3</elem>
+          </next>
+          <statement>
+            <lir>
+              <exp>(PROLOGUE (0 0))</exp>
+              <exp>(SET I32 (REG I32 "_divexI32_0") (INTCONST I32 1))</exp>
+              <exp>(SET I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "_divexI32_1") (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "y.1%") (INTCONST I32 3))</exp>
+              <exp>(CALL (STATIC I64 "printf") ((STATIC I64 "string.4") (INTCONST I32 3)) ((REG I32 "functionvalue.3%")))</exp>
+              <exp>(JUMP (LABEL I64 ".L3"))</exp>
+            </lir>
+            <lir2c>
+              <exp>_divexI32_0 = ((int)( 1))</exp>
+              <exp>((int)(*(((int *)(unsigned char *)&amp;(x))))) = ((int)( 1))</exp>
+              <exp>_divexI32_1 = ((int)( 1))</exp>
+              <exp>y_1_ = ((int)( 3))</exp>
+              <exp>functionvalue_3_ = printf((unsigned char *)&amp;(string_4),  3)</exp>
+              <exp>goto _L3</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L3</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L3">
+            <elem>.L3</elem>
+          </id>
+          <prev displayName="Predecessors">
+            <elem>.L1</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(EPILOGUE (0 0))</exp>
+            </lir>
+            <lir2c>
+              <exp>return</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Predecessors">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L1</elem>
+            </labelList>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Dominator Tree">
+        <node>
+          <id displayName=".L1">
+            <elem>.L1</elem>
+          </id>
+          <next displayName="Dominated Children">
+            <elem>.L3</elem>
+          </next>
+          <statement>
+            <lir>
+              <exp>(PROLOGUE (0 0))</exp>
+              <exp>(SET I32 (REG I32 "_divexI32_0") (INTCONST I32 1))</exp>
+              <exp>(SET I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "_divexI32_1") (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "y.1%") (INTCONST I32 3))</exp>
+              <exp>(CALL (STATIC I64 "printf") ((STATIC I64 "string.4") (INTCONST I32 3)) ((REG I32 "functionvalue.3%")))</exp>
+              <exp>(JUMP (LABEL I64 ".L3"))</exp>
+            </lir>
+            <lir2c>
+              <exp>_divexI32_0 = ((int)( 1))</exp>
+              <exp>((int)(*(((int *)(unsigned char *)&amp;(x))))) = ((int)( 1))</exp>
+              <exp>_divexI32_1 = ((int)( 1))</exp>
+              <exp>y_1_ = ((int)( 3))</exp>
+              <exp>functionvalue_3_ = printf((unsigned char *)&amp;(string_4),  3)</exp>
+              <exp>goto _L3</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L3</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L3">
+            <elem>.L3</elem>
+          </id>
+          <prev displayName="Immediate Dominator">
+            <elem>.L1</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(EPILOGUE (0 0))</exp>
+            </lir>
+            <lir2c>
+              <exp>return</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Predecessors">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L1</elem>
+            </labelList>
+          </info>
+        </node>
+      </graph>
+      <graph displayName="Postdominator Tree">
+        <node>
+          <id displayName=".L1">
+            <elem>.L1</elem>
+          </id>
+          <prev displayName="Immediate Postdominator">
+            <elem>.L3</elem>
+          </prev>
+          <statement>
+            <lir>
+              <exp>(PROLOGUE (0 0))</exp>
+              <exp>(SET I32 (REG I32 "_divexI32_0") (INTCONST I32 1))</exp>
+              <exp>(SET I32 (MEM I32 (STATIC I64 "x")) (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "_divexI32_1") (INTCONST I32 1))</exp>
+              <exp>(SET I32 (REG I32 "y.1%") (INTCONST I32 3))</exp>
+              <exp>(CALL (STATIC I64 "printf") ((STATIC I64 "string.4") (INTCONST I32 3)) ((REG I32 "functionvalue.3%")))</exp>
+              <exp>(JUMP (LABEL I64 ".L3"))</exp>
+            </lir>
+            <lir2c>
+              <exp>_divexI32_0 = ((int)( 1))</exp>
+              <exp>((int)(*(((int *)(unsigned char *)&amp;(x))))) = ((int)( 1))</exp>
+              <exp>_divexI32_1 = ((int)( 1))</exp>
+              <exp>y_1_ = ((int)( 3))</exp>
+              <exp>functionvalue_3_ = printf((unsigned char *)&amp;(string_4),  3)</exp>
+              <exp>goto _L3</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Successors">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Dominated Children">
+              <elem>.L3</elem>
+            </labelList>
+            <labelList displayName="Immediate Postdominator">
+              <elem>.L3</elem>
+            </labelList>
+          </info>
+        </node>
+        <node>
+          <id displayName=".L3">
+            <elem>.L3</elem>
+          </id>
+          <next displayName="Postdominated Children">
+            <elem>.L1</elem>
+          </next>
+          <statement>
+            <lir>
+              <exp>(EPILOGUE (0 0))</exp>
+            </lir>
+            <lir2c>
+              <exp>return</exp>
+            </lir2c>
+          </statement>
+          <info>
+            <labelList displayName="Predecessors">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Immediate Dominator">
+              <elem>.L1</elem>
+            </labelList>
+            <labelList displayName="Postdominated Children">
+              <elem>.L1</elem>
+            </labelList>
+          </info>
+        </node>
+      </graph>
+    </function>
+  </module>
+</program>
+
