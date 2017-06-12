@@ -1,0 +1,22 @@
+DOCDIR=$PWD/../docs1.2
+JAVA_PACKAGES='
+	java.awt 
+	java.awt.color 
+	java.awt.event 
+	java.awt.font 
+	java.awt.geom 
+	java.awt.image 
+	java.awt.image.renderable
+	java.io 
+	java.lang 
+	java.math 
+	java.net 
+	java.text 
+	java.util 
+	javax.swing 
+'
+JAVA_PACKAGES=
+/bin/rm -f $DOCDIR/*.html
+javadoc -version -author -sourcepath $PWD/$JDK:$JAVAHOME/src:$JAVACUP -d $DOCDIR -use -splitIndex -windowtitle "Grappa 1.2" -doctitle "Grappa 1.2" -bottom "Grappa 1.2" -J-Xmx128m $JAVA_PACKAGES att.grappa java_cup.runtime 
+#javadoc -sourcepath $PWD/$JDK:$JAVAHOME/src:$JAVACUP -d $PWD/../docs att.grappa 
+exit 0

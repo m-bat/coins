@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>
+
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>Performance of COINS compilers</title>
+
+  </head>
+  <body>
+	<h1>12. Performance of COINS compilers</h1>
+<p>    
+COINS supports a wide range of optimizations such as SSA based optimizations and conventional optimizations based on data-flow analysis.
+These optimizations are selectable by the compiler optins.
+The backend process of COINS also has several basic optimization
+processes such as register allocation, jump optimization, constant
+foldings. These optimizations are always applied by default.
+<p>
+The relative execution times of
+the SPEC benchmarks are shown in Fig.12-1.
+<center>
+<img src="speed1.en.jpg" alt="speed1.en.jpg"><br>
+<font size=3>Fig.12-1 Relative excecution time of SPEC benchmark</font><p>
+</center>
+In this figure, "COINS O0" means "COINS compiler: no optimization selected (only backend optimizations)", and "gcc O2" means "gcc compiler: with 
+compiler option -O2". The target machine is x86 (Pentium 4).
+<p>
+This figure shows the good performance of the backend optimizations.
+<p>
+The effects of SSA optimizations and some added optimizations are
+shown in Fig.12-2.
+<center>
+<img src="speed2.en.jpg" alt="speed2.en.jpg"><br>
+<font size=3>Fig.12-2 Result of optimizations</font><p>
+</center>
+In this figure, the execution times of small programs are compared, where:
+<pre><tt>isort:   insertion sort
+ssort:   selection sort
+heap:    heap sort
+shell:   shell sort
+queen:   8-queen
+soukan:  correlation coefficient
+komachi: "komachi" calculation
+prime:   prime number
+matmult: matrix multiplication
+
+COINS 0:  COINS C compiler, no optimization selected
+COINS 1:  COINS C compiler, with compiler options
+            -coins:ssa-opt=prun/divex/cse/cstp/hli/osr/hli/cstp/cpyp/preqp/cstp/rpe/dce/srd3
+COINS 2: COINS C compiler, with compiler options
+            -coins:ssa-opt=prun/divex/cse/cstp/hli/osr/hli/cstp/cpyp/preqp/cstp/rpe/dce/srd3,
+             attach=coins.backend.sched.Schedule,schedule,pipelining,attach=Regromote,regpromote
+gcc O2:     gcc compiler, with compiler options "-O2"
+gcc O3:     gcc compiler, with compiler options "-O3"
+
+target machine:  SPARC (Sun Blade 1000)</tt>
+</pre>
+"schedule"  means instruction scheduling (with "nop"-instruction elimination, in case of SPARC), 
+"pipelining" means software pipelining, and "regpromote" means register promotion of static variables.
+See <a href='../backend/backend-frame.html' target="_top">11. Structure and Extensions of the Backend Process</a>
+for these optimizations.
+These are the added optimizations using the hook features of the backend process.
+
+  </body>
+</html>

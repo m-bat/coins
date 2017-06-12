@@ -1,0 +1,1490 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>Optimization for HIR</title>
+
+  </head>
+  <body>
+	<h1>5. Optimization for HIR</h1>
+    
+	<h2>Contents</h2>
+<ul>
+<li><a href='#i-5-1'>5.1. Overview of HIR Optimization</a></li>
+<li><a href='#i-5-2'>5.2. HIR Basic Optimization</a></li>
+<ul>
+<li><a href='#i-5-2-1'>5.2.1. Overview of basic optimization</a></li>
+<li><a href='#i-5-2-2'>5.2.2. Optimizers for basic optimization</a></li>
+<ul>
+<li><a href='#i-5-2-2-1'>5.2.2.1. Constant folding</a></li>
+<li><a href='#i-5-2-2-2'>5.2.2.2. Constant propagation and folding</a></li>
+<li><a href='#i-5-2-2-3'>5.2.2.3. Dead code elimination</a></li>
+<li><a href='#i-5-2-2-4'>5.2.2.4. Local common subexpression elimination</a></li>
+<li><a href='#i-5-2-2-5'>5.2.2.5. Global variable temporalization</a></li>
+</ul>
+<li><a href='#i-5-2-3'>5.2.3. Invocation of basic optimizers from your code</a></li>
+</ul>
+<li><a href='#i-5-3'>5.3. HIR Advanced Optimization</a></li>
+<ul>
+<li><a href='#i-5-3-1'>5.3.1. Overview of advanced optimization</a></li>
+<li><a href='#i-5-3-2'>5.3.2. Optimizers for advanced optimization</a></li>
+<ul>
+<li><a href='#i-5-3-2-1'>5.3.2.1. Loop expansion</a></li>
+<li><a href='#i-5-3-2-2'>5.3.2.2. Loop-if expansion</a></li>
+<li><a href='#i-5-3-2-3'>5.3.2.3. Inline expansion</a></li>
+<li><a href='#i-5-3-2-4'>5.3.2.4. Partial redundancy elimination</a></li>
+</ul>
+</ul>
+<li><a href='#i-5-4'>5.4. Optimization in C-front</a></li>
+<li><a href='#i-5-5'>5.5. HIR Flow Analysis</a></li>
+<ul>
+<li><a href='#i-5-5-1'>5.5.1. Overview of flow analysis</a></li>
+<li><a href='#i-5-5-2'>5.5.2. Flow analysis by coins.flow</a></li>
+<ul>
+<li><a href='#i-5-5-2-1'>5.5.2.1. Control flow analysis</a></li>
+<li><a href='#i-5-5-2-2'>5.5.2.2. Data flow analysis</a></li>
+<li><a href='#i-5-5-2-3'>5.5.2.3. Basic data flow information</a></li>
+<li><a href='#i-5-5-2-4'>5.5.2.4. Data structure</a></li>
+<li><a href='#i-5-5-2-5'>5.5.2.5. Usage</a></li>
+<li><a href='#i-5-5-2-6'>5.5.2.6. How to extend flow analysis</a></li>
+</ul>
+<li><a href='#i-5-5-3'>5.5.3. Flow analysis by coins.aflow</a></li>
+<ul>
+<li><a href='#i-5-5-3-1'>5.5.3.1. Flow information</a></li>
+<li><a href='#i-5-5-3-2'>5.5.3.2. How to use in your code</a></li>
+<li><a href='#i-5-5-3-3'>5.5.3.3. From command line</a></li>
+</ul>
+</ul>
+<li><a href='#i-5-6'>5.6. HIR Alias Analysis</a></li>
+<ul>
+<li><a href='#i-5-6-1'>5.6.1. Overview of alias analysis</a></li>
+<li><a href='#i-5-6-2'>5.6.2. How to use</a></li>
+</ul>
+<li><a href='#i-5-7'>5.7. References</a></li>
+</ul>
+</ul>
+
+<h3 id='i-5-1'>5.1. Overview of HIR Optimization</h3>    
+
+HIR optimizers transform HIR subtree of subprogram to more efficient subtree
+in some viewpoint. They are invoked by a compiler command of the form
+<pre>
+    java coins.driver.Driver -coins:hirOpt=hiroptspec/hiroptspec/...
+</pre>
+where each of hiroptspec specifies some optimizing option such as 
+cf for constant folding, cpf for constant propagation, cse for local common 
+subexpression elimination, etc. <br>
+Multiple option arguments are supported, and can be consolidated 
+using `/' as the separator.
+<pre>  
+    ex. java coins.Driver -S -coins:hirOpt=cf/cpf
+</pre>
+The order of the optimizations is approximately the same to the order
+of the optimization specifications by the command line, but in some 
+cases, some optimization may be inserted to make ready to apply another
+specified optimization, or neglected when the effect of the optimization
+is covered by another optimization specified. For example, by the command
+<pre>
+     java coins.Driver -S -coins:hirOpt=cf/cpf
+</pre>
+constant folding is done at first and then constant propagation and folding.<br>
+
+The HIR optimizers are invoked for each subprogram in approximately 
+the same order as it is specified in the command line. In some case,
+a preparatory optimizer may be automatically inserted, and in other case, 
+some optimizer will be neglected when its effect is already covered by 
+other optimizer. For example, by a command
+<pre>
+     java coins.Driver -S -coins:hirOpt=pre
+</pre>
+common subexpression elimination within basic blocks is automatically
+inserted. As another example, by a command 
+<pre>
+     java coins.Driver -S -coins:hirOpt=pre/cse
+</pre>
+cse is negrected because pre will cover the effect of cse.<br>
+Some option may have sub-option xx in the form opt1.xx. For example, 
+loopexp.4 means loop expansion up to 4 times as it is explained later.<br>
+The invocation of HIR optimizers is controlled by coins.opt.Opt.java. 
+You can add a new HIR optimizer or change the way of control by defining 
+a subclass of Opt with doHir() method of your own.<br>
+All HIR optimizers require control flow analysis of subprogram. Some
+HIR optimizers require data flow analysis and the data flow analysis
+requires alias analysis. Such relation of prerequisite processes is
+automatically solved by specifying final solution required.<br>
+There are basic optimization and advanced optimization. Optimizers in
+the basic optimization does addition, deletion, and modification of
+statements and expressions within basic blocks but does not change 
+the control flow structure of subprogram, and so, basic blocks are 
+not deleted even when no executable statement is left in them. <br>
+Another optimization is "fromc" optimization performed in the process of 
+C to HIR transformation. It is invoked by
+<br>
+    java coins.driver.Driver -coins:hirOpt=fromc
+</br>
+It is not treated by coins.opt.Opt but treated by C-front.<br>
+
+ 
+<h3 id='i-5-2'>5.2. HIR Basic Optimization</h3>    
+
+<h4 id='i-5-2-1'>5.2.1. Overview of basic optimization</h4>
+
+Following optimizers are provided for the basic optimization.
+<pre>
+    cf    // constant folding
+    cpf   // constant propagation and folding triggered by the propagation
+    cse   // common subexpression elimination within basic blocks
+    dce   // dead code elimination
+    gt    // global variable temporalization within basic block
+</pre>
+The optimizers cf and gt do not require data flow analysis, however,
+cpf, cse, dce require some result of data flow analysis.
+
+<h4 id='i-5-2-2'>5.2.2. Optimizers for the basic optimization</h4>
+
+<h5 id='i-5-2-2-1'>5.2.2.1. Constant folding (hirOpt=cf)</h5>
+
+If all operands of an expression are constant, then the expression is 
+replaced with a constant obtained by evaluating the expression when the 
+value of the expression can be computed at compile time. If such 
+replacement makes surrounding expression to be computable at compile time 
+then the surrounding expression is replaced by a constant, and so on. 
+However, as for floating point expression, such replacement is done only 
+when the option hirOpt=evalFloat is specified, because there might be small 
+difference between compile time evaluation and execution time evaluation.
+
+<h5 id='i-5-2-2-2'>5.2.2.2. Constant propagation and folding (hirOpt=cpf)</h5>
+
+If a variable is assigned a constant, then the variable can be treated
+as a constant at a program point where the variable is used and no other
+definitions reach to the program point. The constant propagation and
+folding does such replacement of variable by constant if at the use point
+of the variable, there is only one reaching definition that assigns
+a constant to the variable. This replacement may triggers to another
+replacement if such variable is assigned to another variable. This
+optimization may be more effective when combined with constant folding
+in such way as
+<pre>
+    java cooins.driver.Driver -S -coins:hirOpt=cf/cpf
+</pre>
+
+<h5 id='i-5-2-2-3'>5.2.2.3. Dead code elimination (hirOpt=dce)</h5>
+
+If a variable is not used after an assignment statement, then the
+assignment statement can be deleted and such deletion may cause
+another dead code elimination.
+For example, when 
+<pre>
+    int main ()
+    {
+      int a, b, c, d, x;
+      a = 1;
+      b = 2;
+      c = a + b;
+      d = a + b;
+      if (a+1 < c-1)
+        x = a - b;
+      else
+        x = a + b;
+      printf("%dn",x); 
+    }
+</pre>
+is compiled by
+<pre>
+    java coins.driver.Driver -S -coins:hirOpt=cf/cpf/dce,hir2c=opt
+</pre>
+then following C program will be generated by converting resulting
+HIR to C by hir2c.
+<pre>
+    int main( )
+    {
+        int a;
+        int b;
+        int c;
+        int d;
+        int x;
+        a = (int )1;
+        b = (int )2;
+        if (((int )2) < ((int )2))
+        {
+            x = ((a) - (b));
+        }
+        else
+        {
+            x = ((a) + (b));
+        }
+        (&(printf))( (const char * )((("%dn"))),x);
+    }
+</pre>
+The statement
+<pre>
+    d = a + b;
+</pre>
+is eliminated as a dead code and condition expression is changed to
+an expression that can be evaluated as false at compile time.
+In the backend part of COINS, code sequence for only else-part 
+is generated for such if-statement as follows:
+<pre>
+         .global   main
+    main:
+         save    %sp,-96,%sp
+    .L18:
+         mov     1,%i1
+         mov     2,%i0
+    .L20:
+         add     %i1,%i0,%o1
+    .L21:
+         sethi   %hi(string.17),%o0
+         or      %o0,%lo(string.17),%o0
+         call     printf
+         nop
+    .L22:
+         ret
+         restore
+</pre>
+
+<h5 id='i-5-2-2-4'>5.2.2.4. Local common subexpression elimination (hirOpt=cse)</h5>
+
+If expression e1 is the same to expression e0 within a basic block and
+no operand of e1 is changed after the computation of e0, then the result
+of e0 is saved to a temporal variable and e1 is replaced by the temporal
+variable. Such expression is called a local common subexpression. 
+If the computation cost of e1 is small, then such replacement is not done 
+but e1 is re-computed. In this processing, the largest common 
+subexpression is replaced by a temporal variable and subexpressions
+contained in the expression are not replaced to minimize the replacement
+overhead. Compound variables such as array element and structure element
+are treated as expression and their use is replaced by a scalar temporal
+variable if no component of the compound variable are changed after
+the previous reference of the variable.
+
+<h5 id='i-5-2-2-5'>5.2.2.5. Global variable temporalization (hirOpt=gt)</h5>
+
+Global variables have less chance of register promotion (assignment
+of register to hold the value) because advanced alias analysis is
+required to promote it to register. The global variable temporalization
+changes uses of a global variable to temporal variable if the global
+variable is used in a basic block multiple times and satisfies
+following conditions:
+<li> The variable is not taken address </li>
+<li> It is neither structure element nor array element </li>
+<li> It has not volatile attribute</li>
+because temporal variables are more likely to be promoted to register
+and there are several machines where temporal variable access is
+more efficient than global variable access. <br>
+If the option
+<pre>
+    java -coins:regpromote
+</pre>
+is specified, it is not required to specify hirOpt=gt because 
+register promotion for global variables is done in the COINS backend.
+In many cases, regpromote option will produce more efficient code than
+hirOpt=gt option.
+
+<h4 id='i-5-2-3'>5.2.3. Invocation of basic optimizers from your code</h4>
+
+Basic optimizers may be called as pre-processing or post-processing 
+procedure of other optimizations. To invoke some basic optimizer,  
+instantiate an optimizer class and call the appropriate method
+corresponding to the optimizer.
+<pre>
+  ex. new ConstFolding(lResults).doSubp(lSubpFlow);
+</pre>
+The method will return a boolean value indicating whether the program has 
+been changed (optimized) as a result of the call to this optimizer method. 
+For more examples, see the basic optimizer driver class coins.opt.Opt.
+
+<h3 id='i-5-3'>5.3. HIR Advanced Optimization</h3>    
+
+<h4 id='i-5-3-1'>5.3.1. Overview of advanced optimization</h4>    
+
+Following optimizers are provided for the advanced optimization.
+<pre>
+    loopexp  // loop expansion
+    loopif   // loop-if expansion
+    inline   // inline expansion
+    pre      // partial redundancy elimination
+</pre>
+All of them may change the control flow structure of subprograms.
+The loopexp, loopif, and inline optimizer does not require data flow
+analysis. The pre optimizer requires data flow analysis.<br>
+They are invoked for each subprogram by following commands:
+<pre>
+    java coins.driver.Driver -S -coins:hirOpt=loopexp
+    java coins.driver.Driver -S -coins:hirOpt=loopif
+    java coins.driver.Driver -S -coins:hirOpt=inline
+    java coins.driver.Driver -S -coins:hirOpt=pre
+</pre>
+    
+<h4 id='i-5-3-2'>5.3.2. Optimizers for advanced optimization</h4>    
+
+<h5 id='i-5-3-2-1'>5.3.2.1. Loop expansion (hirOpt=loopexp)</h5>
+
+The loop expansion optimizer expand small for-loops several times to decrease
+loop overhead and to increase opportunities for other optimizations.
+The number of expansions of a loop is determined by the number of registers 
+of the target machine (getNumberOfGeneralRegisters() of MachineParam) and
+by HIR complexity of the body part of the loop. The maximal expansion
+number is
+<pre>
+    4 if number of registers N <= 16
+    8 if N > 16
+</pre>
+as default, but it can be changed by specifying expansion number as a
+sub-option in such way as
+<pre>
+    hirOpt=loopexp.6
+</pre>
+Following loops are not expanded:
+<pre>
+(1) Outer loop (not an inner-most loop)
+(2) Loop including subprogram call
+(3) Loop including volatile variable
+(4) Non-simple for-loop, that is, a loop having some of following 
+    characteristics
+      not a for-loop
+      start condition is null
+      start condition is not a simple arithmetic comparison expression
+        for loop control variable
+      loop control variable is changed in the loop body (not in loop step part)
+      complexity level of the loop body is large, that is,
+        if (((R <= 8)&&(E * N > 200))||
+            ((R <= 32)&&(E * N > 300))||
+            ((R >  32)&&(E * N > 600)))
+      is true, where,
+        R: number of general registers of the target machine.
+        E: expansion number
+        N: the number of executable operators and assign-operators
+</pre>
+Statements in the loop body may be changed if reordering does not affect
+execution results. For example, following loop
+<pre>
+    for (i = 0; i < 100; i++) {
+      sum1 = sum1 + i;
+      sum2 = sum2 + a[i];
+    }
+</pre>
+will be expanded as follows:
+<pre>
+    _var5 = 1*7;
+    _var7 = 1*8;
+    for (i = 0; i < 100 - _var5; i = i + _var7) {
+      sum1 = sum1 + i + i + 1 + i + 2 + i + 3 + i + 4 + i + 5
+        + i + 6 + i + 7;
+      sum2 = sum2 + a[i] + a[i+1] + a[i+2] + a[i+3]
+        + a[i+4] + a[i+5] + a[i+6] + a[i+7];
+    }
+    for (; i < 100; i = i + 1) {
+      sum1 = sum1 + i;
+      sum2 = sum2 + a[i];
+    }
+</pre>
+
+<h5 id='i-5-3-2-2'>5.3.2.2. Loop-if expansion (hirOpt=loopif)</h5>
+
+The loop-if expansion optimizer removes loop invariant if-condition within
+a loop by transforming the loop to an if-statement with true-case loop 
+statement in then-part and false-case loop statement in else-part.
+For example,
+<pre>
+    for (i = 0; i < pn; i++) {
+      lSum = lSum + pa[i];
+      if (pMode > 0)
+        lSum = lSum + i;
+      else
+        lSum = lSum + i * i;
+    }
+</pre>
+will be transformed as follows:
+<pre>
+    if (pMode > 0) {
+      for (i = 0; i < pn; i++) {
+        lSum = lSum + pa[i];
+        lSum = lSum + i;
+      }
+    }else {
+      for (i = 0; i < pn; i++) {
+        lSum = lSum + pa[i];
+        lSum = lSum + i * i;
+      }
+    }
+</pre>
+If hirOpt=loopif/loopexp is specified, then the resultant loops in 
+then-part and else-part will be expanded by the loop expansion optimizer.
+
+<h5 id='i-5-3-2-3'>5.3.2.3. Inline expansion (hirOpt=inline)</h5>
+
+The inline expansion optimizer expand a small subprogram by replacing 
+call-expression by the body part of the subprogram. Subprogram call having
+any of following characteristics are not expanded:
+<pre>
+(1) Complexity of subprogram body is large
+   Subprogram having more than 100 HIR nodes are not expanded.
+   This complexity threshold can be changed by sub-option; for example,
+     hirOpt=inline.200
+   will expand subprograms up to 200 HIR nodes. 
+(2) Call is included in conditional expression of if-statement,
+   loop-statement, or included in case-selection expression of switch-statement.
+(3) Subprogram whose definition is not given in the same compile unit.
+</pre>
+Subprograms called before giving its definition can be expanded. Recursive
+subprograms are also expanded up to 2 times. For example,
+<pre>
+    int fact(int p) {
+      if (p > 0)
+        return p * fact(p - 1);
+      else
+        return 1;
+    }
+</pre>
+will be expanded as follows:
+<pre>
+    int fact( int p ) {
+      int _var1, _var3, _var5, _var7, _var9, _var11;
+      if (p > 0) {
+        _var1 = p - 1;
+        if (_var1 > 0) {
+          _var5 = _var1 - 1;
+          if (_var5 > 0) {
+            _var7 = _var5 - 1;
+            if (_var7 >  0) {
+              _var9 = _var7 * fact(_var7 - 1);
+              goto _lab19;
+            }else {
+              _var9 = 1;
+              goto _lab19;
+            }
+          _lab19:;
+            _var11 = _var5 * _var9;
+            goto _lab22;
+          }else {
+            _var11 = 1;
+            goto _lab22;
+          }
+        _lab22:;
+          _var3 = _var1 * _var11;
+          goto _lab12;
+        }else {
+          _var3 = 1;
+          goto _lab12;
+        }
+       _lab12:;
+        return p * _var3;
+      }
+      else {
+        return 1;
+      }
+    }
+</pre>
+
+<h5 id='i-5-3-2-4'>5.3.2.4. Partial redundancy elimination (hirOpt=pre)</h5>
+
+Partial redundancy optimization is a powerful optimization method that does
+global common subexpression elimination and loop-invariant hoisting, etc. 
+by a single method. (See Morel and Renvoise[1], Muchnick[2], Nakata[3].)
+Current implementation is based on E-path_PRE formulated by Dhamdhere[4]
+as follows.<br>
+Symbols and equations according to the E-path_PRE:
+<pre>
+   locally available:  EGen (downward exposed)
+        After computation, operands are not changed.
+   available:  AvailIn
+   locally anticipable:  AntLoc (upward exposed)
+        Operands are not set in preceding operations
+        (before use) in a basic block.
+   safe:  Either anticipable or available.
+   e-path([b_i ... b_k]) = set of eliminatable computation e included
+        in b_k, i.e.
+        {e | e is locally available in b_i and locally anticipable in b_k } &
+        empty((b_i ... b_k)) &  // not computed in intermediate point
+        e is safe at exit of each node on the path [b_i ... b_k),
+</pre>
+where, b_i, ..., b_k are basic block i, ..., basic block k, respectively.
+e-path suffix is the maximal suffix of an E-path such that
+<pre>
+   AntIn * (not AvIn) = true for each node in it.
+</pre>
+Data flow properties are as follows:
+<pre>
+   Comp_i    : e is locally available in b_i
+   Antloc_i  : e is locally anticipable in b_i
+   Transp_i  : b_i does not contain definitions of e's operands
+   AvIn_i    : e is available at entry of b_i
+   AvOut_i   : e is available at exit  of b_i
+   AntIn_i   : e is anticipable at entry of b_i
+   AntOut_i  : e is anticipable at exit  of b_i
+   EpsIn_i   : entry of b_i is in an e-path suffix
+   EpsOut_i  : exit  of b_i is in an e-path suffix
+   Redund_i  : Occurrence of e in b_i is redundant
+   Insert_i  : Insert t_e := e in node b_i
+   Insert_i_j : Insert t_e := e along edge (b_i, b_j)
+   SaIn_i    : A Save must be inserted above the entry of b_i
+   SaOut_i   : A Save must be inserted above the exit  of b_i
+   Save_i    : e should be saved in t_e in node b_i
+</pre>
+where, t_e is a temporal variable to hold the value of e.<br>
+
+Data flow equations are as follows:
+<pre>
+   AvIn_i    = PAI_p (AvOut_p)
+   AvOut_i   = AvIn_i * Transp_i + Comp_i
+   AntIn_i   = AntOut_i * Transp_i + Antloc_i
+   AntOut_i  = PAI_s (AntIn_s)
+   EpsIn_i   = SIGMA_p (AvOut_p + EpsOut_p) * AntIn_i * (not AvIn_i)
+   EpsOut_i  = EpsIn_i * (not Antloc_i)
+   Redund_i  = (EpxIn_i + AvIn_i) * Antloc_i
+   Insert_i  = (not AvOut_i) * (not EpsOut_i) * PAI_s(EpsIn_s)
+   Insert_i_j = (not AvOut_i) * (not EpsOut_i) * (not Insert_i) * EpsIn_j
+   SaOut_i   = SIGMA_s (EpsIn_s + Redund_s + SaIn_s) * AvOut_i
+   SaIn_i    = SaOut_i * (not Comp_i)
+   Save_i    = SaOut_i * Comp_i * (not Redund_i * Transp_i)
+</pre>
+where, _s means successor and _p means predecessor. <br>
+ 
+Optimization using E-path_PRE is done by
+<pre>
+   Save the value of e: computation t_e is inserted before an
+   occurrence of e and the occurrence of e is replaced by t_e
+   (as indicated by Save_i).
+   Insert an evaluation of e: A computation t_e <- e is inserted
+   (as indicated by Insert_i and Insert_i_j).
+   Eliminate a redundant evaluation of e: An occurrence of e is
+   replaced by t_e (as indicated by Redund_i).
+</pre>
+
+Before doing partial redundancy elimination, critical edges[3] in control
+flow graph are removed by preparatory transformation phase (NormalizeHir). 
+A critical edge is an edge that goes from a basic block having multiple 
+successors to a basic block having multiple predecessors. For example,
+<pre>
+    switch (i) {
+    case 0:
+      s = 0;
+    case 1:
+      s = s + i;
+        ....
+    }
+</pre>
+will be changed by the preparatory transformation phase to
+<pre>
+    switch (i) {
+    case 0:
+      s = 0;
+      goto _lab11;
+    case 1:
+      { _lab11:;
+        s = s + i;
+      }
+      ......
+    }
+</pre>
+
+<h3 id='i-5-4'>5.4. Optimization in C-front (hirOpt=fromc)</h3>    
+
+Optimization in the process of C to HIR-base transformation is 
+performed by specifying coins option hirOpt=fromc in such way as
+<pre>
+    java coins.driver.Driver -S -coins:hirOpt=fromc xxx.c
+</pre>
+Most optimizations done by fromc specification are covered
+by other HIR and LIR optimizations. The effect of the optimization
+in C front is to make slim the HIR representation of source program
+so that succeeding processing will be simplified.
+
+<h3 id='i-5-5'>5.5. HIR Flow Analysis</h3>    
+ 
+<h4 id='i-5-5-1'>5.5.1. Overview of flow analysis</h4>
+
+In flow analysis, there are control flow analysis and data flow analysis.
+Certain flow analyses must be done in a specific order.
+For example, if Analysis C uses the result of B and B uses the result of A,
+Analysis A must be done first and then Analysis B, then Analysis C. 
+It will be a pain to dig into this kind of dependence if all the user want is
+the fruits, i.e. some results of C in the above example. 
+In COINS flow analysis scheme, as a piece of information supports the 
+automatic analysis mechanism, the user simply has to request it, e.g. C
+and the analysis A and B will be done automatically, and the information 
+requested will eventually be returned.<br>
+There are 2 versions of flow analysis modules.
+<pre>
+
+  coins.flow: Flow analysis used currently in all HIR optimizations
+     such as loopif/loopexp/inline/cf/cpf/cse/gt/pre.
+
+  coins.aflow: Old version flow analysis which is used currently in 
+     loop parallelizer, coarse grain parallelizing module (-coins:mdf).
+</pre>
+In building new modules, it is recommended to use coins.flow version
+because coins.aflow version may take long compile time and huge
+storage space for large subprograms.
+
+<h4 id='i-5-5-2'>5.5.2. Flow analysis by coins.flow </h4>
+
+<h5 id='i-5-5-2-1'>5.5.2.1. Control flow analysis</h5>
+
+The control flow analyzer computes
+<li> CFG (control flow graph) </li>
+<li> Dominance relations of basic blocks (BBlock)</li>
+for specified subprogram.<br>
+ 
+There are several symbols widely used in control/data flow analysis.
+<pre>
+  flowRoot: instance of FlowRoot (usually passed from Driver).
+  subpDefinition: instance for SubpDefinition representing
+      the HIR subtree of a subprogram.
+  subpFlow: instance of SubpFlow to represent control/data flow information
+      of specified subprogram.
+</pre>
+The instance of HirSubpFlowImpl is required to be made only once
+for each subprogram. All control flow information and data flow
+information are linked from this instance and if you renew the 
+instance, then all flow information previously computed will be reset. <br>
+The following statement makes an instance of SubpFlow 
+<pre>
+    coins.flow.SubpFlow lSubpFlow = new HirSubpFlowImpl(flowRoot, subpDefinition);
+</pre>
+and after executing it, the instance can be refered by
+<pre>
+    flowRoot.fSubpFlow
+</pre>
+
+To do control flow analysis, it is necessary to prepare for it by
+<pre>
+    flowRoot.flow.controlFlowAnal(lSubpFlow);
+</pre>
+After executing this statement, methods related to basic blocks such as 
+<pre>
+   cfgIterator(), getEntryBBlock(), getBBlockOfIR(ir.getIndex()), 
+   bblockSubtreeIterator(bblock), ...
+</pre>
+are made available. There are many other methods for control/data flow 
+analysis as they are shown in the interface coins.flow.SubpFlow. After executing 
+controlFlowAnal(lSubpFlow), methods of coins.flow.BBlock interface such as
+<pre>
+   getPredList(), getSuccList(), 
+   getImmediateDominator(), getPostDominatedChildren(), ...
+</pre>
+are made available. 
+
+To see the result of control flow analysis, the coding sequence
+<pre>
+    coins.flow.ShowControlFlow lShow = flowRoot.controlFlow.getShowControlFlow();
+    lShow.showAll();
+</pre>
+will print the result of control flow analysis.<br>
+<br>  
+The statement
+<pre>
+    flowRoot.flow.controlFlowAnal(lSubpFlow);
+</pre>
+resets previous control flow analysis information and begins to re-compute.
+If there is no change in HIR subtree of SubpDefinition instance, then it is
+not necessary to re-compute it. It is recommended to avoid it by
+following coding sequence:
+<pre>
+    if (flowRoot.flow.getFlowAnalStateLevel() <
+        coins.flow.Flow.STATE_CFG_AVAILABLE)
+      flowRoot.flow.controlFlowAnal(lSubpFlow);
+</pre>
+The method finishHir() and setIndexNumbetToAllNodes() of HIR0 interface 
+will make 
+<pre>
+    getGlowAnalStateLevel() < coins.flow.Flow.STATE_CFG_AVAILABLE)
+</pre>
+true so as to inform re-computation is required. 
+
+<h5 id='i-5-5-2-2'>5.5.2.2. Data flow analysis</h5>
+
+In the implementation of data flow analysis, each variable
+is assigned a unique index number to identify
+it in data structures for flow analysis. Each program point
+defining or using variables is assigned a unique
+position number to identify it quickly.<br>
+
+Each expression is assigned an expression identifier (ExpId)
+which is the same between expressions having the same form.
+The expression identifiers are used to treat compound variables in the 
+similar way as simple variable and to identify expressions.
+FlowAnalSym is the class of symbols for data flow analysis.
+Variables and expression identifiers are instances of FlowAnalSym.
+In the data flow analysis, alias analysis is automatically done
+to find variables whose value might be changed.
+
+<h5 id='i-5-5-2-3'>5.5.2.3. Basic data flow information</h5>
+ 
+Let us use following notations:
+<pre>
+     x, y, t, u : variable or register representing an operand.
+                  (variable may be a compound variable such as
+                   array element or structure element.)
+     op         : operator.
+     def(x)     : shows that value of x is defined (value is set).
+     def(x, y, ...) : shows that values of x, y, ... are defined.
+     use(x)     : shows that x is used.
+     p(use(x))  : x is used at program point p.
+     or_all(z)  : construct a set by applying or-operation
+                  on all components indicated by z.
+     and_all(z) : construct a set by applying and-operation
+                  on all components indicated by z.
+</pre>
+The data flow analyzer will compute following information according to requests:
+<pre> 
+   Def(B)  =
+         { p | for some x, p(def(x)) is included in B and after that point 
+               there is no p'(def(x)) in B. }
+   Kill(B) =
+         { p | for some x, p(def(x)) is included in B' (where, B' != B) 
+               and there exists some defining point of x p'(def(x)) in B. }
+   Reach(B)=
+         { p | there is some path from program point p defining x 
+               (that is p(def(x))) to the entry of B such that there is 
+               no p'(def(x)) on that path. }
+               Reach(B) = or_all( (Def(B') | (Reach(B') - Kill(B')))
+                   for all predecessors B' of B)
+   Defined(B) =
+         { x | x is defined in B. }
+   Exposed(B) =
+         { x | x is used in B and x is not defined in B
+               before x is used. }
+   Used(B) = 
+         {x|x is used in B}
+   EGen(B) =
+         { op(x,y) | expression op(x,y) is computed in B and after
+                     that point, neither x nor y are defined in B. }
+           Thus, the result of op(x,y) is available after B.
+   EKill(B) =
+         { op(x,y) | operand x or y is defined in B and the
+                     expression op(x,y) is not re-evaluated after
+                     that definition in B. }
+                 If t = op(x,y) is killed in B,
+                 then op(t,u) should also be killed in B.
+   AvailIn(B) =
+         { op(x,y) | op(x,y) is computed in every paths to B and
+                     x, y are not defined after the computations
+                     on the paths. }
+           Thus, the result of op(x,y) can be used without
+           re-evaluation in B.
+   AvailOut(B) =
+         { op(x,y) | op(x,y) is computed in every paths to the exit of B and
+                     x, y are not defined after the computations
+                     on the paths. }
+           Thus, op(x,y) can be used without re-evaluation after B.
+         Following relations hold.
+           AvailIn(B) = and_all(AvailOut(B') for all predecessors B' of B)
+                if B is not an entry block;
+           AvailIn(B) = { } if B is an entry block.
+           AvailOut(B) = EGen(B) | (AvailIn(B) - EKill(B))
+   LiveIn(B) =
+         { x | x is alive at entry to B, that is, on some path from
+               entrance point of B to use point of x, x is not defined. }
+           Thus, x in LiveIn(B) should not be changed until it is used.
+   LiveOut(B) =
+         { x | x is live at exit from B, that is, there is some
+               path from B to B' where x is in Exposed(B'). }
+         Following relations hold.
+           LiveOut(B) = or_all(LiveIn(B') for all successors B' of B
+           LiveIn(B)  = Exposed(B) | (LiveOut(B) - Defined(B))
+   DefIn(B) =
+         { x | x is always defined at entry to B whichever path
+               may be taken. }
+           DefIn(B) = and_all(DefOut(B') for all predecessors B' of B)
+   DefOut(B) =
+         { x | x is always defined at exit from B whichever path
+               may be taken.}
+           DefOut(B) = Defined(B) | DefIn(B)
+   Reach(p(use(x))) =
+         { p'(def(x)) | there are some paths from p to p' on which
+               x is not re-defined. }
+   DefUseList(p(def(x))) =
+         { p'(use(x)) | p(def(x)) is included in p'(use(x)). }
+   UseDefList(p(use(x))) =
+         { p'(def(x)) | p'(def(x)) is included in p(use(x)). }
+</pre>
+ 
+<h5 id='i-5-5-2-4'>5.5.2.4. Data structure</h5>
+ 
+There are several ways of representing data flow information
+such as bit vector representation and discrete list representation.
+When a new data flow information is introduced, it will be necessary
+to solve new data flow equation concerning it. For that purpose,
+several methods treating bit vector data structures are provided
+(expVector, pointVector, vectorAnd, vectorOr, ...).
+By using these methods and methods in BitVector interface,
+we will be able to solve new data flow equation and to access the new
+data flow information.<br>
+<br>
+In the bit vector representation, information can be accessed by
+position number of IR nodes and index number of symbols which
+can be get from IR node or symbol table each respectively.
+There are also methods to access the information by symbol itself.<br>
+BBlockVector is a bit vector representing 0/1 information for each BBlock.<br>
+DefVector is a bit vector representing 0/1 information for
+each value-setting node. If its value at position p is 1, true is represented
+for the IR node at p, if it is 0, false is represented at that node.<br>
+PointVector is a bit vector representing 0/1 information for
+each IR node. If its value at position p is 1, true is represented
+for the IR node at p, if it is 0, false is represented at that node.<br>
+FlowAnalSymVector is a bit vector representing 0/1 information
+for each symbol such as variable or ExpId. A symbol is assigned a local index 
+which is unique within a subprogram. If FlowAnalSymVector value at position
+i is 1, true is represented for the symbol having index number i,
+if it is 0, false is represented for that symbol. <br>
+ExpVector is a bit vector representing 0/1 information for each 
+unique expression. Expressions having 
+the same form are assigned the same local object (ExpId). An expression is
+represented by the index number assigned to the ExpId
+corresponding to the expression. If an ExpVector's n-th bit is 1, true is 
+represented for the expression having the ExpId object whose index is i.<br>
+All the indexes such as symbol indexes are numbered 1, 2, 3, ... .
+If such numbering is not yet performed, the index value
+will be 0. Position 0 in the bit vectors is not used.
+
+<h5 id='i-5-5-2-5'>5.5.2.5. Usage</h5>
+
+Data flow analysis is done on demand, that is, if data flow information of
+kind A is requested, then only A and some information on which A depends
+are computed. If requested information is already computed, then it is
+not re-computed but reused.<br>
+<br>
+In order to prepare for data flow analysis, do
+<pre>
+    flowRoot.flow.dataFlwoAnal(subpDefinition);
+</pre>
+at the first time. This makes coins.flow.SubpFlow methods such as
+<pre>
+    getDefinedSyms(), getUsedSyms(), ...
+</pre>
+available. It also makes coins.flow.BBlock methods such as
+<pre>
+    getDefIn(), getDefOut(), getRech(), getLiveIn(), getLiveOut(),  
+    getAvailIn(), getAvailOut(),  ....
+</pre>
+available. available. There are many other methods for accessing data flow 
+information as shown in the interface SubpFlow. Such methods can be
+called via the SubpFlow instance 
+<pre>
+    flowRoot.fSubpFlow
+</pre>
+which is prepared by calling dataFlwoAnal(subpDefinition);<br>
+<br>
+The method dataFlowAnal(subpDefinition) resets data flow information 
+previously computed and prepares to re-compute it. If there is no change in 
+HIR subtree of SubpDefinition instance, then it is unnecessary to re-compute 
+it. It is recommended to avoid re-computation by following coding sequence:
+<pre>
+  if (flowRoot.flow.getFlowAnalStateLevel() <
+      coins.flow.Flow.STATE_DATA_FLOW_AVAILABLE)
+    flowRoot.dataFlow = flowRoot.flow.dataFlowAnal(subpDefinition);
+</pre>
+The methods finishHir() and setIndexNumbetToAllNodes() of HIR0 interface 
+will make getFlowAnalStateLevel() as STATE_DATA_UNAVAILABLE, that is, it will
+make 
+<pre>
+    getFlowAnalStateLevel() < coins.flow.Flow.STATE_DATA_FLOW_AVAILABLE
+</pre>
+true so as to inform re-computation is required. <br>
+
+If HIR is changed as a result of some optimization, finishHir() should be 
+called at the end of the optimization phase to keep consistency between 
+data structures related with HIR and to indicate that control flow and data 
+flow information are no more valid. To avoid unnecessary re-computation of 
+flow analysis, optimizers should return an indication whether HIR has
+been changed or not (See coins.Opt as an example).<br>
+<br>
+Most compiler books explain data flow analysis assuming some intermediate 
+representation of a form similar to quadruple having no hierarchical structure.
+HIR has tree structure representing nested expressions. Some special 
+consideration is required in analyzing data flow for tree structured 
+intermediate representation.<br>
+<br>
+Common subexpression in HIR takes the form of subtree. For each subtree,
+an expression identifier (ExpId) is allocated as it is mentioned before 
+and expressions having the same structure and the same operands share 
+the same ExpId, thus, the recognition of common subexpression is a trivial 
+work in HIR analysis, but it is required to find the largest common subexpression
+and to confirm that there is no possibility of the change for operand values.
+An expression may have many operands and it may have function call.
+In optimization procedures, it is required to examine what operands are
+used and what variables have possibility of changing their value
+and whether a call is included or not for statements and expressions.<br>
+<br>
+Data flow information for basic blocks can be accessed by methods of 
+BBlock as mentioned above. The data flow analyzer also provides several 
+methods to access set/refer information, etc. To see set/refer information, 
+a class named SetRefRepr is provided in the package coins.flow. ExpId is 
+also used to access operand information, etc. of corresponding expression.<br>
+<br>
+Value of a variable may be set by assign statement and call expression.
+A variable may be referred in an expression using the variable as its 
+leaf operands. In analyzing data flow of HIR subtree, it is required to
+examine assign statements, call expressions, conditional expressions
+in if-statements and loop-statements, expressions in return statements and
+case-selection expressions of switch statements. Other parts of HIR subtree
+do not set/refer variables directly.<br>
+
+An instance of SetRefRepr is assigned to each of
+<pre>
+    AssignStmt
+    Conditional expressions in LoopStmt
+    Subprogram call
+    ReturnStmt
+</pre>
+which are treated as a statement in the data flow analysis.
+Following methods are available for SetRefRepr.
+<pre>
+    defSym() returns the set of symbols definitely defined.
+    modSyms() returns the set of symbols that are possibly defined.
+    useSyms() returns the set of symbols definitely used (referred).
+</pre>
+As for expressions, ExpId interface provides following methods:
+<pre>
+    getOperandSet() returns the set of variables used as leaf operand.
+    getExpInf().hasCall() returns true if the expression has call.
+</pre>
+SubpFlow interface provides following methods for corresponding subprogram:
+<pre>
+    cfgIterator() traverses all reachable basic blocks of the subprogram.
+    bblockSubtreeItrator(BBlock pBBlock) returns iterator that traverse top 
+        subtrees of the basic block pBBlock.
+        Traversed top-subtrees are
+            LabeledStmt, AssignStmt, ExpStmt, ReturnStmt,
+            IfStmt, LoopStmt, SwitchStmt
+            Conditional expression in IfStmt and LoopStmt
+            Case-selection expression in SwitchStmt
+            Call subtree (irrespective of contained in ExpStmt or Exp)
+    bblockStmtIterator(BBlock pBBlock) returns iterator to traverse all
+        HIR statements in the basic block pBBlock.
+    bblockNodeIterator(BBlock pBBlock) returns iterator to traverse all
+        HIR nodes in the basic block pBBlock.
+    getSetRefReprOfIR(IR pIr) returns SetRefRepr corresponding to pIr 
+         or returns null if pIr has no SetRefRepr instance.
+    getExpId(IR pIr) returns ExpId corresponding to pIr.
+    getExpOfTemp(Var pTemp) returns the expression represented by 
+         the temporal variable pTemp.
+    setOfGlobalVariables() returns the set of global variables appeared.
+    setOfAddressTakenVariables() returns the set of address taken variables.
+    getRecordAlias() returns the instance of RecordAlias that is used to
+         access alias information of the subprogram.
+</pre>
+DefUseList and UseDefList are computed by the information of definitely
+defined and definitely used relations because if all possibilities are 
+unconditionally included, define/use lists and use/define lists will become 
+very large. Possibly defined symbols and possibly used symbols can be get 
+from defSyms() and useSyms() by using the set of global variables, the 
+set of address-taken variables, and the set of variables aliased to a variable. <br>
+<br>
+For the following program
+<pre>
+    int printf(char*, ...);
+    int func(int pa[10], int pn);
+    int ga1[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    int main()
+    {
+      int a = 1, b = 2, c, d;
+      int i = 0;
+      int *ptrc, *ptry;
+      int sum;
+      int x[10];
+      int y[10] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+      int z[10] = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+      int zz[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+      ptrc = &c;
+      ptry = y;
+      x[i] = a;
+      *ptrc = x[i] + 1;
+      sum = c + func(z, 10);
+      d = zz[2] + zz[3];
+      printf(" sum=%d ", sum);
+      for (i = 0; i < 10; i++) {
+        d = d + (zz[2] + zz[3]);
+        d = d + z[i] + z[i];
+        d = d + zz[i] + zz[i];
+        sum = ga1[i] + ga1[i];
+        sum = sum + *ptry;
+        printf(" *ptry=%d d=%d ", *ptry, d);
+        ptry = ptry + 1;
+        sum = sum + z[i] + z[i];
+        sum = sum + zz[i] + zz[i];
+        d = d + ga1[i] + ga1[i];
+      }
+      d = d + ga1[2] + ga1[2];
+      printf("\n"); 
+      d = d + (zz[2] + zz[3]);
+      d = d + ga1[2] + ga1[2];
+      printf("%d %d %d \n", sum, c, d);
+      return 0; 
+    }     
+</pre>
+basic blocks are
+<pre>
+  BBlock 1: statements from the beginning up to "i=0;" of for-statement
+  BBlock 2: conditional expression "i < 10"
+  BBlock 3: from "d=d+(zz[2]+zz[3]);" to "d=d+ga1[i]+ga1[i];"
+  BBlock 4: "i++"
+  BBlock 5: rest of statements (from "d=d+ga1[2]+ga1[2];" to "return 0;")
+and
+  setOfAddressTakenVariables() = { c, z, y }
+Available expressions of basic blocks are
+  BBlock 1
+    AvailOut= { zz[2], zz[3], &c, zz[2]+zz[3] }
+  BBlock 2
+    AvailIn = { zz[2], zz[3], &c, zz[2]+zz[3] }
+    AvailOut= { zz[2], zz[3], &c, zz[2]+zz[3], i<10 }
+  BBlock 3
+    AvailIn = { zz[2], zz[3], &c, zz[2]+zz[3] }
+    AvailOut= { zz[2], zz[3], &c, zz[2]+zz[3], i<10, z[i], zz[i], ga1[i] }
+  BBlock 4
+    AvailIn = { zz[2], zz[3], &c, zz[2]+zz[3], i<10, z[i], zz[i], ga1[i] }
+    AvailOut= { zz[2], zz[3], &c, zz[2]+zz[3] }
+  BBlock 5
+    AvailIn = { zz[2], zz[3], &c, zz[2]+zz[3], i<10 }
+    AvailOut= { zz[2], zz[3], &c, zz[2]+zz[3], i<10 }
+</pre>
+At the statement "*ptrc = x[i] + 1;", address taken variables are assumed 
+to be modified.
+<pre>
+   defSym = { *ptrc }
+   modSyms= { c, *ptrc, z, ptrc, y }
+</pre>
+At the statement "sum = c + func(z, 10);", global variables are assumed
+to be modified.
+<pre>
+   defSym = { sum }
+   modSyms= { z, ga1, sum }
+</pre>
+Thus, after partial redundancy elimination, z[i]+z[i] is re-computed 
+after subprogram call but z[i]+z[i] is not re-computed (eliminated
+as common subexpression), and zz[2]+zz[3] is recorded in a temporal 
+variable before entering the for-loop and all later occurrences of 
+zz[2]+zz[3] are replaced by the temporal variable.<br>
+<br>
+Following is an example to show how to use these methods where
+flowRoot is an instance of FlowRoot and subpDefinition is an instance of
+SubpDefinition. 
+<pre>
+    SubpFlow lSubpFlow = new HirSubpFlowImpl(flowRoot, subpDefinition);
+    ControlFlow lControlFlow = flowRoot.flow.controlFlowAnal(lSubpFlow);
+    DataFlow lDataFlow = flowRoot.flow.dataFlowAnal(lSubpFlow);
+    RecordAlias lRecordAlias = lSubpFlow.getRecordAlias(); 
+    for (Iterator lBBlockIterator = lSubpFlow.cfgIterator();
+         lBBlockIterator.hasNext(); ) {
+      BBlock lBBlock = (BBlock)lBBlockIterator.next();
+      ExpVector lAvailableExp  = lBBlock.getAvailIn();
+      for (BBlockSubtreeIterator lSubtreeIterator 
+               = lSubpFlow.bblockSubtreeIterator(lBBlock);
+           lSubtreeIterator.hasNext(); ) {
+        HIR lSubtree = (HIR)lSubtreeIterator.next();
+        SetRefRepr lSetRefRepr = lSubpFlow.getSetRefReprOfIR(lSubtree);
+        Set lModSyms = lSetRefRepr.modSyms();
+        Set lModSymsAlias = fRecordAlias.aliasSymGroup(lModSyms); // Set of 
+          // symbold aliased to some of modified variables.
+        for (ExpVectorIterator lExpIterator = lAvailableExp.expVectorIterator();
+             lExpIterator.hasNext(); ) {
+          ExpId lExpId = nextExpId();
+          Set lOperands = lExpId.getOperandSet();
+          if (! lOperands.retailAll(lModSymsAlias).isEmpty()) {
+              // Treat the expression corresponding to lExpId as unavailable
+              // because some operand may be changed by the subtree lSubtree.
+           }
+           ......
+        }
+        ....
+      }
+      ....
+    }
+</pre>
+To see the result of data flow analysis, execute following statement: 
+<pre>
+    flowRoot.dataFlow.showSummary();
+</pre>
+The amount of printed result may be large for subprograms with hundreds
+of statements.
+
+    
+<h5 id='i-5-5-2-6'>5.5.2.6. How to extend flow analysis</h5>
+
+If new flow analysis information is required, compute it by using
+facilities of the flow analyzer, or define a subclass of HirSubpFlow
+(a subclass of SubpFlow) and make methods to compute the new flow analysis 
+information in the subclass.<br>
+
+For example, if you want to find transparent expressions that are neither
+killed nor defined within a basic block, following coding will provide
+the information for each basic block.
+<pre>
+    package coins.flow;
+    import coins.FlowRoot;
+    import coins.ir.hir.SubpDefinition;
+    import java.util.Iterator;
+    
+    public class
+      MySubpFlow extends HirSubpFlowImpl implements HirSubpFlow
+    {
+      ExpVector fTransparent[];
+    
+      public MySubpFlow(FlowRoot pFlowRoot, SubpDefinition pSubpDefinition)
+      {
+        super(pFlowRoot, pSubpDefinition);
+      } // MySubpFlow
+    
+      public void
+        computeTransparent()
+      {
+        ExpVector lEKillAll;
+        ExpVector lTemp1 = expVector();
+        ExpVector lTemp2 = expVector();
+        FlowAnalSymVector lDefined;
+        int lBBlockNum;
+        fTransparent = new ExpVector[fBBlockCount + 1]; // Get space
+          // to record transparent vectors for all basic blocks.
+        for (Iterator lIterator = cfgIterator();
+             lIterator.hasNext(); ) { // Repeat for each basic block.
+          BBlock lBBlock = (BBlock)lIterator.next();
+          if (lBBlock == null)
+            continue;
+          lBBlockNum = lBBlock.getBBlockNumber(); // Get basic block number.
+          fTransparent[lBBlockNum] = expVector(); // Initiate by zero vector.
+          lEKillAll = lBBlock.getEKillAll(); // Get the cumulative set of
+             //expressions killed by some statements in this BBlock.
+          lEKillAll.vectorNot(lTemp1); // lTemp1 is negation of lEKillAll..
+          // Get the set of defined variables.
+          lDefined = (FlowAnalSymVector)lBBlock.getDefined();
+          lTemp2 = lDefined.flowAnalSymToExpVector(); // Change the set to vector.
+          lTemp1.vectorSub(lTemp2, fTransparent[lBBlockNum]);
+              // fTransparent[lBBlockNum] = lTemp1 - lTemp2
+          if (fDbgLevel > 1) // If trace=Flow.2 or more, print the result.
+            ioRoot.dbgFlow.print(2, "Transparent B"+lBBlockNum, 
+                fTransparent[lBBlockNum].toStringShort());
+        }
+        setComputedFlag(DF_TRSNSPARENT); // Set already-computed flag.
+    } // computeTransparent
+    
+      /**
+       * Get the transparent expression for the basic block pBBlock.
+       * Expressions are represented by ExpId corresponding to the expression.
+       * @param pBBlock basic block.
+       * @return expression vector showing transparent expressions.
+       */
+    public ExpVector
+    getTransparent( BBlock pBBlock )
+    {
+      if (! isComputed(DF_TRSNSPARENT)) // If already computed,
+        computeTransparent();           // do not re-compute but reuse.
+      return fTransparent[pBBlock.getBBlockNumber()];
+    } // getTransparent
+    
+    } // MySubpFlow
+</pre>
+In this example, it is necessary to add
+<pre>
+    public static final int DF_TRANSPARENT = 26;
+</pre>
+as a flag number to SubpFlow.java. To use the subclass for extending 
+the flow analysis capability, write such coding as
+<pre>
+    SubpFlow lSubpFlow = new MySubpFlow(flowRoot, subpDefinition);
+</pre>
+instead of 
+<pre>
+    SubpFlow lSubpFlow = new HirSubpFlowImpl(flowRoot, subpDefinition);
+</pre>
+which is shown in the previous example.
+
+
+<h4 id='i-5-5-3'>5.5.3. Flow analysis by coins.aflow (old version)</h4>
+
+<h5 id='i-5-5-3-1'>5.5.3.1. Flow information</h5>
+
+The control flow information is the same as that of coins.flow version.
+As for the data flow information, both of definite information and probable
+information are computed.<br>
+ 
+Let us use following notations:
+<pre>
+    x, y, t, u : variable or register representing an operand.
+    op         : operator.
+    def(x)     : shows that value of x is definitely defined.
+    mod(x)     : shows that value of x is possibly defined.
+    use(x)     : shows that x is used.
+    p(def(x))  : value of x is (definitely) modified (i.e. via assign) 
+                 at program point p.
+    p(mod(x, y, ...))  : value of x, y, ... are modified at program point p 
+                 (modified means possibly changed).
+    p(use(x))  : x is used at program point p.
+    or_all(z)  : construct a set by applying or-operation
+                 on all components indicated by z.
+    and_all(z) : construct a set by applying and-operation
+                 on all components indicated by z.
+</pre>
+The data flow analyzer will compute following information according to requests:
+<pre> 
+  PDef(B)  =
+       { p | p(mod(x, y, ...)) is included in B and after that point there is
+             no p' s.t. p'(def(x)) nor p" s.t. p"(def(y)), ... in B. }
+   DKill(B) =
+       { p | p(def(x)) is not included in B and
+             p'(def(x)) is included in B. }
+   PReach(B)=
+       { p | there is some path from program point p
+             that modifies some variables x, y, ... (that is, p(mod(x, y, ...)))
+             to the entry of B such that there is no p'(def(x)) or no p''(def(y))
+             or ... on that path. }
+         PReach(B) = or_all( (PDef(B') | (PReach(B') - DKill(B')))
+                          for all predecessors B' of B)
+   DDefined(B) =
+       { x | x is definitely modified in B. }
+   PDefined(B) =
+       { x | x is posibly modified in B. }
+   PExposed(B) =
+       { x | x is possibly used in B and x is not definitely set in B
+             before x is used. }
+   PUsed(B) = {x|x is possibly used in B}
+   DEGen(B) =
+       { op(x,y) | expression op(x,y) is computed in B and after
+                   that point, neither x nor y are possibly set in B. }
+         Thus, the result of op(x,y) is available after B.
+   PEKill(B) =
+       { op(x,y) | operand x or y is possibly modified in B and the
+                   expression op(x,y) is not re-evaluated after
+                   that definition in B. }
+         If t = op(x,y) is killed in B,
+         then op(t,u) should also be killed in B.
+   DAvailIn(B) =
+       { op(x,y) | op(x,y) is computed in every paths to B and
+                   x, y are not modified after the computations
+                   on the paths. }
+         Thus, the result of op(x,y) can be used without
+         re-evaluation in B.
+   DAvailOut(B) =
+       { op(x,y) | op(x,y) is computed in every paths to the exit of B and
+                   x, y are not modified after the computations
+                   on the paths. }
+         Thus, op(x,y) can be used without re-evaluation after B.
+         Following relations hold.
+           DAvailIn(B) = and_all(DAvailOut(B') for all predecessors B'
+                                 of B) if B is not an entry block;
+           DAvailIn(B) = { } if B is an entry block.
+           DAvailOut(B) = DEGen(B) | (DAvailIn(B) - PEKill(B))
+   PLiveIn(B) =
+       { x | x is alive at entry to B, that is, on some path from
+             entrance point of B to use point of x, x is not definitely set. }
+         Thus, x in PLiveIn(B) should not be changed until it is used.
+   PLiveOut(B) =
+       { x | x is live at exit from B, that is, there is some
+             path from B to B' where x is in PExposed(B'). }
+       Following relations hold.
+         PLiveOut(B) = or_all(PLiveIn(B') for all successors B' of B
+         PLiveIn(B)  = PExposed(B) | (PLiveOut(B) - DDefined(B))
+   DDefIn(B) =
+       { x | x is always defined at entry to B whichever path
+             may be taken. }
+         DDefIn(B) = and_all(DDefOut(B') for all predecessors B' of B)
+   DDefOut(B) =
+       { x | x is always defined at exit from B whichever path
+             may be taken.}
+         DDefOut(B) = DDefined(B) | DefIn(B)
+</pre>
+
+<h5 id='i-5-5-3-2'>5.5.3.2. How to use in your code</h5>
+
+First, the relevant package is coins.aflow. It is not supported to refer
+both pakages of coins.aflow and coins.flow in one module simultaneously.<br>
+
+FlowResults class is central to the automatic analysis mechanism. 
+It is a Map class (it extends HashMap) with additional methods that provide 
+the automatic analysis functionality. <br>
+  
+FlowResults has 4 main methods: find(), get(), put(), and getRaw(). (For 
+precise signatures, see the API document of coins.aflow.)<br>
+
+(1) find<br>
+The method find() will trigger the analysis specified by its first argument,
+with (optional) second and third keys passed through to the analysis method. 
+The result of the analysis should be stored in this FlowResults Map.
+<pre> 
+    ex. find("Def", lBBlock);
+</pre>
+
+(2) get<br>
+The method get() will query its own map and if the key specified by its 
+arguments cannot be found, the find method explained above will be called. 
+In any case, it returns the value corresponding to the specified key, as
+Map.get() does.  
+<pre> 
+    ex. get("Def", lBBlock);
+</pre>
+  
+(3) put<br>
+The method put() will store the key-value pair in the Map. 
+This is just the same as Map.put(), but with support for multiple keys (which
+I have called simply a key so far). 
+This will be called inside the analyzer method (method called from within 
+find()), but can also be called from any context.
+The key may or may not support automatic analysis mechanism. 
+If the key does not support automatic analysis, the retrieval of the value 
+should be done via getRaw(), or an exception may be thrown.
+<pre> 
+    ex. put("Def", lBBlock, lDefVector);
+</pre>
+  
+(4) getRaw<br>
+The method getRaw() will simply retrieves the value for the specified key 
+from the Map whether the key supports automatic analysis or not. 
+This is just the same as Map.get(), with support for multiple keys that 
+correspond to the arguments of put().
+<pre>
+    ex. getRaw("Def", lBBlock)
+</pre>
+
+In the following code snippet, the Reach vector for the exit BBlock of the 
+SubpDefinition variable subpDef is going to be stored in the local variable 
+lReach.
+<pre>
+    // Establishes the map between the analysis names and the analyzer methods 
+    // that actually do the analysis. 
+    // A key of this map together with the arguments of the associated
+    // analyzer class methods forms a piece of information that supports the 
+    // automatic analysis mechanism. 
+    // This method will be called only twice during the program life; once
+    // for HIR and once for LIR.	
+    FlowResults.putRegClasses(new RegisterFlowAnalClasses());
+  
+    // Instantiate a FlowResults map. 
+    FlowResults lResults = flow.results(); 
+    
+    // Instantiate a SubpFlow object, with FlowResults object passed as an
+    // argument to the factory method.	 
+    SubpFlow lSubpFlow = flow.subpFlow(subpDef, lResults);
+
+    // Performs control flow analysis. 
+    // Control flow analysis does not support the automatic flow analysis 
+    // mechanism and must be called explicitly.                             
+    lSubpFlow.controlFlowAnal();
+  
+    // Collects some basic information that does not require a complex 
+    // algorithm. 
+    // Some pieces of information obtained here ARE part of the automatic
+    // analysis picture, but some are not, so I call it explicitly.
+     lSubpFlow.initiateDataFlow();
+
+    // Finds the Reach vector for each of the BBlocks that belong to lSubpFlow. 
+    // There is no need to call lSubpFlow.getExitBBlock().findDef() or 
+    // lSubpFlow.getExitBBlock().findKill() (or lSubpFlow.findReach()) since
+    // they are called automatically (automatic analysis).
+    lReach = lResults.get("Reach", lSubpFlow.getExitBBlock());	
+    // OR lReach = lSubpFlow.getExitBBlock().getReach();
+    ...
+</pre>
+
+<h5 id='i-5-5-3-3'>5.5.3.3 From Command Line</h5>
+
+   The flow analyzer is usually called as a preparatory phase of some
+   optimizers and parallelizers. But in some case, it may be helpful
+   to invoke it by command line (for educational purpose, etc.).<p>
+   The following command invokes HIR flow analyzer.
+<pre>
+     java coins.driver.Driver -S -coins:hirAnal,trace=Flow.2
+</pre>
+   The trace option is attached to see the result of the flow analysis.
+
+
+<h3 id='i-5-6'>5.6. Alias Analysis</h3>
+
+<h4 id='i-5-6-1'>5.6.1. Overview of alias analysis</h4>
+
+The alias analysis implemented here is an intra-procedural flow-insensitive
+analysis. There are only a few interface methods,
+so the usage should be quite straighforward.<p>
+
+There are 2 levels of analysis:
+<ul>
+<li> AliasAnalLevel1 - compute only alias groups for symbols</li> 
+<li>  AliasAnalLevel2 - compute alias relations between HIR nodes</li>
+</ul> 
+In AliasAnalLevel1, methods of RecordAlias class
+<ul>
+<li>aliasSyms(Sym pSym): returns the set of symbols aliased with pSym.</li>
+<li>aliasSymGroup(Set pSymbolSet): return the set of symbols
+     aliased with smbols in pSymbolSet.</li>
+</ul>
+are available.<p>
+
+Also, there are 2 modes of analysis for both AliasAnalLevel1 and
+AliasAnalLevel2:
+<dll>
+<dt>pessimistic mode </dt><dd>
+     Assume followings:
+<ol>
+<li>Temporal variables generated by the compiler are not
+       in alias relations with each other.</li>
+<li>Temporal variables are not in alias relation with source
+       program variables.</li>
+<li> Local variables other than parameters are not in alias
+       relations with global variables if they are not taken address.</li>
+</ol></dd>
+<dt>optimistic mode</dt><dd>
+     Assume followings in addition to those of pessimistic mode:
+<ol>
+<li>Formal parameters within a subprogram are not in alias
+       relations with each other.</li>
+<li>Subscript values of array elements do not exceed
+       the range boundary specified by declaration of the array.</li>
+<li>Pointer variables do not point to storage areas
+       whose type differs from the type specified by the
+       declaration of the pointers.</li>
+</ol></dd>
+</dl>
+The pessimistic mode is default mode. The optimistic mode is taken
+only when specified so by compiler command option
+<pre>
+    -coins:alias=opt
+</pre>
+There are fine computation mode and coarse computation mode in the alias 
+analysis. The fine computation mode will consume much time and memory.
+For large subprograms (more than 1000 HIR nodes), the coarse computation mode
+is automatically adopted. In the fine computation mode, size of set 
+showing aliased symbols will be small compared to the coarse computation mode.<br>
+
+<h4 id='i-5-6-2'>5.6.2. How to Use</h4>
+
+The alias analyzer is automatically called in process of data flow analysis.
+The result of alyas analysis can be used by calling methods of RecordAlias
+such as mayAlias, aliasSyms, and aliasSymGroup. Following is an example of 
+using alias information.
+<pre>
+    RecordAlias lRecordAlias = flowRoot.subpFlow.getRecordAlias();
+    ....
+    if(lRecordAlias.mayAlias(x, y)) {
+      // Assume y may be changed when x is changed.
+      ....
+    }
+    Set lSetOfVariablesAliased = lRecordAlias.aliasSyms(x);
+</pre>
+where, x, y are variables.
+
+<h3 id='i-5-7'>5.7. References</h3>    
+
+[1] Morel, Etienne and Renvoise, Claude: Global optimization by suppression
+   of partial redundancies, CACM, Vol. 22, No. 2, pp.96-103 (Feb. 1979).<br>
+[2] Muchnick, Steven S.: Advanced Compiler Design and Implementation, 
+  Morgan Kaufmann Publishers (1997).<br>
+[3] Nakata, Ikuo: Compiler Construction and Optimization, Asakura Shoten, (1999).
+[4] Dhamdhere, Dhananjay M.: E-path_PRE - Partial redundancy elimination made
+  easy, ACM SIGPLAN Notices, Vol. 37, No. 8, pp. 53-65 (Aug. 2002).
+
+  </body>
+</html>
+

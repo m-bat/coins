@@ -1,0 +1,85 @@
+solution 1
+   0  MMMMM CCCCC  /             
+   1  MMMMM CCC    /        CC   
+   2  MMMMM CCCC   /        C    
+   3  MMMMM CC     /        CCC  
+   4  MMMMM CCC    /        CC   
+   5  MMMMM C      /        CCCC 
+   6  MMMMM CC     /        CCC  
+   7  MMMMM        /        CCCCC
+   8  MMMMM C      /        CCCC 
+   9  M     C      /  MMMM  CCCC 
+  10  MM    CC     /  MMM   CCC  
+  11        CC     /  MMMMM CCC  
+  12        CCC    /  MMMMM CC   
+  13        C      /  MMMMM CCCC 
+  14        CC     /  MMMMM CCC  
+  15               /  MMMMM CCCCC
+solution 2
+   0  MMMMM CCCCC  /             
+   1  MMMMM CCC    /        CC   
+   2  MMMMM CCCC   /        C    
+   3  MMMMM CC     /        CCC  
+   4  MMMMM CCC    /        CC   
+   5  MMMMM C      /        CCCC 
+   6  MMMMM CC     /        CCC  
+   7  MMMMM        /        CCCCC
+   8  MMMMM C      /        CCCC 
+   9  M     C      /  MMMM  CCCC 
+  10  MM    CC     /  MMM   CCC  
+  11        CC     /  MMMMM CCC  
+  12        CCC    /  MMMMM CC   
+  13        C      /  MMMMM CCCC 
+  14        CCCC   /  MMMMM C    
+  15               /  MMMMM CCCCC
+solution 3
+   0  MMMMM CCCCC  /             
+   1  MMMMM CCC    /        CC   
+   2  MMMMM CCCC   /        C    
+   3  MMMMM CC     /        CCC  
+   4  MMMMM CCC    /        CC   
+   5  MMMMM C      /        CCCC 
+   6  MMMMM CC     /        CCC  
+   7  MMMMM        /        CCCCC
+   8  MMMMM C      /        CCCC 
+   9  M     C      /  MMMM  CCCC 
+  10  MM    CC     /  MMM   CCC  
+  11        CC     /  MMMMM CCC  
+  12        CCC    /  MMMMM CC   
+  13        C      /  MMMMM CCCC 
+  14        CCCCC  /  MMMMM      
+  15        CCCC   /  MMMMM C    
+  16  MMMM  CCCC   /  M     C    
+  17  MM    CC     /  MMM   CCC  
+  18  MMM   CCC    /  MM    CC   
+  19        CCC    /  MMMMM CC   
+  20        CCCC   /  MMMMM C    
+  21               /  MMMMM CCCCC
+solution 4
+   0  MMMMM CCCCC  /             
+   1  MMMMM CCC    /        CC   
+   2  MMMMM CCCC   /        C    
+   3  MMMMM CC     /        CCC  
+   4  MMMMM CCC    /        CC   
+   5  MMMMM C      /        CCCC 
+   6  MMMMM CC     /        CCC  
+   7  MMMMM        /        CCCCC
+   8  MMMMM C      /        CCCC 
+   9  M     C      /  MMMM  CCCC 
+  10  MM    CC     /  MMM   CCC  
+  11        CC     /  MMMMM CCC  
+  12        CCC    /  MMMMM CC   
+  13               /  MMMMM CCCCC
+solution 5
+   0  MMMMM CCCCC  /             
+   1  MMMMM CCC    /        CC   
+   2  MMMMM CCCC   /        C    
+   3  MMMMM CC     /        CCC  
+   4  MMMMM CCC    /        CC   
+   5  MMMMM C      /        CCCC 
+   6  MMMMM CC     /        CCC  
+   7  MMMMM        /        CCCCC
+   8  MMMMM C      /        CCCC 
+   9  M     C      /  MMMM  CCCC 
+  10  MM    CC     /  MMM   CCC  
+  11               /  MMMMM CCCCC

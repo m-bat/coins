@@ -1,0 +1,269 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+
+<html>
+<head>
+<title>AT&amp;T Labs Research - Grappa / FAQ</title>
+<meta name="description" content="AT&T Labs Research Grappa FAQ Page">
+<meta name="keywords" content="Grappa Frequently Asked Questions, Graph Drawing, Java Package, Open Source, Freeware, Applet, Application">
+<link rev="made" href="mailto:webmaster@research.att.com"> 
+</head>
+
+<!-- user content -->
+
+<P>
+<H1><A HREF='/~john/Grappa/'>Grappa</A> / <A NAME=top_of_page>FAQ</B>&nbsp;&nbsp;&nbsp;&nbsp;<FONT SIZE=-1><I>Last updated:</I>&nbsp;Tue May 10 10:01:08 EDT 2005</FONT></H1>
+This page provides questions and answers which
+we feel may be of general interest.
+<P>
+<UL>
+<LI><A HREF='#Installation'>Installation</A>
+<OL TYPE=1>
+<LI><A HREF='#Installation_Q0'>How do I install <i>Grappa</i>?
+</A>
+<LI><A HREF='#Installation_Q1'>How do I build from the source?
+</A>
+<LI><A HREF='#Installation_Q2'>Is there a demo I can look at?
+</A>
+</OL>
+<LI><A HREF='#Licensing'>Licensing</A>
+<OL TYPE=1>
+<LI><A HREF='#Licensing_Q0'>How to I license <i>Grappa</i>?
+</A>
+</OL>
+<LI><A HREF='#Miscellany'>Miscellany</A>
+<OL TYPE=1>
+<LI><A HREF='#Miscellany_Q0'>Is there a mailing list or message group?
+</A>
+<LI><A HREF='#Miscellany_Q1'>How do I report a bug?
+</A>
+</OL>
+<LI><A HREF='#Usage'>Usage</A>
+<OL TYPE=1>
+<LI><A HREF='#Usage_Q0'>How come all my nodes and edges draw on top of each other at the same place?
+</A>
+<LI><A HREF='#Usage_Q1'>Does <i>Grappa</i> work with JDK1.4?
+</A>
+<LI><A HREF='#Usage_Q2'>Does <i>Grappa</i> work with JDK5.0 (a.k.a., JDK1.5)?
+</A>
+<LI><A HREF='#Usage_Q3'>How do I trigger actions when I click on elements in the graph?
+</A>
+<LI><A HREF='#Usage_Q4'>The javadoc documentation is OK, but what else do you have?
+</A>
+<LI><A HREF='#Usage_Q5'>Can I use <i>Grappa</i> to generate GIF or JPEG images?
+</A>
+</OL>
+</UL>
+<A NAME='Installation'><H2>Installation&nbsp;&nbsp;<A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A></H2>
+<OL TYPE=1>
+<LI><A NAME='Installation_Q0'><I><B>How do I install <i>Grappa</i>?
+</B></I>
+<BR>
+First download the
+<a href='/~john/Grappa/grappa.tgz'><i>Grappa</i>
+gzipped-tar file</a> and unpack it any number of ways, such as the
+<a href='http://www.winzip.com'>WinZip</a> tool or the Linux command-line:
+<pre><tt>  gunzip < grappa.tgz | tar xvf -
+</tt></pre>
+Then, look in the <b>archives</b> folder for the package file of your choice (usually <tt>grappa1_2.jar</tt>) and place that file somewhere in your Java CLASSPATH (any basic Java book will explain what that means) and you are ready to make use of the
+<i>Grappa</i>
+package in your Java programs by simply adding a
+<pre><tt>  import att.grappa.*;
+</tt></pre>
+statement in your source files.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Installation_Q1'><I><B>How do I build from the source?
+</B></I>
+<BR>
+Assuming you want to build the Grappa 1.2 source and that you have either
+JDK1.2 or JDK1.3 or JDK1.4 installed, you may proceed as follows (Note: these are
+Linux style directions, modify with backslashes instead of slashes as
+appropriate for Windows):
+<ul>
+<li>
+First you will need to compile the JavaCup runtime package.
+The JavaCup runtime package is distributed with Grappa.
+The entire JavaCup tool, which you would need if you plan to modify
+the 'dot' parser supplied with Grappa, is available at
+<a href='http://www.cs.princeton.edu/~appel/modern/java/CUP/'>
+http://www.cs.princeton.edu/~appel/modern/java/CUP/
+</a>.
+To compile the JavaCup runtime package, get into
+src/jdk1.2/java_cup/runtime and run:
+<pre><tt>  javac *.java
+</tt></pre>
+<li>
+Next, you need to compile the Grappa source, so get into
+src/jdk1.2/att/grappa and run:
+<pre><tt>  javac -classpath ../.. *.java
+</tt></pre>
+<li>
+Finally, put src/jdk1.2 in your CLASSPATH.
+Note that it is probably preferrable to keep your class files in a folder
+separate from your Java source files, which can be accomplished by using
+the '-d' option to javac or by moving the class files after you compile.
+Java books can help with these basics.
+Also, some hokey shell scripts (Korn Shell) are in the src directory, but
+they are not really meant for the general public and will require modification.
+Nonetheless, it is possible that some will find them useful.
+</ul>
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Installation_Q2'><I><B>Is there a demo I can look at?
+</B></I>
+<BR>
+Yes, graph files and some crude demo applications are provided in the <tt>DEMO</tt> folder.
+The <tt>jdk1.2</tt> folder within <tt>DEMO</tt> is probably of most interest.
+Assuming that the
+<i>Grappa</i>
+package is in your CLASSPATH and also that the current folder is in your CLASSPATH as well, then in the <tt>jdk1.2</tt> demo folder, you can try running:
+<pre><tt>  java Demo12 ../sample.dot
+</tt></pre>
+Note that the graph in the <tt>sample.dot</tt> file already has layout information contained in it (by means of the <b>pos</b> element attribute).
+Pressing the right mouse button provides a popup-menu.
+Pressing the left mouse button selects elements
+(either individually or by sweeping).
+Pressing the control-key and the left mouse button on an element lets you select
+additional elements without clearing the previously selected elements.
+Pressing the shift-key and the left mouse button on a piece of blank graph
+creates a new node while doing the same in an existing node and dragging to
+another existing node creates an edge.
+Pressing the labelled "Layout" button to the left of the demo panel first
+tries to call a local layout script (formatDemo) and then, if that fails,
+which it almost certainly will, it will try to contact our web server to
+perform the layout.
+This latter should work as long as you have a live connection to the internet.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+</OL>
+<A NAME='Licensing'><H2>Licensing&nbsp;&nbsp;<A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A></H2>
+<OL TYPE=1>
+<LI><A NAME='Licensing_Q0'><I><B>How to I license <i>Grappa</i>?
+</B></I>
+<BR>
+<i>Grappa</i>
+is licensed under the same arrangements as are used for <i>graphviz</i>, which
+is essentially Open Source.
+Refer to the <a href="/sw/tools/graphviz/download.html" target="_blank">graphviz download page</a> for additional information.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+</OL>
+<A NAME='Miscellany'><H2>Miscellany&nbsp;&nbsp;<A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A></H2>
+<OL TYPE=1>
+<LI><A NAME='Miscellany_Q0'><I><B>Is there a mailing list or message group?
+</B></I>
+<BR>
+There is no specific mailing list for
+<i>Grappa</i>
+setup.
+The <i>graphviz</i> list can field Grappa questions (refer to the
+<a href="/sw/tools/graphviz/">
+<i>graphviz</i> pages
+</a> for information about that message group) or you questions can be
+sent directly to the
+<a href="mailto:john@research.att.com">
+author
+</a>.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Miscellany_Q1'><I><B>How do I report a bug?
+</B></I>
+<BR>
+You can use the
+<a href="/~erg/graphviz/bugform.html">
+<i>graphviz</i> bug form
+</a> or
+send reports directly to the
+<a href="mailto:john@research.att.com">
+author
+</a>.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+</OL>
+<A NAME='Usage'><H2>Usage&nbsp;&nbsp;<A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A></H2>
+<OL TYPE=1>
+<LI><A NAME='Usage_Q0'><I><B>How come all my nodes and edges draw on top of each other at the same place?
+</B></I>
+<BR>
+<i>Grappa</i>
+does not do layout, though it provides a convenience method (<tt>GrappaSupport.filterGraph(...)</tt>) to make using an external layout engine simpler.
+Moreover, since Grappa stores graph structure information and provides
+several methods for traversing graphs and retrieving elements, it
+simplifies the task of coding your own layout engine directly in Java.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Usage_Q1'><I><B>Does <i>Grappa</i> work with JDK1.4?
+</B></I>
+<BR>
+Yes, the Grappa 1.2 works with both JDK1.2, JDK1.3 and JDK1.4.
+Demo12.java, however, contains a deprecated method that can be easily updated
+if you do not like getting the deprecation warning.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Usage_Q2'><I><B>Does <i>Grappa</i> work with JDK5.0 (a.k.a., JDK1.5)?
+</B></I>
+<BR>
+Almost. Some minor tweaks to the source are needed, but I'd like to
+wait until the point one release before I worry about it. I am content
+with 1.4.
+Early adopters can easily perform the  source tweaks themselves.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Usage_Q3'><I><B>How do I trigger actions when I click on elements in the graph?
+</B></I>
+<BR>
+<i>Grappa</i>
+defines a <i>GrappaListener</i> interface and methods in <i>GrappaPanel</i>
+for adding and removing a listener.
+By default, there is no listener.
+However,
+<i>Grappa</i>
+does supply an extensible <i>GrappaAdapter</i> class which provides
+one implementation of a <i>GrappaListener</i> as a convenience.
+The demo application demonstrates how it can be added to a <i>GrappaPanel</i>.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Usage_Q4'><I><B>The javadoc documentation is OK, but what else do you have?
+</B></I>
+<BR>
+Although there is an early paper
+(<i>Grappa: A GRAPh PAckage in Java</i> by Naser S. Barghouti, John
+M. Mocenigo and Wenke Lee at pages 336 - 343 in the Proceedings of the
+5th International Symposium on <a href="http://www.graphdrawing.org">Graph
+Drawing</a> in Rome, 1997 and published by Springer-Verlag
+[ISBN: 3-540-63938-1]), it is rather
+out-of-date and only introductory in its depth.
+So, for all practical purposes, the <a href="/~john/Grappa/docs/att/grappa/package-summary.html">javadoc documentation</a> is it.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+<LI><A NAME='Usage_Q5'><I><B>Can I use <i>Grappa</i> to generate GIF or JPEG images?
+</B></I>
+<BR>
+Grappa is intended for interactive display of graphs (zooming in,
+deleting/adding elements, displaying an updated layout, etc).
+While you can access
+Java's print classes to print a graph, the default behavior Grappa uses is
+to shrink the graph to the size of the paper. This behavior might still be OK
+if you are generating a PDF that will be viewed on another computer,
+but most graphs
+get fairly illegible quickly unless you are printing on one of those HP
+Plotters (the things with rolls of 3' or 4' wide paper).
+<P>
+If all you want is
+to generate a GIF or JPEG, you need only use <i>dot</i>, <i>neato</i> 
+or the other graphviz layout tools directly, they take options to generate
+such output.
+<P>
+You can also go the hybrid route, namely, use <i>Grappa</i> for interactive
+display and then when a user wants a GIF/JPEG snapshot, use the
+GrappaSupport.filterGraph() method to send the graph over to a server
+running, for example, <i>dot</i> (or send it to a local <i>dot</i> executable)
+and have it generate the image which can then be saved by the user.
+<BR><A HREF='#top_of_page'><FONT SIZE=1><SUP>(top)</SUP></FONT></A>
+<P>
+</OL>
+
+<!-- /user content -->
+
+</body>
+</html>

@@ -1,0 +1,823 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>SIMD Parallelization for LIR</title>
+
+  </head>
+  <body>
+	<h1>9. SIMD Parallelization for LIR</h1>
+
+<h3 id='i-9-1'>9.1. Introduction</h3>
+
+Media processing applications often treat homogeneous data with relatively
+small size such as PCM audio and bitmaps of pictures.
+Then, recent processors have equipped with SIMD (Single Instruction Multiple
+Data stream) type media processing instruction (SIMD instruction for short) 
+sets extensions,
+which is aimed to accelerate the processing speed for those data.
+The followings are examples of such SIMD instruction sets:
+<pre>
+DEC(HP)	Motion Video Instruction Extensions for Alpha
+MIPS	MIPS 3D
+SUN	Visual Instruction Set
+Motorola Velocity Engine (AltiVec)
+Intel	MMX,SSE,SSE2,SSE3
+</pre>
+Currently, utilization of SIMD instructions through compilers are very limited.
+In many cases, programmers must resort to use assembly languages or
+intrinsic routines when he is to exploit SIMD instruction sets.<p>
+
+We have developed program code analysis and transformation
+methods which enables the compiler to generate efficient code including
+SIMD instructions for those applications shown above, and have implemented it
+in our infrastructure. We call such transformation as SIMD parallelization or
+SIMD optimization.<p>
+
+<h3 id='i-9-2'>9.2. Precise Description of SIMD instructions</h3>
+SIMD instructions including complex and data size conscious
+instructions such as saturation arithmetics and rounding operations.
+It is impossible to make use of those instructions
+with simplified instruction description manner that only associates
+operators in higher-level languages and their corresponding instructions.
+
+<P>To exploit features of SIMD instruction sets which have generally
+low parallelism but low execution cost, schedulings of instructions including
+conventional ones are needed.
+And the compiler must analyse dependencies between instructions precisely.
+
+<P>Then, we made precise and systematic description of functions of the
+instructions including conventional ones for following instruction set
+architecture.
+Really, they describe precise behaviour of instruction execution such
+as change of condition flags and behaviour on overflow.
+
+<p>For example, "addcc" instruction of SPARC v8 is described as Fig.9-1.
+<pre>
+;; == Add and modify icc ==
+;; addcc reg, reg_or_imm, reg
+(DEFINST ("addcc ?1r, ??2R, ?3r" "addcc ?1r, ??2R, ?3r")
+  (PARALLEL
+   (SET (REG I32 (HOLE 3 IREG_D))
+	(ADD I32 (REG I32 (HOLE 1 IREG)) (HOLE 2)))
+   (SET (REG I1 icc_n)
+	(TSTLTS I1 (ADD I32 (REG I32 (HOLE 1 IREG)) (HOLE 2))
+	       (INTCONST I32 0)))
+   (SET (REG I1 icc_z)
+	(TSTEQ I1 (ADD I32 (REG I32 (HOLE 1 IREG)) (HOLE 2))
+	       (INTCONST I32 0)))
+   (SET (REG I1 icc_v)
+	(OVERFLOW I1 (REG I32 (HOLE 1 IREG)) (HOLE 2) (INTCONST I1 0)))
+   (SET (REG I1 icc_c)
+	(CARRY  I1 (REG I32 (HOLE 1 IREG)) (HOLE 2) (INTCONST I1 0)))
+   )
+  )
+;; in case of destination=g0
+(DEFINST ("addcc ?1r, ??2R, %g0" "addcc ?1r, ??2R, %g0")
+  (PARALLEL
+   (SET (REG I1 icc_n)
+	(TSTLTS I1 (ADD I32 (REG I32 (HOLE 1 IREG)) (HOLE 2))
+	       (INTCONST I32 0)))
+   (SET (REG I1 icc_z)
+	(TSTEQ I1 (ADD I32 (REG I32 (HOLE 1 IREG)) (HOLE 2))
+	       (INTCONST I32 0)))
+   (SET (REG I1 icc_v)
+	(OVERFLOW I1 (REG I32 (HOLE 1 IREG)) (HOLE 2) (INTCONST I1 0)))
+   (SET (REG I1 icc_c)
+	(CARRY  I1 (REG I32 (HOLE 1 IREG)) (HOLE 2) (INTCONST I1 0)))
+   )
+  )
+</pre>
+<center>
+Fig.9-1 Precise description of "addcc" insturuction of SPARC v8<p>
+</center>
+Table 9-1 shows the total volume of such descriptions. These files
+with comments in Japanese
+are under the directory "doc-ja/coins/instDesc" of COINS release.<p>
+
+<center>
+Table 9-1 Volumes of precise description of SIMD instructions<p>
+<table border="1">
+  <tr>
+    <th align="center">Instruction Set</th>
+    <th align="center">Lines</th>
+    <th align="center">Bytes</th>
+  </tr>
+  <tr>
+    <td  align="left">SPARC Version 8</td>
+    <td align="right">4044</td>
+    <td align="right">100133</td>
+  </tr>
+  <tr>
+    <td  align="left">SPARC Version 9 (including VIS )</td>
+    <td align="right">9045</td>
+    <td align="right">245017</td>
+  </tr>
+  <tr>
+    <td  align="left">IA-32(including MMX/ SSE/ SSE2/ Enhanced 3DNow!)</td>
+    <td align="right">31090</td>
+    <td align="right">1276309</td>
+  </tr>
+  <tr>
+    <td  align="left">PowerPC (including AltiVec)</td>
+    <td align="right">20796</td>
+    <td align="right">827171</td>
+  </tr>
+</table>
+</center>
+<p> 
+
+<h3 id='i-9-3'>9.3. SIMD Parallelization</h3>
+SIMD instruction set treated in COINS uses fixed size
+vector registers, which are separated into sub-registers with
+uniform data size as illustrated in Fig.9-2. The data size is decided
+by applied SIMD instruction. To gain more parallelism,
+data size of sub-registers should be minimized with a condition
+that the same execution result is given as the compiler uses the
+integral type for data size of the sub-resigters. We will discuss
+this issue in section 9.4.<p>
+
+<center>
+<img src="simdType1-3.jpg" alt="simdType1-3.jpg"><br>
+Fig.9-2 Examples of SIMD instructions<p>
+</center>
+
+We categorize SIMD instructions into three types which our
+SIMD optimizer can treat as illustrated in Fig.9-2.
+
+<dl>
+<dt>TYPE-1</dt><dd> 
+Uniform operations are done between sub-registers
+in the same positions and the results are written to
+the same position. It is why we call such instruction
+set as SIMD.</dd>
+<dt>TYPE-2</dt><dd> 
+The result may be written in different position from
+the source. Shuffle operations are the examples. Our
+optimizer uses them when implicit data motions are
+needed.</dd>
+<dt>TYPE-3</dt><dd> 
+The data size of source differ from that of the
+destination. The optimizer used them implicitly when
+data size conversions are needed, or explicitly with
+large pattern matching.</dd>
+</dl>
+<p>
+We assume that comparing operations in SIMD instruction
+set produce all 1 bit patterns for true or all 0 patterns for
+false, in other words, they produce bit-mask for the result
+as illustrated in second example of Fig.9-2. Most of SIMD
+instruction sets use this manner. Our if-conversion algorithm
+exploits this feature. This semantics for boolean value differs
+from that of original LIR, then we use it only in the SIMD
+optimization phase.<p>
+We decided in this project to show step-wise mile stones for
+SIMD compiler optimization, and following items for COINS
+SIMD optimization.
+<ul><li>COINS does not employ any additional special language
+constructs for SIMD optimization such as vector type
+declarations and operations.</li>
+<li>SIMD optimizer itself does not perform vectorization
+tasks such as loop unrolling and complex IF peeling.</li>
+<li>SIMD optimizer in this project is designed as an LIR to
+LIR transformer.</li></ul>
+<p>
+While vectorization and complex if-conversion are important
+items in SIMD optimization for real source code, most of
+them can be written in source code level. Such transformations
+and optimizations should be done in HIR level under the policy
+of COINS. Currently, they are separated and postponed to the
+future work.
+<p>
+SIMD optimizer decides do or not do of SIMD optimization
+for each sub-program (or function) automatically. This decision
+should be done in more fine grain such as loops, and it
+is also a future work.
+<p>
+For example, current COINS cannot emit SIMD instructions
+for case-A and -B of Fig.9-3, but can do for case-C, -D, and
+-E. Compilers which connects SIMD optimization to vector
+operations may not be able to generate SIMD instructions for
+case-E.
+<pre id='AVE-program'><tt>
+#define AVE(x,y) (((x)&gt;&gt;1)+((y)&gt;&gt;1)+(((x)|(y))&amp;1))
+struct {
+  short r, g, b, a;
+} *u1, *u2, *u3;
+  short *v1, *v2, *v3;
+/* Assume that all pointers are aligned,
+   and distances of source and destination pointers
+   are longer than the size of vector register. */
+  for (i = 0; i &lt; M; i++) // case-A
+    *v1++ = AVE(*v2++, *v3++);
+  for (i = 0; i &lt; M; i++) // case-B
+    v1[i] = AVE(v2[i], v3[i]);
+  for (i = 0; i &lt; M; i += 4) { // case-C
+    v1[i] = AVE(v2[i], v3[i]);
+    v1[i+1] = AVE(v2[i+1], v3[i+1]);
+    ...
+    v1[i+3] = AVE(v2[i+3], v3[i+3]); }
+  for (i = 0; i &lt; M; i += 4) { // case-D
+    v1[0] = AVE(v2[0], v3[0]);
+    v1[1] = AVE(v2[1], v3[1]);
+    ...
+    v1[3] = AVE(v2[3], v3[3]);
+    v1+=4; v2+=4; v3+=4; }
+  for (i = 0; i &lt; M; i++) { // case-E
+    u1[i].r = AVE(u2[i].r, u3[i].r);
+    u1[i].g = AVE(u2[i].g, u3[i].g);
+    u1[i].b = AVE(u2[i].b, u3[i].b);
+    u1[i].a = AVE(u2[i].a, u3[i].a); }</tt></pre>
+<center>
+Fig.9-3 Examples of SIMD parallelizable loop
+</center>
+
+<h4 id='i-9-3-1'>9.3.1 Methods of SIMD Parallelization</h4>
+
+We use an example code shown in Fig.9-4 to illustrate SIMD
+optimization.  
+
+<pre><tt>static unsigned char sa,sr,sg,sb;
+static short da,dr,dg,db;
+static short k;
+
+static void
+hLineRight(unsigned char *p,int n,
+           unsigned char a,short ea,
+           unsigned char r,short er,
+           unsigned char g,short eg,
+           unsigned char b,short eb) {
+  while(n!=0) {
+    *p++=b; *p++=g; *p++=r; *p++=a;
+    a+=sa; r+=sr; g+=sg; b+=sb;
+    if((ea+=da)&gt;=0) { a++; ea-=k; }
+    if((er+=dr)&gt;=0) { r++; er-=k; }
+    if((eg+=dg)&gt;=0) { g++; eg-=k; }
+    if((eb+=db)&gt;=0) { b++; eb-=k; }
+    --n;
+  }
+}</tt></pre>
+<center>
+FIg.9-4 An example code for a SIMD parallelization
+</center>
+<p>
+Loop kernel of the example is transformed into
+the LIR in Fig.9-5.
+
+<PRE><tt>
+<FONT COLOR=BLUE>(SET (REG I8 t0) (ADD I8 (REG I8 t0) (REG I8 t4)))</FONT>  ; a+=sa;
+<FONT COLOR=green>(SET (REG I8 t1) (ADD I8 (REG I8 t1) (REG I8 t5)))</FONT>  ; r+=sr;
+<FONT COLOR=red>(SET (REG I8 t2) (ADD I8 (REG I8 t2) (REG I8 t6)))</FONT>  ; g+=sg;
+<FONT COLOR=purple>(SET (REG I8 t3) (ADD I8 (REG I8 t3) (REG I8 t7)))</FONT>  ; b+=sb;
+<FONT COLOR=BLUE>(SET (REG I16 t8) (ADD I16 (REG I16 t8) (REG I16 t12)))</FONT>  ; ea+=da;
+<FONT COLOR=BLUE>(JUMP2 (TSTGE I1 (REG I16 t8) (INTCONST I16 0)) (LABEL L0) (LABEL L4))</FONT>  ; if()
+ <FONT COLOR=BLUE>(LABEL L0) (SET (REG I8 t0) (ADD I8 (REG I8 t0) (INTCONST I8 1)))</FONT>  ; a++;
+<FONT COLOR=BLUE> (SET (REG I16 t8) (SUB I16 (REG I16 t8) (REG I16 t28)))</FONT>  ; ea-=k;
+<FONT COLOR=BLUE>(LABEL 4)</FONT>
+<FONT COLOR=green>(SET (REG I16 t9) (ADD I16 (REG I16 t9) (REG I16 t13)))
+(JUMP2 (TSTGE I1 (REG I16 t9) (INTCONST I16 0)) (LABEL L1) (LABEL L5))
+ (LABEL L1) (SET (REG I8 t1) (ADD I8 (REG I8 t1) (INTCONST I8 1)))
+ (SET (REG I16 t9) (SUB I16 (REG I16 t9) (REG I16 t28)))
+(LABEL 5)</FONT>
+<FONT COLOR=red>(SET (REG I16 t10) (ADD I16 (REG I16 t10) (REG I16 t14)))
+(JUMP2 (TSTGE I1 (REG I16 t10) (INTCONST I16 0)) (LABEL L2) (LABEL L6))
+ (LABEL L2) (SET (REG I8 t2) (ADD I8 (REG I8 t2) (INTCONST I8 1)))
+ (SET (REG I16 t10) (SUB I16 (REG I16 t10) (REG I16 t28)))
+(LABEL 6)</FONT>
+<FONT COLOR=purple>(SET (REG I16 t11) (ADD I16 (REG I16 t11) (REG I16 t15)))
+(JUMP2 (TSTGE I1 (REG I16 t11) (INTCONST I16 0)) (LABEL L3) (LABEL L7))
+ (LABEL L3) (SET (REG I8 t3) (ADD I8 (REG I8 t3) (INTCONST I8 1)))
+ (SET (REG I16 t11) (SUB I16 (REG I16 t11) (REG I16 t28)))
+(LABEL 7)</FONT>
+</tt></PRE>
+<center>
+FIg.9-5 LIR of the loop kernel
+</center>
+<p>
+SIMD parallelization consists of following steps:
+<ol>
+<li>If-conversion<br>
+LIR expressions are if-converted to branch-free LIR
+expressions. For example, LIR for if-statement in the blue part of Fig.9-5
+is if-converted as shown in Fig.9-6.
+
+<PRE><tt><FONT COLOR=BLUE>(JUMP2 (TSTGE I1 (REG I16 t8) (INTCONST I16 0)) (LABEL L0) (LABEL L4))
+(LABEL L0)
+ (SET (REG I8 t0) (ADD I8 (REG I8 t0) (INTCONST I8 1)))
+ (SET (REG I16 t8) (SUB I16 (REG I16 t8) (REG I16 t28)))
+(LABEL 4)</FONT>
+</tt></PRE>
+is if-converted to
+<PRE><tt><FONT COLOR=BLUE>(SET (REG I16 t16)
+     (TSTGE I16 (REG I16 t8) (INTCONST I16 0)))
+(SET (REG I8 t0)
+     (ADD I8 (REG I8 t0)
+             (NEG I8 (CONVIT I8 (REG I16 t16)))))</FONT> ; exploits return value -1/0 of TSTGE
+<FONT COLOR=BLUE>(SET (REG I16 t8)
+     (SUB I16 (REG I16 t8)
+              (BAND I16 (REG I16 t28) (REG I16 t16))))</FONT>
+</tt></PRE>
+<center>
+FIg.9-6 If-conversion
+</center>
+<p>
+Our if-conversion exploits the result of
+comparison operator as not only masks but also values of
+-1/0. Then-part and else-part of the if-statements must be
+single basic-blocks to be the candidates for if-converted
+as shown in (a) of Fig.9-7. If statement of (b) can also
+be if-converted when if-statement surrounded by the box
+with dashed line can be if-converted. The optimizer has
+a constant (= 2) for levels to stop such conversion for
+nested if-statements.
+<center>
+<img src="if-convertible.jpg" alt="if-convertible.jpg"><br>
+Fig.9-7 If-convertible if-statement form<p>
+</center>
+</li>
+<li>Transforming to DAG(Directed Acyclic Graph)<br>
+For example, LIR of Fig.9-6 is transformed to LIR of Fig.9-8.
+
+<pre><tt><FONT COLOR=BLUE>(SET (REG I16 t16)
+    (TSTGE I16 (REG I16 t8) (INTCONST I16 0))) 
+(SET (REG I8 t32) (CONVIT I8 (REG I16 t16))) 
+(SET (REG I8 t0) 
+    (ADD I8 (REG I8 t0) (NEG I8 (REG I8 t32))))</FONT>  ;matched to SUB
+<FONT COLOR=BLUE>(SET (REG I16 t31) (BAND I16 (REG I16 t28) (REG I16 t16)))
+(SET (REG I16 t8) (SUB I16 (REG I16 t8) (REG I16 t31)))</FONT>
+</tt></pre>
+<center>
+Fig.9-8 Transformation to DAG
+</center>
+</li>
+<li>Data size inference<br>
+Tasks for this step are described in section 9.4.
+</li>
+<li>Matching DAGs with SIMD operations<br>
+There are templates called BOP (Basic OPerator) which
+is used to match LIR pattern with SIMD instruction
+of target machine as shown in Fig.9-9. The optimizer
+matches portions of the DAG with some of BOPs and
+trims the matched portions from the DAG according to
+the priority shown by the order of NOPs arranged on
+a table. The table consists of elemental operations in
+the TYPE-1 SIMD instruction and whole operation of
+TYPE-3 SIMD instruction, and BOPs for more complex
+operation are laid out more prior position in the table. Lexpressions
+which is trimmed with some BOP is newly
+assigned a destination register and embedded in new
+SET expression. A number which a HOLE expression
+in a BOP holds is the order of operand which the
+BOP is given. Unmatched portions of the DAGs are
+translated to normal instructions. If such portions are
+large, then SIMD optimization for the intended subprogram
+is abandoned.
+
+<pre><tt>; Get maximum number
+(BOR I8
+  (BAND I8 (HOLE 1 I8) (TSTGES I8 (HOLE 1 I8) (HOLE 2 I8)))
+  (BAND I8 (HOLE 2 I8)
+          (BNOT I8 (TSTGES I8 (HOLE 1 I8) (HOLE 2 I8)))))
+; Get average
+(RSHS I8
+  (ADD I8
+    (ADD I8 (HOLE 1 I8) (HOLE 2 I8))
+    (INTCONST I8 1))
+  (INTCONST I8 1))</tt></pre>
+<center>
+Fig.9-9 Examples of BOP
+</center>
+</li>
+<li>Combining SET expressions with same form(parallelization)<br>
+
+The optimizer finds SET expressions which uses
+same operation for different data, and gather and bind
+them with PARALLEL expression as illustrated in
+Fig.9-10 and Fig.9-11. 
+
+<pre><tt>(PARALLEL
+ <FONT COLOR=BLUE>(SET (REG I8 t0) (ADD I8 (REG I8 t0) (REG I8 t4)))</FONT>
+ <FONT COLOR=green>(SET (REG I8 t1) (ADD I8 (REG I8 t1) (REG I8 t5)))</FONT>
+ <FONT COLOR=red>(SET (REG I8 t2) (ADD I8 (REG I8 t2) (REG I8 t6)))</FONT>
+ <FONT COLOR=purple>(SET (REG I8 t3) (ADD I8 (REG I8 t3) (REG I8 t7)))</FONT>)
+(PARALLEL
+ <FONT COLOR=BLUE>(SET (REG I16 t8) (ADD I16 (REG I16 t8) (REG I16 t12)))</FONT>
+ <FONT COLOR=green>(SET (REG I16 t9) (ADD I16 (REG I16 t9) (REG I16 t13)))</FONT>
+ <FONT COLOR=red>(SET (REG I16 t10) (ADD I16 (REG I16 t10) (REG I16 t14)))</FONT>
+ <FONT COLOR=purple>(SET (REG I16 t11) (ADD I16 (REG I16 t11) (REG I16 t15)))</FONT>)
+(PARALLEL
+ <FONT COLOR=BLUE>(SET (REG I16 t16) 
+     (TSTGE I16 (REG I16 t8) (INTCONST I16 0)))</FONT>
+ <FONT COLOR=green>(SET (REG I16 t17)
+    (TSTGE I16 (REG I16 t9) (INTCONST I16 0)))</FONT>
+ <FONT COLOR=red>(SET (REG I16 t18) 
+    (TSTGE I16 (REG I16 t10) (INTCONST I16 0))) </FONT>
+<FONT COLOR=purple> (SET (REG I16 t19) 
+    (TSTGE I16 (REG I16 t11) (INTCONST I16 0)))</FONT>) 
+(PARALLEL
+ <FONT COLOR=BLUE>(SET (REG I8 t32) (CONVIT I8 (REG I16 t16)))</FONT>
+ <FONT COLOR=green>(SET (REG I8 t34) (CONVIT I8 (REG I16 t17)))</FONT>
+ <FONT COLOR=red>(SET (REG I8 t36) (CONVIT I8 (REG I16 t18)))</FONT>
+ <FONT COLOR=purple>(SET (REG I8 t38) (CONVIT I8 (REG I16 t19)))</FONT>)
+(PARALLEL
+ <FONT COLOR=BLUE>(SET (REG I8 t0) (SUB I8 (REG I8 t0) (REG I8 t32)))</FONT>
+ <FONT COLOR=green>(SET (REG I8 t1) (SUB I8 (REG I8 t1) (REG I8 t34)))</FONT>
+ <FONT COLOR=red>(SET (REG I8 t2) (SUB I8 (REG I8 t2) (REG I8 t36)))</FONT>
+ <FONT COLOR=purple>(SET (REG I8 t3) (SUB I8 (REG I8 t3) (REG I8 t38)))</FONT>)
+(PARALLEL
+ <FONT COLOR=BLUE>(SET (REG I16 t31) (BAND I16 (REG I16 t28) (REG I16 t16)))</FONT>
+ <FONT COLOR=green>(SET (REG I16 t33) (BAND I16 (REG I16 t28) (REG I16 t17)))</FONT>
+ <FONT COLOR=red>(SET (REG I16 t35) (BAND I16 (REG I16 t28) (REG I16 t18)))</FONT>
+ <FONT COLOR=purple>(SET (REG I16 t37) (BAND I16 (REG I16 t28) (REG I16 t19)))</FONT>)
+(PARALLEL
+ <FONT COLOR=BLUE>(SET (REG I16 t8) (SUB I16 (REG I16 t8) (REG I16 t31)))</FONT>
+ <FONT COLOR=green>(SET (REG I16 t9) (SUB I16 (REG I16 t9) (REG I16 t33)))</FONT>
+ <FONT COLOR=red>(SET (REG I16 t10) (SUB I16 (REG I16 t10) (REG I16 t35)))</FONT>
+ <FONT COLOR=purple>(SET (REG I16 t11) (SUB I16 (REG I16 t11) (REG I16 t37)))</FONT>)
+</tt></pre>
+<center>
+Fig.9-10 Parallelization (1)
+</center>
+<p>
+<PRE><tt>(PARALLEL
+ (SET (SUBREG I8 (REG I32 m0) 0) (ADD I8 (SUBREG I8 (REG I32 m0) 0) (SUBREG I8 (REG I32 m1) 0)))
+ (SET (SUBREG I8 (REG I32 m0) 1) (ADD I8 (SUBREG I8 (REG I32 m0) 1) (SUBREG I8 (REG I32 m1) 1)))
+ (SET (SUBREG I8 (REG I32 m0) 2) (ADD I8 (SUBREG I8 (REG I32 m0) 2) (SUBREG I8 (REG I32 m1) 2)))
+ (SET (SUBREG I8 (REG I32 m0) 3) (ADD I8 (SUBREG I8 (REG I32 m0) 3) (SUBREG I8 (REG I32 m1) 3)))
+)
+(PARALLEL
+ (SET (SUBREG I16 (REG I64 m2) 0) (ADD I16 (SUBREG I16 (REG I64 m2) 0) (SUBREG I16 (REG I64 m3) 0)))
+ (SET (SUBREG I16 (REG I64 m2) 1) (ADD I16 (SUBREG I16 (REG I64 m2) 1) (SUBREG I16 (REG I64 m3) 1)))
+ (SET (SUBREG I16 (REG I64 m2) 2) (ADD I16 (SUBREG I16 (REG I64 m2) 2) (SUBREG I16 (REG I64 m3) 2)))
+ (SET (SUBREG I16 (REG I64 m2) 3) (ADD I16 (SUBREG I16 (REG I64 m2) 3) (SUBREG I16 (REG I64 m3) 3)))
+)
+(PARALLEL
+ (SET (SUBREG I16 (REG I64 m4) 0) (TSTGES I16 (SUBREG I16 (REG I64 m2) 0) (INTCONST I16 0)))
+ (SET (SUBREG I16 (REG I64 m4) 1) (TSTGES I16 (SUBREG I16 (REG I64 m2) 1) (INTCONST I16 0)))
+ (SET (SUBREG I16 (REG I64 m4) 2) (TSTGES I16 (SUBREG I16 (REG I64 m2) 2) (INTCONST I16 0)))
+ (SET (SUBREG I16 (REG I64 m4) 3) (TSTGES I16 (SUBREG I16 (REG I64 m2) 3) (INTCONST I16 0)))
+)
+(PARALLEL
+ (SET (SUBREG I8 (REG I32 m5) 0) (CONVIT I8 (SUBREG I16 (REG I64 m4) 0)))
+ (SET (SUBREG I8 (REG I32 m5) 1) (CONVIT I8 (SUBREG I16 (REG I64 m4) 1)))
+ (SET (SUBREG I8 (REG I32 m5) 2) (CONVIT I8 (SUBREG I16 (REG I64 m4) 2)))
+ (SET (SUBREG I8 (REG I32 m5) 3) (CONVIT I8 (SUBREG I16 (REG I64 m4) 3)))
+)
+(PARALLEL
+ (SET (SUBREG I8 (REG I32 m0) 0) (SUB I8 (SUBREG I8 (REG I32 m0) 0) (SUBREG I8 (REG I32 m5) 0)))
+ (SET (SUBREG I8 (REG I32 m0) 1) (SUB I8 (SUBREG I8 (REG I32 m0) 1) (SUBREG I8 (REG I32 m5) 1)))
+ (SET (SUBREG I8 (REG I32 m0) 2) (SUB I8 (SUBREG I8 (REG I32 m0) 2) (SUBREG I8 (REG I32 m5) 2)))
+ (SET (SUBREG I8 (REG I32 m0) 3) (SUB I8 (SUBREG I8 (REG I32 m0) 3) (SUBREG I8 (REG I32 m5) 3)))
+)
+(PARALLEL
+ (SET (SUBREG I16 (REG I64 m4) 0) (BAND I16 (SUBREG I16 (REG I64 m4) 0) (SUBREG (REG I64 m7) 0)))
+ (SET (SUBREG I16 (REG I64 m4) 1) (BAND I16 (SUBREG I16 (REG I64 m4) 1) (SUBREG (REG I64 m7) 1)))
+ (SET (SUBREG I16 (REG I64 m4) 2) (BAND I16 (SUBREG I16 (REG I64 m4) 2) (SUBREG (REG I64 m7) 2)))
+ (SET (SUBREG I16 (REG I64 m4) 3) (BAND I16 (SUBREG I16 (REG I64 m4) 3) (SUBREG (REG I64 m7) 3)))
+)
+(PARALLEL
+ (SET (SUBREG I16 (REG I64 m2) 0) (SUB I16 (SUBREG I16 (REG I64 m2) 0) (SUBREG I16 (REG I64 m4) 0)))
+ (SET (SUBREG I16 (REG I64 m2) 1) (SUB I16 (SUBREG I16 (REG I64 m2) 1) (SUBREG I16 (REG I64 m4) 1)))
+ (SET (SUBREG I16 (REG I64 m2) 2) (SUB I16 (SUBREG I16 (REG I64 m2) 2) (SUBREG I16 (REG I64 m4) 2)))
+ (SET (SUBREG I16 (REG I64 m2) 3) (SUB I16 (SUBREG I16 (REG I64 m2) 3) (SUBREG I16 (REG I64 m4) 3)))
+)
+</tt></PRE>
+<center>
+Fig.9-11 Parallelization (2)
+</center>
+<p>
+A set of SET
+expressions which refers a continuous memory location
+is the first candidate for combining, and arrange SET
+expressions so that their source/destination memory
+references are aligned in a PARALLEL expression. This
+arrangement decides the order of SET expressions in
+other PARALLEL expression through define/use chains
+of registers. It uses BONE patterns for gathering
+other SET expressions. A BONE represents a SIMD
+instruction: it consists of operation pattern of target
+SIMD instruction which is mostly equivalent to the
+BOP, parallelism of the operation, commutativity
+between registers, and constraints for registers. We can
+describe whether the target machine employs 2-address
+or 3-address in the BONE. In this step, SET expressions
+combined with a PARALLEL expression must be so
+moved that the meaning of the program is not changed.
+with use of control flow information.
+</li>
+<li>Assigning SIMD registers<br>
+SIMD optimizer assigns a vector register for each PARALLEL
+expression, with using constraints in BONE
+information.
+</li>
+</ol>
+
+Correspondence between PARALLEL expression and
+SIMD instructions are described in the TMD file. Optimizers
+other than SIMD never touches PARALLEL expressions
+in current implementation.
+
+<h3 id='i-9-4'>9.4. Data Size Inference</h3>
+
+Using the definition of AVE() in <a href='#AVE-program'>Fig.9-3</a> which averages two
+integers, all operations can be done in short size (16 bits), and
+we expect the compiler to generate code (a) for the loop kernel
+in Fig.9-12. But they must be sign-extended and done in "int" size
+(32 bits in most cases) when the integral promotion rule of a
+programming language is honestly observed, and the compiler
+must generate code like (b). 
+
+
+<pre><tt>movq (%edi),%mm1                             punpcklwd (%edi),%mm1 # get lower
+movq (%esi),%mm2                             punpcklwd (%esi),%mm2
+movq %mm2,%mm3                               psrad $16,%mm1
+por %mm1,%mm3                                psrad $16,%mm2
+pand %mm0,%mm3 # %mm0 == 1(constant)         movq %mm2,%mm3
+psraw $1,%mm1                                por %mm1,%mm3
+psraw $1,%mm2                                pand %mm0,%mm3 # %mm0 == 1
+paddw %mm1,%mm3                              psrad $1,%mm1
+paddw %mm2,%mm3                              psrad $1,%mm2
+movq %mm3,(%eax)                             paddd %mm1,%mm2
+                                             paddd %mm3,%mm2 # lower result
+(a) Programmer expects ...                   punpckhwd (%edi),%mm4 # get higher
+                                             punpckhwd (%esi),%mm3
+                                             psrad $16,%mm4
+                                             psrad $16,%mm3
+                                             movq %mm3,%mm1
+                                             por %mm4,%mm1
+                                             pand %mm0,%mm1
+                                             psrad $1,%mm4
+                                             psrad $1,%mm3
+                                             paddd %mm4,%mm3
+                                             paddd %mm1,%mm3 # higher result
+                                             packssdw %mm3,%mm2
+                                             movq %mm2,(%eax)
+
+                                             (b) Integral promotion rule is observed ...</tt></pre>
+<center>
+Fig.9-12  Object codes for loop kernel of Fig.9-3(in MMX ISA)
+</center>
+<p>
+Actually, code (b) is about 2.7
+times slower than (a) in our experimentation using Pentium-M.
+We remarked this problem and presented a systematic
+solution<a href='#suzuki'>[Suzuki]</a>. This method can determine meaningful bits in
+each data path, where the word meaningful means that
+intended bits affect the result of a computation. Operations
+with constants often yield meaningless bits in storage word.
+<a href='#Stephen'>[Stephenson]</a> presented a similar analysis, but it gives only
+necessary word size. <a href='#Fisher'>[Fisher]</a> points out the necessity for
+such analysis, but presented no solution.
+
+<h4 id='i-9-4-1'>9.4.1. Algorithm</h4>
+Data size inference is performed for every assignment statements.
+We assume that the algorithm is passed top level SET
+node through parameter top, and it can traverse expression
+for right-value of the assignment with define-use chain of
+corresponding DAG.
+We use lo, up, and sz to represent the value range
+of a expression as illustrated in Fig.9-13. 
+<center>
+<img src="valuerange.jpg" alt="valuerange.jpg"><br>
+Fig.9-13 Value range representation for a expression<p>
+</center>
+We assume value of
+the expression can be in continuous integer range from bit-pattern
+lo to bit-pattern up in modulus of 2<sup>sz</sup> or with
+mask of 2<sup>sz</sup><tt>-</tt>1. We evaluate lo and up as unsigned integers
+for the default. We use a term size of ring for 2<sup>sz</sup>, and
+difference for the difference between lo and up in size of the
+ring. The figure also illustrates examples for size conversion
+and union of two value ranges. And we also use lv for set
+of meaningful bits for the expression. A 1 bit means that the
+value of this bit position may influence final value of intended
+expression. The outline of the algorithm is shown in Fig.9-14.
+
+<pre><tt>type
+  valueRange = record lo, up, sz: integer end;
+  meaningfulBits = integer; {substitution for set of bits}
+
+procedure inferNode(top: expression)
+begin
+  top.valueRange := bottomupAanalysis(top.rightValue);
+  topdownAnalysis(
+    meaningfulBits(top.leftValue),
+    top.rightValue);
+  top.meaningfulBits := meaningfulBits(top.leftValue);
+end;
+
+function bottomupAnalysis(n: expression): valueRange
+begin
+  n.valueRange := bottomupSchema(
+    n.kind,
+    bottomupAnalysis(n.child_1),
+    bottomupAnalysis(n.child_2),
+    ...
+    bottomupAnalysis(n.child_n);)
+end;
+
+procedure topdownAnalysis(w: meaningfulBits, n: expression)
+begin
+  foreach (i in n.childs) begin
+    topdownAnalysis(
+      topdownSchema(
+        w,
+        n.child_1.valueRange,
+        n.child_2.valueRange,
+        ...
+        n.child_n.valueRange),
+      n.child_i);
+  end
+  n.lv = n.lv | (w &amp; rangeToMask(n.valueRange));
+end;
+</tt></pre>
+<center>
+Fig.9-14 Data size inference algorithm<p>
+</center>
+
+<h3 id='i-9-5'>9.5. How to Use SIMD Parallelization</h3>
+<h4 id='i-9-5-1'>9.5.1. Options</h4>
+
+ SIMD parallelizer has following options.
+<dl>
+<dt> -coins:simd</dt><dd>
+    This option invokes SIMD parallelizer.
+    SIMD parallelizer is specialized for IA32/SSE2 in current implementation.</dd>
+
+<dt> -coins:target=x86simd</dt><dd>
+    This option instructs the back-end to switch matching table including SSE2
+    instructions for SIMD parallelized LIR.</dd>
+</dl>
+
+   To generate SIMD-optimized IA32/SSE2 code, both options must be used at
+ a time.<br>
+   These options may be revised along with changes of specifications or
+ implementations of the SIMD parallelizer.<p>
+
+<h4 id='i-9-5-2'>9.5.2. Limitations and Cautions</h4>
+
+   On/off of SIMD parallelizations are switched for every compilation unit
+ in current implementation. And the compiler goes to exception when it failed
+ to SIMD parallelization or it cannot match appropriate machine codes for 
+ parallelized LIR.<p>
+   In default COINS settings, x86simd code generation is switched-off.
+ You must make appropriate modification for src/coins/backend/gen/Makefile
+ to switch-on it.
+
+<h3 id='i-9-6'>9.6. SIMD Benchmark</h3>
+
+We have surveyed and evaluated real media processing applications
+with profilers (gprof or Intel VTune), and got many
+hot-spots (program portions which consume relatively large
+proportions of execution time), and extracted code patterns
+from them as the targets of SIMD optimization. We actually
+made SIMD codes from them by hand, and selected examples
+from them which could be speeded up by SIMD coding. We
+found out that most of them could not be translated to appropriate
+SIMD instructions by existing compilers unless they
+were equipped with hole in one matching corresponding to
+each of them. From this point of view, SPEC and <a href='#mediabench'>[MediaBench]</a>
+are not so much suited for tunings of SIMD optimizing
+compilers. Our primary objective for designing benchmark
+programs for SIMD optimization is to construct step-wise mile
+stones for SIMD optimization. As the result, we design and
+implemented SIMD benchmark.<p>
+Furthermore, the benchmark is available for the following
+purposes.
+<ul><li>Showing the users coding patterns suitable for SIMD
+optimization</li>
+<li>Detecting erroneous SIMD optimization: This item is
+accomplished by passing (1) non-aligned pointer and (2)
+heaping vectors to the examples through parameters.</li>
+<li>Performance comparison between implementations with
+same SIMD instruction set architecture</li></ul>
+
+<h4 id='i-9-6-1'>9.6.1. Mile-stoning</h4>
+
+In this section, we discuss what the mile-stones should be.
+Let us argue on the issues raised by SIMD optimization of a
+program code shown in Fig.9-15. 
+
+<pre><tt>/* Multiplier table for division */
+const unsigned int multipliers[32] ={
+0,32767,16385,10923,8193,6554,5462,4682,
+4097,3641,3277,2979,2731,2521,2341,2185,
+2049,1928,1821,1725,1639,1561,1490,1425,
+1366,1311,1261,1214,1171,1130,1093,1058
+};
+
+unsigned int quant5 (
+  int16_t * coeff,
+  const int16_t * data,
+  const unsigned int quant )
+{ const unsigned int mult = multipliers[quant];
+  const unsigned short quant_m_2 = quant &lt;&lt; 1;
+  const unsigned short quant_d_2 = quant &gt;&gt; 1;
+  int sum = 0;
+  unsigned int i;
+
+  for (i = 0; i &lt; M; i++) {
+    int16_t acLevel = data[i];
+    if (acLevel &lt; 0) {
+      acLevel = (-acLevel) - quant_d_2;
+      if (acLevel &lt; quant_m_2) {
+        coeff[i] = 0;
+        continue; }
+      acLevel = (acLevel * mult) &gt;&gt; 16; // division
+      sum += acLevel; // sum += |acLevel|
+      coeff[i] = -acLevel;
+    } else {
+      acLevel -= quant_d_2;
+      if (acLevel &lt; quant_m_2) {
+        coeff[i] = 0;
+        continue; }
+      acLevel = (acLevel * mult) &gt;&gt; 16;
+      sum += acLevel;
+      coeff[i] = acLevel; } }
+  return sum; }</tt></pre>
+<center>
+Fig.9-15 An example from SIMD benchmark
+</center>
+<p>
+
+This example was extracted
+from a license free implementation MPEG-4 encoder. While
+current working compilers cannot translate this function to
+optimized code in which the SIMD instructions are efficiently
+used, human can do so by hand. There are some gaps between
+this example and the goal.
+<ul><li>Loop unrolling</li>
+<li>Flattening nested if statements</li>
+<li>Processing data size selection</li></ul>
+Solutions for the first and the second items has been already
+presented <a href='#allen'>[Allen]</a>, and some SIMD optimizing compilers may be
+equipped them, and some (e.g. COINS) may not. And they
+are solved in source code level to some extent.
+<p>
+This example should be processed in 16 bits (i.e. data size
+for short) except for the division part which does multiply
+and right shift 16 bits. In normal language specifications, we
+cannot instruct it to the compiler. With data size analysis
+or some strict pattern matching, the compiler can recognize
+appropriate processing data size. Otherwise, this computation
+must be done in 32 bits (size of integral type) of data size. It is
+very hard to generate appropriate SIMD code for the original
+source code, after all.
+<p>
+We can transform loop kernel of this example to easier form
+as shown in Fig.9-16. They may be considered as a result of
+some step in SIMD code generation process, and it is quite
+possible that there may be several versions derived from the
+same original coding. In this point of view, each of original
+coding patterns was transformed by hand yielding multiple
+versions. They cover wide range of patterns from easily SIMD
+optimizable level to hardly optimizable level.
+
+<pre><tt>/* Transformation 1 */
+const unsigned short mult = multipliers[quant];
+int16_t acLevel, acLevel2;
+acLevel = ((data[i] &lt; 0) ? -data[i] : data[i]) - quant_d_2;
+acLevel2 = (acLevel * mult) &gt;&gt; SCALEBITS;
+sum += ((acLevel &lt; quant_m_2) ? 0 : acLevel2);
+coeff[i] = ((acLevel &lt; quant_m_2)
+           ? 0
+           : ((data[i] &lt; 0) ? -acLevel2 : acLevel2));
+
+/* Transformation 2 */
+const unsigned short mult = multipliers[quant];
+int16_t acMsk1, acMsk2;
+int16_t acLevel;
+
+acMsk1 = (data[i] &lt; 0) ? -1 : 0;
+acLevel = ((data[i] &amp; acMsk1)|((-data[i]) &amp; acMsk1)) - quant_d_2;
+acMsk2 = (acLevel &lt; quant_m_2) ? -1 : 0;
+acLevel = (acLevel * mult) &gt;&gt; SCALEBITS;
+sum += acMsk2 &amp; acLevel;
+coeff[i] = acMsk2 &amp; (((-acLevel) &amp; acMsk1) | (acLevel &amp; (acMsk1)));</tt></pre>
+<center>
+FIg.9-16 Two easier form for SIMD optimizations
+</center>
+
+<h3 id='references'>References</h3>
+<ol>
+<li id='suzuki'>M. Suzuki, N. Fujinami, T. Fukuoka, T. Watanabe, and I. Nakata,
+Data size inference for multimedia SIMD instructions, IPSJ Tran. on
+Programming, vol. 45, no. SIG 5(PRO21), pp. 111, 2004, (in Japanese).</li>
+<li id='Stephen'>M. Stephenson, J. Babb, and S. Amarasinghe, Bitwidth analysis with
+application to silicon compilation, in Proceedings of the SIGPLAN
+Conference on Program Language Design and Implementarion (PLDI),
+June 2000, pp. 108120.</li>
+<li id='Fisher'>R. Fisher and H. Dietz, Compiling for SIMD within a register, in
+LCPC98 (LNCS 1656), August 1998, pp. 290304.</li>
+<li id='mediabench'>C. Lee, M. Potkonjak, and W. H. Mangione-Smith, Mediabench: A
+tool for evaluating and synthesizing multimedia and communicatons
+systems, in International Symposium on Microarchitecture, 1997, pp.
+330335. [Online]. Available: citeseer.ist.psu.edu/lee97mediabench.html</li>
+<li id='allen'>R. Allen and K. Kennedy, Optimizing Compilers for Modern Architectures.
+Morgan Kaufmann Publishers, 2002.</li>
+</ol>
+  </body>
+</html>

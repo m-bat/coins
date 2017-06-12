@@ -1,0 +1,481 @@
+Fri Mar 11 19:07:51 2005  FUKUDA   Isao
+	* CommandLine.java: bug fix.
+            (-D__arch__ not defined) 
+Mon Mar  7 11:11:51 2005  FUKUDA   Isao
+        *  Driver.java :  Root.init(spec); was added.
+Tue Nov  2 01:14:01 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CoinsOptions.java: bug fix.  Options in a property file no more
+ 	  overrides options given in command line.
+
+	* CommandLine.java: "sparc" is adopted as a default architecture name.
+
+	* CompileThread.java, CommandLine.java, Driver.java: target convention 
+	  can be specified by -b arch-convention and
+	  -coins:target-arch=arch,target-convention=convention.
+
+Thu Sep 22 23:50:07 2004  Koichi Sasada  <sasada@namikilab.tuat.ac.jp>
+
+        * F77Driver.java : change import package (ffront -> coins.ffront).
+
+Fri Jun 25 12:49:07 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* StreamCopier.java: Never closes output stream.  A new method go() is 
+	  introduced, which starts copying and waits to finish.
+
+	* CompileThread.java: Waits a StreamCopier and closes an OutputStream
+	  when assemble and link.
+
+	* Driver.java: Fixed for a new StreamCopier interface.
+
+	* Driver.java: Standard output of an assembler and a linker is
+	  redirected to IoRoot#msgOut.
+
+	* Driver.java: Trace messages of a category "asdebug" are eliminated.
+
+Mon Jun 21 02:16:35 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: COINS options optLabel1 and optLabel2 are removed.
+
+	* Driver.java: An old HIR2LIR is removed.
+
+	* CompileStatus.java: This class is changed to public, so that the two 
+	  static constant field NORMAL_END and ABNORMAL_END can be referred
+	  from other packages.
+
+	* CommandLine.java, Driver.java: Class CommandLine is changed to throw 
+	  java.text.ParseException if a specified command string is incorrect.
+	  a -o option without any argument can be treated as a command line
+	  error by this fix.
+
+	* CommandLine.java, SuffixFactory.java: A null constructor is added to
+ 	  represent an empty command line.
+
+	* CompileThread.java: an I/O error message is changed to be put at
+	  IoRoot#msgError, not at System.err directly.
+
+	* Driver.java: a new COINS option dumphir is introduced to dump an HIR 
+	  to a file.  This is a hidden feature for debugging.
+
+	* Driver.java: some trace messages of category "asdebug" is added.
+
+	* StreamCopier.java: An optional message to notify output stream close
+ 	  is added.
+
+Mon Apr 26 04:03:13 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: a package coins.casttohir is replaced by a package
+	  casttohir.
+
+Mon Apr 19 11:42:22 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: LIR optimization options for various optimization
+	  levels are defined.
+
+	* Driver.java: HIR optimization arguments for various optimization
+	  levels are updated.
+
+Thu Apr 15 01:57:30 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CoinsOptions.java: toString() is introduced.
+
+	* Driver.java: SSA optimization arguments for various optimization
+	  levels are updated.
+
+	* Driver.java: Old LIR optimization codes are eliminated including
+	  flow analysis and absReg.
+
+	* Driver.java: English is improved in some comments.
+
+Wed Apr 14 02:11:45 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: HIR#setIndexNumberToAllNodes() is called always in
+	  makeHirBaseFromC().
+
+Fri Apr  2 02:47:52 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CompileSpecification.java, CommandLine.java, Driver.java: -v is
+	  added.
+
+	* CompileSpecification.java, CommandLine.java: -b arch is added.
+
+	* Driver.java: -coins:lir2c=flo is obsoleted.
+
+	* F77Driver.java: renamed from fc.java.
+	
+Thu Apr  1 19:32:24 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: obsolete the old back-end.
+
+	* Driver.java: back-end interface is changed to pass SSA and LIR2C
+	  control to the driver.
+
+Wed Feb 18 07:35:55 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* fc.java: "-lm" is added.
+
+Mon Feb 16 13:46:09 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* fc.java: A FORTRAN driver.
+
+	* Driver.java: site-local default settings can be specified by a
+ 	  default settings file "settings" located at the library directory.
+  	  Default linker options can be specified by it.
+
+Mon Feb  9 12:46:21 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: set a default LIR option to the COINS-options object if
+ 	  neither of them is specified.
+
+	* CommandLine.java: ignore null string command arguments
+
+Thu Jan 29 03:49:53 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: include changes for a newer HIR2C.
+
+Tue Jan 27 06:41:32 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: include changes for new HIR2C.
+
+	* Driver.java: DEFAULT_LIR_OPTION is introduced to switch default
+	  version of LIR.
+
+Thu Jan 22 06:53:28 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CompileStatus.java: The name is changed from
+	  CompilerExitStatus, due to handle linking cancellation.
+
+	* PassStopException.java: a new exception class is introduced to abort 
+	  compilation not setting abnormal end to exit status.
+
+	* CompileThread.java: catches PassStopException.
+
+Tue Jan 20 11:58:48 2004  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* coins/driver/CompileThread.java: the exit status is set to abnormal
+	  end if a RuntimeException or an Error is thrown in a CompileThread.
+
+Thu Oct 30 03:43:37 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* SuffixFactory.java: specifying a suffix string same as a source flie
+ 	  to the after-preprocess/compile/assemble field causes a warning
+	  message.
+
+	* SuffixFactory.java: new records `c(out-newlir)' and `lir' are
+ 	  introduced to the default suffix rule.
+
+	* suffixes: new records `c(out-newlir)' and `lir' are introduced.
+
+	* Driver.java: new cons options, `oldlir', `newlir' and `out-newlir'
+ 	  are introduced.  New LIR can be used.
+
+	* Driver.java: when -coins:oldlir is specified, -On options don't
+ 	  invoke SSA optimizations, i.e., only basic optimizations are
+ 	  invoked.
+
+Thu Oct 16 04:41:29 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: two bug fixes.
+	  1) initHir/LirToCTImingList() returns an ArrayList which contains
+ 	  conversion timing specifiers given in command line option, whether a
+ 	  stopafterhir/lir2c option is given or not.
+	  2) optimizeHir*/Lir are invoked if -coins:hir/lirOpt are not
+ 	  specified.  (SSA can be used without -coins:lirOpt.)
+
+Fri Oct 10 03:40:40 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: package coins.ssa is replaced by ssaforoldlir.
+
+Wed Sep 24 06:09:53 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: bug fix.  initHir/LirToCTimingList() returns empty
+ 	  ArrayList object instead of null when either -coins:hir/lir2c=xxx or
+ 	  -coins:stopafterhir/lir2c is not specified.
+
+	* SuffixFactory.java: bug fix.  A default suffix rule is incorrect
+	  (header record missing).
+
+Mon Sep 22 05:39:29 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CoinsOptions.java, CompilerDriver.java: -coins:preserveFiles is
+	  introduced.
+	* Driver.java: -coins:testHir and -coins:testSym are introduced.
+	* Driver.java, CommandLine.java: -O, -O1, -O2 are translated into
+	  -coins:hirOpt=cf/cpf,lirOpt=cf/cpf,absReg,with_ssa_opt=cp/cf and -O3 
+	  is translated into
+	  -coins:hirOpt=cf/cpf/cse/dce,lirOpt=cf/cpf/csem/dce,absReg,with_ssa_opt=cp/cf/cse/dce/hie/osr/eup
+
+Tue Sep 16 08:58:02 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CoinsOptions.java:
+	  **INTERFACE FIX**
+	  set(String) and set(String, String) are introduced to set COINS
+	  options by program.
+	
+Sun Sep 14 07:29:14 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* SuffixFactory.java: suffix rule database format is changed to
+	  include programming language name.
+	* CompilerImplementation.java, Driver.java, CompileThread.java: 
+	  **INTERFACE FIX**
+	  preprocess(), compile(), and assemble() are supplied Suffix object
+	  as a parameter.
+	* Suffix.java
+	  **INTERFACE FIX**
+	  getLanguageName() and getSuffixOption() are introduced.
+	
+Fri Sep 12 22:34:17 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: go() is introduced to reduce writing cost of main() in
+	  derived classes.
+	* Driver.java: makeHirFromSource() is introduced to generalize pass
+	  structure to languages other than C.
+	* Driver.java: a bug fix. Makes LIR2C and HIR2C thread-safe.
+	
+Wed Aug 27 16:03:41 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: SSA optimizer is included.
+
+Thu Jul 17 20:27:26 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Warning.java: when the instance is created without IoRoot, two
+ 	  putMessage()s emit messages directly to System.out, not to
+ 	  IoRoot.msgWarning.
+
+Thu Jun 26 04:07:26 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CoinsOptions.java: Method getAttachedFileInputStream() is moved to
+	  the class CompilerDriver.
+
+	* Following classes are now thread-safe: CoinsOptions, CommandLine,
+ 	  CompilerExitStatus, CompileThread, Driver, IoRoot, Message,
+ 	  StreamCopier, Suffix, SuffixFactory, TemporaryFileManager, Trace,
+ 	  Warning.
+
+Wed Jun 25 05:07:34 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* TemporaryFileManager.java:
+	  **INTERFACE FIX**
+	  A return type of the method getTemporaryFiles() is changed
+ 	  to Colleciton from List.
+
+	* CompilerImplementation.java: A list of object files is remove from
+	  an argument list of method link().
+
+	* Driver.java: The method makeCommaneLine() is a protected method now.
+  	  A list of object files is remove from an argument list of method
+ 	  link().
+
+Tue Jun 24 00:52:53 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Warning.java: Uses IoRoot.msgWarning to put warning messages.
+
+	* CompilerImplementation.java: 
+	  **INTERFACE FIX**
+	  CompilerImplementation#preprocess(),
+	  CompilerImplementation#compile(), CompilerImplementation#assemble(),
+ 	  and CompilerImplementation#link() passes an IoRoot instead of a
+ 	  CompileSpecification
+	
+	* CompilerDriver.java: method errorCheck() is introduced to count and
+	  reset message counts.  IoRoot is created in CompilerDriver#go().
+
+	* Message.java: A new inner class FatalMessage is introduced, which
+	  throws a FatalError whenever a message is put.
+
+	* Driver.java: interface changed: Driver#preprocess(),
+	  Driver#compile(), Driver#assemble(), and Driver#link().  An IoRoot
+	  is passed instead of a CompileSpecification.
+
+Wed Jun  4 23:37:11 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: `package coins.driver' is added.
+
+Fri May  9 07:20:17 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* SuffixFactory.java (SuffixFactory): a bug fix.  suffix database file 
+	  now can have empty lines without any error.
+
+	* CoinsOptions.java: a bug fix. getAttachedFileInputStream() now
+ 	  thorws a FileNotFoundException if the file is not found in a jar/zip 
+	  entry, not a NullPointerException.
+
+	* CommandLine.java:
+	  **INTERFACE FIX**
+	  CommandLine#getPreprocessorOptions() and
+	  CommandLine#getCompilerOptions() now return a List of String's
+ 	  properly, not a List of Collection's and String's.
+	
+Thu Feb 13 13:59:21 2003  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* CompilerDriver.java: minor bug fix.  A file name given in a command
+	  line is used to call setObjectFile(), not a getPath() result.
+
+Tue Dec 24 12:05:57 2002  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* SuffixFactory.java: a minor change.  Some methods now requires a
+ 	  CompileSpecification object instead of Warning object, since tracing 
+	  them is required during development.
+
+	* CompileSpecifications.java, CommandLine.java: following five
+ 	  interface methods are introduced: isPreprocessorOption(),
+ 	  isCompilerOption(), isAssemblerOption(), isLinkerOption(), and
+ 	  setObjectFile().
+
+	* CommandLine.java: fLinkerOptions is introduced to store linker
+	  options in the order they appeared in the original command line.
+	  Instead, getLinkerOptions() gets simpler.
+	
+	* CompilerDriver.java (CompilerDriver$PassGroup#outputFile()): now
+	  throws a PassException instead of an old IOException.
+
+	* CompilerDriver.java (CompilerDriver#go()): now calls
+ 	  fSpec.setObjectFile() to set the linker options correctly.
+
+	* Driver.java (Driver#link()): the argument fObjectFiles is ignored
+ 	  since spec.getLinkerOptions() now includes object file names (at
+ 	  correct point in the command line).
+
+	* CompilerDriver.java: the suffix rule file search path is changed: if
+ 	  not found in the library directory, default file in a COINS
+ 	  distribution will be used.
+
+	* CoinsOptions.java: the default library directory is changed from "."
+  	  to "~/coins": "." is now the second default.  Method
+ 	  getAttachedFileInputStream is introduced to read a default
+ 	  configuration file which may be bundled in a distribution.
+
+Wed Dec 18 02:33:26 2002  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: following protected members and methods are introduced
+	  to judge whether the C sources are generated for all specified
+	  timing:
+	    fHirToCRemainingSpecifiers, fLirToCRemainingSpecifiers,
+	    separateDelimitedList, checkHirToCStopCondition, and
+	    checkLirToCStopCondition.
+
+Tue Nov 26 12:52:08 2002  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java: following protected methods are added:
+	    includedInDelimitedList, matchHirToCTiming, callHirBasToC,
+	    makeCSourceFromHirBase (and its variation), matchLirToCTiming,
+	    callLirToC, and makeCSourceFromLir (and its variation).
+
+Fri Oct  4 06:01:31 2002  NISHIOKA Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Driver.java (Driver#link()): This method is corrected to insert
+ 	  object file names and a -o option to the head of the linker options,
+ 	  not add them to the tail.  This correction is a temorary work around
+ 	  and should be corrected later to preserve the original order in the
+ 	  user-given command line.
+
+	* Driver.java (Driver#makeHIRFlowAnalysis()): This method is corrected
+ 	  to call useSymTableOfSubpDefinition() of the symRoot object for each
+ 	  subpDef object before its control flow analysis.
+
+	* Driver.java (Driver#makeHirBaseFromC()): This method is corrected to
+ 	  put a trace message "HIR-base does not violate tree structure." if
+ 	  the output hir satisfies the isTree() condition.
+
+	* Driver.java (Driver#evaluateCommandName()): This method is corrected
+ 	  to preserve quotation marks in a quoted part in
+	  -coins:preprocessor/assembler/linker options.
+
+	* Driver.java (Driver#makeHirCFromCSource()): This method is corrected
+ 	  to put the ToHirC object as a field of the hirRoot object.  This is
+ 	  caused by the design change of the HIR library.
+	
+	* CompilerDriver.java (CompilerDriver$Assembler#outputFile()): This
+ 	  method is corrected to return a temporary file name unless the -c
+ 	  option is specified; i.e. a -o option specifies an output executable
+ 	  file name, not the assembler output file name unless the -c option
+ 	  and other similiar options are not specified.
+
+	* CompileSpecification.java: A cosmetic change.
+
+	* CommandLine.java (CommandLine#getLinkerOptions()): -L and -l options
+ 	  may be specified more than once in a command line.  This method is
+ 	  corrected to return all the options, not one.
+
+	* CoinsOptions.java: A cosmetic change.
+
+Thu Dec 27 07:49:33 2001  NISHIOKA `Jazz' Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* Warning.java: A warning message can take a warning number.
+
+Mon Nov 12 12:06:14 2001  NISHIOKA `Jazz' Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* SampleDriver.java: gas and gcc are called as an assembler and a
+ 	  linker.
+
+	* StreamCopier.java: A new class, actually promoted from an inner
+	  class of SampleDriver.
+
+	* CompilerImplementation.java, SampleDriver.java: The output types of
+ 	  assemble() and link() are changed from OutputStream to File.
+
+	* CompileSpecification.java, CommandLine.java: WARNING_LEVEL ->
+ 	  WARNING_CATEGORY.
+
+	* CommandLine.java: getCompilerOptions(), getAssemblerOptions(), and
+	  getLinkerOptions() are implemented.
+
+	* CompilerDriver.java: When an object file is specified in a command
+ 	  line, it is used as a linker input, without copying it to a
+ 	  temporary file.
+
+	* CompilerDriver.java: The output of a PassGroup can be a File, not
+ 	  only an OutputStream.
+
+Wed Nov  7 05:16:50 2001  NISHIOKA `Jazz' Toshihiro  <nishioka@bill.mri.co.jp>
+
+	* SampleDriver.java:
+	    o A code generation phase is implemented,
+	    o `cpp' is called during a preprocess phase, and
+	    o `gas' is called during an assembler phase.
+
+	* CompilerDriver.java: Various bug fixes.  Oh, my.
+
+	* compile: Bug fix.  It was completely corrupted.
+
+	* CompileSpecification.java: Return values of three methods,
+	  getPreprocessorOptions(), getCompilerOptions(), and
+	  getAssemblerOptions() are changed from a String to a List since
+	  Runtime.exec() takes arguments as String[], not a String.
+
+	* CompileSpecification.java, CommandLine.java: Bug fix.  -P must
+ 	  INHIBIT #line directives, not to produce them.
+
+	* CompilerImplementation.java: An argument `InputStream in' was
+ 	  removed since C-preprocessors cannot take input from standard input
+	  (remember that they generate #line directives with a source file
+	  name).
+
+	* Suffix.java (Suffix): Bug fix.  An after-preprocess suffix was
+	  initilized incorrectly.
+
+	* CodeEmitterImpl.java: implements CodeEmitter.
+
+	* CodeGenerator.java, AbstractCodeGenerator.java: A new interface,
+ 	  process(Program, OutputStream) is added; i.e., takes an OutputStream
+ 	  instead of a String file name.
+	  Two methods, process(Program, String) and process(Program,
+	  OutputStream) throws coins.PassException and java.io.IOException.
+
+	* CodeEmitter.java, SparcCodeEmmiter.java: A new interface,
+ 	  process(Program, OutputStream) is added; i.e., takes an OutputStream
+ 	  instead of a String file name.  Two methods, process(Program,
+ 	  String) and process(Program, OutputStream) throws
+ 	  coins.PassException and java.io.IOException.
+
+	* SparcCodeEmitterImpl.java: An implementation of the new interface
+	  process(Program, OutputStream) is added.
+  	  Two methods, process(Program, String) and process(Program,
+ 	  OutputStream) throws coins.PassException and java.io.IOException.
+
+	* CodeEmitterImpl.java: A new method write(OutputStream) is added.
+	  Two methods, write(String) and write(OutputStream) throws
+	  IOException if writing fails.
+	
+	* CompilerDriver.java: When a RuntimeException or an Error is caught,
+	  temporary files are cleared and the exception is re-thrown.

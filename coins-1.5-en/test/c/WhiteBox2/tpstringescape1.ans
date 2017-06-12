@@ -1,0 +1,4 @@
+str \0END
+str2 \\\abcdEND
+str3 xyz"	tf
+nEND

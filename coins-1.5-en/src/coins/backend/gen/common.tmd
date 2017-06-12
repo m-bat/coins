@@ -1,0 +1,41 @@
+;; -----------------------------------------------------------------------
+;;%   Copyright (C) 2007 Association for the COINS Compiler Infrastructure 
+;;%       (Read COPYING for detailed information.)             
+;;------------------------------------------------------------------------ 
+;;-*-Lisp-*-
+; Common Definitions
+
+(defmacro (use-convuf-fu)
+  ;; convert CONVUF
+
+  ;; CONVUF to CONVSF + ADD
+  (defrewrite (CONVUF _ _)
+    (to (eval "rewriteCONVUF($0, pre)"))
+    (phase early))
+
+  ;; CONVFU to CONVFS + ADD
+  (defrewrite (CONVFU _ _)
+    (to (eval "rewriteCONVFU($0, pre)"))
+    (phase early)) )
+
+(defmacro (use-call)
+  ;; Prologue
+  (defrewrite (PROLOGUE)
+    (to (norescan (eval "rewritePrologue($0, post)")))
+    (phase late))
+
+  ;; Epilogue
+  (defrewrite (EPILOGUE)
+    (to (norescan (eval "rewriteEpilogue($0, pre)")))
+    (phase late))
+
+  ;; Call
+  (defrewrite (CALL)
+    (to (eval "rewriteCall($0, pre, post)"))
+    (phase late))
+
+  ;; Rewrite ASM
+  (defrewrite (ASM)
+    (to (norescan (eval "rewriteAsm($0, pre, post)")))
+    (phase late)) )
+

@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>Structure and Extensions of the Backend Process</title>
+
+  </head>
+  <body>
+	<h1>11. Structure and Extensions of the Backend Process</h1>
+    
+	<h2>Contents</h2>
+    
+<ul>
+<li><a href='#i-11-1'>11.1. How to Call Backend Processes</a></li>
+<li><a href='#i-11-2'>11.2. How to Add New Process to Backend</a></li>
+<ul>
+<li><a href='#i-11-2-1'>11.2.1. Example 1: Instruction Scheduler</a></li>
+<li><a href='#i-11-2-2'>11.2.2. Example 2: Register Promotion</a></li>
+</ul>
+</ul>
+
+<h3 id='i-11-1'>11.1. How to call Backend Processes</h3>
+The backend processes are called from coins.driver.Driver as follows:
+<pre>
+00    /* pass 7 -- Code generation */
+01    Root root = new Root(spec, new PrintWriter(System.out, true));
+02    String targetName
+03      = coinsOptions.getArg(CommandLine.COINS_TARGET_NAME_OPTION);
+04    String targetConvention
+05      = coinsOptions.getArg(CommandLine.COINS_TARGET_CONVENTION_OPTION);
+06    trace.trace(myName, 5000, "target name = " + targetName);
+07    Module unit = Module.loadSLir(sexp, targetName, targetConvention, root);
+08    makeCSourceFromLir("new", lirToCTimings, unit, io);
+09
+10    if(spec.getCoinsOptions().isSet("snapshot"))
+11      snap.shot(unit,"Generated LIR");
+12
+13    /* SSA optimization */
+14    if (spec.getCoinsOptions().isSet(coins.ssa.OptionName.SSA_OPT)) {
+15      unit.apply(new coins.ssa.SsaDriver(unit, io, spec));
+16      /* Simple/JumpOpt again */
+17      unit.apply(coins.backend.opt.SimpleOpt.trig);
+18      unit.apply(coins.backend.opt.JumpOpt.trig);
+19    } else {
+20      unit.basicOptimization();
+21    }
+22    if (spec.getCoinsOptions().isSet("simd")) {
+23      unit.apply(new coins.simd.SimdDriver(unit, io, spec));
+24    }
+25    makeCSourceFromLir("opt", lirToCTimings, unit, io);
+26
+27    if(spec.getCoinsOptions().isSet("snapshot"))
+28      snap.shot(unit,"Optimized LIR");
+29
+30    if(spec.getCoinsOptions().isSet("snapshot"))
+31      snap.generateXml();
+32
+33    unit.generateCode(out);
+34
+35    if (trace.shouldTrace("Sym", 1)) {
+36      trace.trace("Sym", 1, "\nSym after code generation ");
+37      symRoot.symTable.printSymTableAllDetail(symRoot.symTableRoot);
+38      symRoot.symTableConst.printSymTableDetail();
+39    }
+</pre>
+The instance <tt>root</tt> made at the line 1 has the root information of the backend process. It has the information of the compiler options (<tt>spec</tt>)
+and output assembly file (<tt>System.out</tt>).
+The backend processes are called at the line 7, 20, and 33 as:
+<pre>
+Module unit = Module.loadSLir(sexp, targetName, targetConvention, root);
+unit.basicOptimization();
+unit.generateCode(out);
+</pre>
+The instance <tt>unit</tt> has the internal representaion of the LIR made
+from the S-expression <tt>sexp</tt>.
+<p>
+The above three methods, loadSLir, basicOptimizations, and generateCode,
+are composed of several steps as follows:
+<dl>
+<dt>loadSLir</dt>
+<pre>
+Module unit = new Module(sexp, targetName, convention, root);
+unit.apply(new String[] {
+    "IntroVirReg",
+    "EarlyRewriting",
+    "+AfterEarlyRewriting",
+    "If2Jumpc" });
+return unit;
+</pre>
+<dt>basicOptimization</dt>
+<pre>
+unit.apply(new String[] {
+    "+BeforeBasicOpt",
+    "SimpleOpt",
+    "JumpOpt",
+    "PreHeaders",
+    "LoopInversion",
+    "+AfterBasicOpt" });
+</pre>
+<dt>generateCode</dt>
+<pre>
+unit.apply(new String[] {
+    "+BeforeCodeGeneration",
+    "LateRewriting",
+    "+AfterLateRewriting",
+    "ToMachineCode",
+    "+AfterToMachineCode",
+    "ConvToAsm"  });
+</pre>
+</dl>
+For example, by the first
+<pre>
+unit.apply("IntroVirReg");
+</pre>
+the method <tt>doIt</tt> in the class <tt>coins.backend.opt.IntroVirReg</tt> is executed,
+because the <tt>Module</tt> constructor has registered the transformer <tt>IntroVirReg.trig</tt> with the name
+<tt>"IntroVirReg"</tt> to the instance <tt>root</tt> by the following statement:
+<pre>
+root.registerTransformer(IntroVirReg.trig);
+</pre>
+By the execution of <tt>doIt</tt> of <tt>coins.backend.opt.IntroVirReg</tt>,
+frame variables are named as virtual registers.
+<p>
+Furthermore, the execution of 
+<pre>
+unit.apply("ToMachineCode");
+</pre>
+in <tt>generateCode</tt> causes the excecution of the instance method <tt>toMachineCode</tt> of the class
+<tt>Function</tt>, and  the <tt>toMachineCode</tt> method executes the following steps:
+<pre>
+    apply(LiveRange.trig);   // live range analysis
+    apply(JumpOpt.trig);   // jump optimization
+    apply(JumpCanon.trig);   // canonicalize JUMPC instructions
+    apply("+BeforeFirstInstSel");   // call Hook point
+    apply(module.targetMachine.instSelTrig);   // instruction selection
+    apply("+AfterFirstInstSel");  // call Hook point
+    int count = 0;
+    for (;;) {
+      if (count++ >= REGALOLIMIT)
+        throw new CantHappenException("Looks like an infinite loop during Register allocation");
+      if (apply(RegisterAllocation.trig))  // register allocation
+        break;          //  if success
+      apply("+BeforeSecondInstSel");  // call Hook point
+      apply(module.targetMachine.instSelTrig);   // instruction selection again
+      apply("+AfterSecondInstSel");  // call Hook point
+    }
+    postProcess(); // eliminate redundant jumps
+</pre>
+The argument string with prefixed "<tt>+</tt>" in the above calls of the <tt>apply</tt> method
+means that it is a hook name.
+Usually this call does nothing.
+But, if the method
+<pre>
+ Root#addHook(String, Transformer)
+</pre>
+has been called with a hook name and a Transformer object, the <tt>doIt</tt> method 
+of the Transformer object is executed when the <tt>apply</tt> method is called with the hook name.
+
+<h3 id='i-11-2'>11.2. How to Add New Process to Backend</h3>
+
+By using the previous hooking features a new process can be added to the backend
+without modifing the backend.
+The class for a new process should be in the following form:
+<pre><tt>class NewProcess {
+  class NewTrigger  implements LocalTransformer{ // or GlobalTransformer
+    void doIt(...){...}
+    ...
+  }
+  static void attach(CompileSpecification spec, Root root){
+//  if (spec.getCoinsOptions().isSet("newprocess")) {
+      root.addHook("+<i>xxx</i>", new NewTrigger());
+// }
+  }
+}</tt></pre>
+where <tt>"+<i>xxx</i>"</tt> is a hook name. LocalTransformer is applied to each Function instance,
+and GlobalTransformer is applied to a Module instance.
+<p>
+When the compiler option 
+<pre><tt>-coins:attach=NewProcess</tt></pre>
+is specified, the <tt>NewProcess.attach</tt> method is called at the entry of the backend process.
+And the <tt>doIt</tt> method of the <tt>NewTrigger</tt> object is executed at the hook point <tt>"+<i>xxx</i>"</tt>.<br>
+If the commented-out if-statement is effective, this execution occurs only when the option 
+<tt><pre>-coins:newprocess</pre></tt>
+is specified.
+<p>
+
+<h4 id='i-11-2-1'>11.2.1. Example 1: Instruction Scheduler</h3>
+
+The instruction scheduler is called when the following compiler options are specified:
+<pre>
+<tt>-coins:schedule,attach=coins.backend.sched.Schedule</tt>
+</pre>
+The <tt>attach</tt> method of coins.backend.sched.Schedule is defined as follows:
+<pre>
+<tt>public static void attach(CompileSpecification spec, Root root) {
+    if (spec.getCoinsOptions().isSet("schedule")) {
+      root.addHook("+AfterFirstInstSel", before);
+      root.addHook("+AfterToMachineCode", after);
+    }
+  }</tt>
+</pre>
+Therefore, the instruction scheduler is called twice by two triggers, one is the <tt>before</tt> trigger
+at the "+AfterFirstInstSel" hook point, and the other is the <tt>after</tt> trigger
+at the "+AfterToMachineCode" hook point. 
+The former point is before the register allocation, and the latter 
+is after the regisiter allocation.
+<p>
+The two triggers are almost the same except that the latter does the "nop"-instruction
+elimination if the target CPU has delayed branch instructions.
+They are written machine independently, and can be applied to any target machine.
+<p>
+See Fig.12-2 in <a href='./perf.html'>12. Performance of COINS compilers</a> for some results
+of this optimization.
+
+<h4 id='i-11-2-2'>11.2.2. Example 2: Register Promotion</h3>
+
+The process of register promotion is called when the following compiler options are specified:
+<pre>
+<tt>-coins:regpromote,attach=RegPromote</tt>
+</pre>
+The class <tt>RegPromote</tt> is in the package <tt>coins.backend.contrib</tt>.
+The name of this special package  can be omitted.
+<p>
+The register promotion is the process to promote static variables to registers
+within some loops.
+This promotion is  effective especially for such a program as:
+<pre>
+int candidat, quotient, remaindr, index, nth, primenum, loopend ;
+int primeNumbers[SIZE] ;
+
+void getPrime(int primevec[SIZE], int count)
+{
+ primevec[0] = 2 ;
+ nth = 1 ;
+ candidat = 3 ;
+ while (nth&lt;count) {
+   remaindr = 1 ;
+   index = 0 ;
+   loopend = 0 ;
+   while(loopend==0) {
+     primenum = primevec[index] ;
+     quotient = candidat / primenum ;
+     remaindr = candidat - quotient*primenum ;
+     if (remaindr==0)
+       loopend = 1 ;
+     if (quotient*quotient&lt;candidat)
+       loopend = 1 ;
+     index = index + 1 ;
+     if (index>=nth)
+       loopend = 1 ;
+   }
+   if (remaindr != 0) {
+     primevec[nth] = candidat ;
+     nth = nth + 1 ;
+   }
+   candidat = candidat + 2 ;
+ }
+ nth   = 0 ;
+ while (nth&lt;count) {
+/*   print(primevec[nth]) ;
+*/
+   nth   = nth + 1 ;
+ }
+ return;
+}
+</pre>
+This program is the prime program in the Fig.12-2 of the chapter
+<a href='./perf.html'>12. Performance of COINS compilers</a>.
+This register promotion produces almost all the performance gain of the prime program.
+
+  </body>
+</html>

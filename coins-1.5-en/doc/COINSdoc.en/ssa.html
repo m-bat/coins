@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>SSA Optimization for LIR</title>
+
+  </head>
+  <body>
+	<h1>8. SSA Optimization for LIR</h1>
+    
+	<h2>Contents</h2>
+ <ul>
+<li><a href='#i-8-1'>8.1. OVERVIEW</a></li>
+<ul>
+<li><a href='#i-8-1-1'>8.1.1.  Introduction</a></li>
+<li><a href='#i-8-1-2'>8.1.2. Translation to SSA form</a></li>
+<li><a href='#i-8-1-3'>8.1.3. Back translation from SSA form</a></li>
+<li><a href='#i-8-1-4'>8.1.4. Optimization</a></li>
+<li><a href='#i-8-1-5'>8.1.5. Details</a></li>
+</ul>
+<li><a href='#i-8-2'>8.2. SSA OPTIONS</a></li>
+<li><a href='#reference'>References</a></li>
+</ul>
+
+<h3 id='i-8-1'>8.1. OVERVIEW</h3>    
+
+<h4 id='i-8-1-1'>8.1.1.  Introduction</h4>
+
+    The SSA module includes optimizers on the Static Single Assignment form
+    (SSA form). SSA is a representation where index is attached to every
+    variable so that every definition of each variable in a program becomes
+    unique.<br>
+ At a joining point of the control flow graph where two or more
+    different definitions of a variable reach, a hypothetical function
+called a
+    phi-function is inserted so that these multiple definitions are merged.<br>
+    Data flow analysis and optimization for sequential execution can be
+    compacted using SSA form. The SSA module is invoked on LIR.
+  
+<h4 id='i-8-1-2'>8.1.2. Translation to SSA form</h4>
+    The translation pass of the SSA module translates normal LIR into LIR-level
+    SSA form.<br>
+    Translation into SSA form generally consists of two phases, insertion of
+    phi-functions and the renaming of variables. Three types of SSA form are 
+    well known: minimal SSA, semi-pruned SSA and pruned SSA. The algorithms for
+    translating into these forms are almost the same, only the live variable
+    analysis being different. The SSA module can translate into these types of 
+    SSA form. See section 8.2.<p>
+
+<h4 id='i-8-1-3'>8.1.3. Back translation from SSA form</h4>
+    The back translation pass of the SSA module translates LIR-level SSA
+form
+    into normal LIR.<br>
+    Generally, in the back translation from SSA form, the task of a
+    phi-function is divided into the predecessor basic blocks. Therefore, in
+    most cases, the translation inserts some copy statements for variables
+used
+    in the phi-function into the predecessor blocks of the basic block where
+    the function resides, and then deletes the phi-function. The SSA module
+    uses the method proposed by Briggs and the three methods proposed by
+    Sreedhar to back translate from SSA form. See section 8.2.<p>
+
+<h4 id='i-8-1-4'>8.1.4. Optimization</h4>
+    Many optimizations based on SSA form are implemented, such as Common
+    Subexpression Elimination, Constant Propagation, Copy Propagation, Dead
+    Code Elimination and loop-related optimizations. The SSA module also
+    includes tools for optimization, such as Split Critical Edge.
+    You can specify the optimizers, tools and their order of application
+using
+    the SSA options. See section 8.2.
+
+<h4 id='i-8-1-5'>8.1.5. Details</h4>
+ For details of the SSA optimization module, see <a href='#reference'>[reference 1]</a>.
+
+<h3 id='i-8-2'>8.2. SSA OPTIONS</h3>
+   There are several compile time options for the SSA pass. For any other 
+   options of the COINS Compiler Driver, see <a href='./driver.html'>2. How to use the Compiler Driver</a>
+ or 
+ <a href='./cc.html'>3. How to use C Compiler</a>.<p>
+<dl>
+
+<dt> -coins:ssa-opt=xxx/yyy/.../zzz</dt><dd>
+     Use SSA pass. This is necessary for using the SSA module. There are
+several
+    optimizations in this module. To invoke the optimization, you should
+    specify the optimizers with this option. Specified optimizers are
+invoked
+    from left to right. First, as `xxx' you MUST specify to which kind of
+SSA
+    form you like to translate, such as minimal, semi-pruned or pruned. And
+    then, as `yyy' you can specify the optimizers which the SSA module
+invokes.
+    You can specify the same optimizer two times, three times, and so on.
+Only 
+    optimizations that you specify are performed in that order. Finally, as
+    `zzz' you MUST specify how to back translate from SSA form.<p>
+
+    The options are defined as follows:
+
+<ul>
+<li>   Translation from normal form LIR to SSA form LIR</li>
+      (You MUST specify one of them at the beginning of this SSA option)
+<ul>
+<li>        mini  :&emsp;&emsp; Translation to Minimal SSA form</li>
+<li>        semi  :&emsp;&emsp; Translation to Semi-Pruned SSA form</li>
+<li>        prun  :&emsp;&emsp; Translation to Pruned SSA form (recommended for optimization)</li>
+</ul>
+
+<li> Back Translation from SSA form LIR to normal form LIR</li>
+      (You MUST specify one of them at the end of this SSA option)
+<ul>
+<li>        brig  :&emsp;&emsp; Back translation using Briggs's Method</li>
+ <li>       srd1  : &emsp;&emsp;Back translation using Sreedhar's Method I</li>
+  <li>      srd2  : &emsp;&emsp;Back translation using Sreedhar's Method II</li>
+ <li>       srd3  : &emsp;&emsp;Back translation using Sreedhar's Method III (recommended for optimization)</li>
+</ul>
+(Options for coalescing are explained later)
+<li>      Optimization</li>
+<ul>
+<li>        cpyp  : &emsp;&emsp;Copy Propagation</li>
+<li>        cstp  : &emsp;&emsp;Constant Folding and Propagation with Conditional Branches</li>
+ <li>       dce   : &emsp;&emsp;Dead Code Elimination</li>
+<li>        cse   : &emsp;&emsp;Common Subexpression Elimination</li>
+<li>      preqp : &emsp;&emsp;Global Value Numbering and Partial Redundancy Elimination 
+              with Efficient Question Propagation</li>
+ <li>       hli   : &emsp;&emsp;Hoisting Loop-invariant Code</li>
+ <li>      osr   : &emsp;&emsp;Operator Strength Reduction related to Induction Variables
+                and Linear Function Test Replacement</li>
+  <li>      ssag  :&emsp;&emsp; Making SSA graph</li>
+ <li>       divex : &emsp;&emsp;Divide expression into Three-Address Code (the right-hand side of assignment will have only one operator)</li>
+ <li>       gra   : &emsp;&emsp;Global Reassociation</li>
+   <li>     ebe   : &emsp;&emsp;Empty Block Elimination</li>
+  <li>      rpe   : &emsp;&emsp;Redundant Phi-function Elimination</li>
+ <li>       cbb   : &emsp;&emsp;Concatenate Basic Block</li>
+  <li>      esplt :&emsp;&emsp; Split Critical Edge</li>
+ <li>       lir2c : &emsp;&emsp;Make C program from LIR</li>
+</ul>
+</ul>
+<p>
+    Example: If you specify the option
+<pre>
+-coins:ssa-opt=prun/cstp/cse/srd3
+</pre>
+    the SSA module performs the following in that order:
+<ol>
+<li> make pruned SSA form</li> 
+<li>  invoke constant folding and propagation with conditional branches</li>
+<li> invoke common subexpression elimination</li>
+<li> back translate using Sreedhar's Method III</li>
+</ol>
+</dd>
+<dt> -coins:ssa-no-change-loop</dt><dd>
+    Before the optimizations, the SSA module changes the structure of the loops
+    as follows, by default. This is for making effective loop optimization.
+<ol>
+<li> merge the several loops that have the same header block</li>
+<li> insert the preheader</li>
+<li>change the loop structure from `while' type to `do-while' type 
+           (precisely `if-do-while'). The `while' type is a loop such that
+           the header and exit block of the loop are the same block.</li>
+</ol>
+  
+    The above is performed by default. If you DO NOT want to do that, specify
+    this option.</dd>
+
+<dt> -coins:ssa-no-copy-folding</dt><dd>
+    During the translation to the SSA form, the SSA module removes and
+    propagates the copy-assign statements such as `x=y', by default.<p>
+
+    If you DO NOT want to do that, specify this option.</dd>
+
+<dt> -coins:ssa-no-redundant-phi-elimination</dt><dd>
+    The SSA module eliminates redundant phi-functions after the translation
+    to the SSA form, by default. A phi-function is redundant if:
+<ol>
+<li>the names of the target and the arguments of the phi-function are
+           all the same as follows: </li>
+<pre>  x1=phi(x1,x1,x1)</pre>
+<li> the names of the arguments of the phi-function are all the same as follows:</li>
+<pre> x1=phi(y1,y1,y1)</pre>
+<li> there are also other cases as follows:  </li>
+<pre>x1=phi(y1,y1,x1)   or   x1=phi(y1,y1,BOTTOM)</pre>
+</ol>
+
+    In the first case, the SSA module just eliminates the phi-function.
+    In the second case, the SSA module eliminates the phi-function and replaces
+    uses of `x1' by `y1' in the statements which are evaluated after the
+    phi-function.<br>
+    For further details, see <a href='#reference'>[reference 1]</a>.<p>
+ 
+    If you DO NOT want to do that, specify this option.</dd>
+
+<dt> -coins:ssa-no-sreedhar-coalescing</dt><dd>
+     During the back translation from SSA form by Sreedhar's method,
+    the SSA module coalesces copy-related variables in SSA form, by default.
+    This coalescing is proposed by Sreedhar and is called the SSA-based
+    coalescing. 
+    This coalescing module is usually unified with Sreedhar's algorithm for
+    back translation from SSA form. But for researchers' convenience, the
+SSA 
+    module can avoid it.<p>
+
+    If you DO NOT want to do SSA based coalescing, specify this option.</dd>
+
+<dt> -coins:ssa-with-chaitin-coalescing</dt><dd>
+    Perform coalescing proposed by Chaitin after the back translation to 
+    normal form. This coalesces copy-related variables whose live ranges do not
+    interfere each other. In general, after the back translation from SSA form,
+     there may be some copy assignment statements in the program. Some copy
+    assignment statements only change the names of variables, that is, they
+are
+    useless. Coalescing these variables eliminates the useless copy
+assignment
+    statements. This optimization is done in normal form LIR after the back
+    translation from SSA form. <p>
+
+    If you WANT to do that, specify this option.<br>
+   (This coalescing can be specified after any back translation method.
+     But it may have no effect after the back translation by Sreedhar's
+     Method III since that method does not insert copy assignment statements
+     which can be coalesced by Chaitin's coalescing.)
+</dd>
+
+<dt> -coins:ssa-no-memory-analysis</dt><dd>
+    When Common Subexpression Elimination and/or Global Value Numbering and
+    Partial Redundancy Elimination with Efficient Question Propagation are 
+    specified, the SSA module makes a simple alias analysis of memory accesses,
+    by treating the whole memory as a single entity. (cf. section 8 of
+    <a href='#reference'>[reference 1]</a>)<p>
+
+    If you DO NOT want to do that, specify this option.</dd>
+
+<dt> -coins:ssa-no-replace-by-exp</dt><dd>
+    Just before the back translation from SSA form, the SSA module finds the 
+    local variables, which are not "live out" from the current basic block
+    and are used only once in the current basic block, and replaces the 
+    variables by the expressions which define the variables. (cf. section
+5.4.6
+    "preprocessing for temporary variables" of  <a href='#reference'>[reference 1]</a>)<p>
+
+    If you DO NOT want to do that, specify this option.</dd>
+
+<dt> -coins:trace=SSA.xxxx</dt><dd>
+    To output the trace information of this SSA module for debugging, specify 
+    the trace level as follows:
+<pre>
+        1     : Output only the message that the SSA module is invoked
+        100   : Output the agenda of the SSA module
+        1500  : Output two kinds of information:
+                (a) The inserted phi-functions when the SSA module translates 
+                   normal LIR into SSA form.
+                (b) The inserted copy assign statements when the SSA module 
+                   back translates SSA form into normal LIR.
+        2000  : Output general debug information of all optimizers in the SSA 
+                module
+        10000 : Output much information about Sreedhar's Method III
+</pre>
+    The trace information includes the levels less than or equal to what you specified. If you
+    specify 
+<pre>trace=SSA.1500</pre>
+then the SSA module outputs information related 
+    to the level `1', `100' and `1500'.</dd>
+
+<dt>-coins:ssa-opt=.../dump/...</dt><dd>
+    For compiler developers, the SSA module provides the option `dump'
+    for debugging. This option should be specified within `ssa-opt'.
+    When this option is specified, the SSA module outputs the current LIR
+    into the standard output.
+    For example, if the option is specified as follows:
+
+  <pre> -coins:ssa-opt=prun/dump/srd3/dump</pre>
+
+    the SSA module outputs the LIR (1) after translation into the
+    pruned SSA form, and (2) after back translation from SSA form.</dd>
+</dl>
+
+<h3 id='reference'>References</h3>
+[1] "Optimization in SSA form - external specification (pdf)" which is available on the web page of
+<a href="http://www.is.titech.ac.jp/~sassa/coins-www-ssa/english/">COINS SSA</a>
+  </body>
+</html>

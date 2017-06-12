@@ -1,0 +1,625 @@
+%{
+/* ----------------------------------------------------------
+%   Copyright (C) 2004 The Coins Project Group               
+%       (Read COPYING for detailed information.)             
+----------------------------------------------------------- */
+package coins.ffront;
+
+import coins.HirRoot;
+import coins.IoRoot;
+import coins.SymRoot;
+import coins.ir.hir.HIR;
+
+public class Parser {
+	F77Hir fHir;
+	F77Sym fSym;
+	Scanner yyLex;
+	
+	public Parser(SymRoot sRoot, HirRoot hRoot, IoRoot iRoot, Scanner lexer) {
+		fHir = new F77Hir(sRoot, hRoot, iRoot);
+		fSym = new F77Sym(sRoot, hRoot, iRoot, fHir);
+		fHir.setF77Sym(fSym);
+		yyLex = lexer;
+	}
+    public F77Hir getHir(){
+      return fHir;
+    }
+%}
+
+
+%token <Token>  REAL_CONST CHAR_CONST INT_CONST
+%token <Token>  DOUBLE_CONST
+%token <Token>  IDENT LABEL_DEF LABEL EOS 
+%token <Token>  NO_LABEL TRUE_CONST FALSE_CONST INTEGER REAL
+%token <Token>  COMPLEX DOUBLE_PREC LOGICAL CHARACTER  PARAM
+%token <Token>  LET ARITH_IF IF ASSIGN  BLOCKDATA CALL CLOSE COMMON CONTINUE
+%token <Token>  DATA DIMENSION  DO END_DO ELSE ELSE_IF END END_FILE END_IF
+%token <Token>  ENTRY EQUIVALENCE EXTERNAL FORMAT FUNCTION 
+%token <Token>  GOTO ASSIGN_GOTO COMP_GOTO
+%token <Token>  IMPLICIT INTRINSIC PAUSE  PRINT PROGRAM  READ RETURN SAVE 
+%token <Token>  STOP SUBROUTINE THEN TO WRITE OPEN INQUIRE BACKSPACE REWIND 
+%token <Token>  AND OR NEQV EQV NOT EQUAL LESS_THAN GREATER_THAN 
+%token <Token>  LESS_OR_EQUAL GREATER_OR_EQUAL NOT_EQUAL 
+%token <Token>  POWER DOUBLE_SLASH
+%token <Token>  FORMAT_SPECIFICATION
+
+
+%type <Token>   opt_identifier subr_dummy_arg type_name constant number_constant
+%type <Token>   opt_block_name block_name save_item label opt_label_def
+%type <Node>    executable_program program_unit program_stmt  type
+%type <FStmt>   end_statement complete_statement executable_statement
+%type <FStmt>   ifable_statement io_statement
+%type <FStmt>   statement function_stmt subroutine_stmt entry_stmt
+%type <Node>    block_data_subprogram block_data_stmt block_data_body
+%type <FStmt>   declaration_statement data_spec_stmt functional_spec_stmt
+%type <Node>    one_declaration opt_length_spec start_block common_var data_seq
+%type <Node>    data_val value simple_value const_item data_var dims dim
+%type <Node>    upper_bound imp_item letter_group 
+%type <Node>    block_if_part do_spec opt_step arg  io_clause 
+%type <Node>    format_spec io_item
+%type <Node>    complex_const  opt_step
+%type <Pair>    substring
+
+/* FirList extends LinkedList */
+%type <FirList>    program_body 
+%type <FirList>    func_dummy_args func_dummy_arg_list subr_dummy_args
+%type <FirList>    subr_dummy_arg_list opt_save_list declaration_list common_decl
+%type <FirList>    one_block external_decl identifier_list intrinsic_decl
+%type <FirList>    equivalence_decl equivalence_set left_name_list data_decl
+%type <FirList>    data_val_list save_list const_list data_var_list dim_list
+%type <FirList>    opt_comma_io_list opt_io_list io_list do_list
+%type <FirList>    implicit_decl letter_group_list do_tail part_tail opt_else_if_parts
+%type <FirList>    opt_else_part opt_actual_args arg_list opt_labels label_list ci_list
+
+%type <Node>       expr opt_expr left_name 
+
+%left ','
+%nonassoc ':'
+%right '='
+%left EQV NEQV
+%left OR
+%left AND
+%left NOT
+%nonassoc EQUAL LESS_THAN  GREATER_THAN LESS_OR_EQUAL GREATER_OR_EQUAL
+%nonassoc  NOT_EQUAL 
+%left DOUBLE_SLASH
+%left '+' '-'
+%left '*' '/'
+%right POWER UMINUS UPLUS
+%%
+
+executable_program : program_unit       { $$ = fHir.executableProgram($1); }
+	| executable_program  program_unit      { $$ = fHir.executableProgram($1, $2); }
+	;
+
+program_unit :
+	  program_stmt  program_body      { $$ = fHir.mainProgram($2); }
+	| program_body                    { $$ = fHir.mainProgram( $1); }
+	| function_stmt program_body      { $$ = fHir.funcSubProgram($1, $2); }
+	| subroutine_stmt program_body    { $$ = fHir.subrSubProgram($1, $2); }
+	| block_data_subprogram           { $$ = fHir.blockDataSubp($1); }
+	;
+
+program_body : end_statement          { $$ = fSym.list($1); }
+	| complete_statement program_body   { $$ = $2.addedFirst($1); }
+	;
+
+end_statement : opt_label_def END EOS { $$ = fHir.endStmt($1); }
+	;
+
+complete_statement : 
+	opt_label_def statement EOS   { $$ = fHir.completeStmt($1, $2); }
+	;
+
+statement : entry_stmt               { $$ = $1; }
+	| declaration_statement      { $$ = $1; } 
+	| executable_statement      { $$ = $1; }
+	;
+
+opt_label_def :
+	  LABEL_DEF     { $$ = fSym.modifiedToken($1); }
+	| NO_LABEL      { $$ = null; }
+	;
+
+program_stmt : opt_label_def PROGRAM IDENT EOS   { $$ = fSym.programStmt(fSym.modifiedToken($3)); }
+	;
+
+function_stmt :
+	  opt_label_def type FUNCTION IDENT func_dummy_args EOS
+	        { $$ = fSym.funcStmt($2, fSym.modifiedToken($4), $5); }
+
+	| opt_label_def FUNCTION IDENT func_dummy_args  EOS 
+	        { $$ = fSym.funcStmt(null, fSym.modifiedToken($3), $4); }
+	;
+
+subroutine_stmt :
+	  opt_label_def SUBROUTINE IDENT subr_dummy_args EOS
+	        { $$ = fSym.subrStmt(fSym.modifiedToken($3), $4); }
+	;
+
+entry_stmt :
+	  ENTRY IDENT subr_dummy_args  
+	        { $$ = fSym.entryStmt(fSym.modifiedToken($2), $3); }
+	; 
+
+block_data_subprogram : 
+	block_data_stmt block_data_body end_statement
+	        { $$ = fHir.blockDataSubProgram($1, $2); }
+	;
+
+block_data_stmt :
+	  opt_label_def BLOCKDATA opt_identifier EOS
+	        { $$ = fSym.blockDataStmt($1, $3); }
+	;
+
+opt_identifier :
+	          { $$ = null; }
+	| IDENT   { $$ = fSym.modifiedToken($1); }
+	;
+
+block_data_body :
+	  { $$ = null; }
+	| block_data_body opt_label_def data_spec_stmt EOS
+	  { $$ = fHir.blockDataBody($1, $2, $3); }
+	;
+
+func_dummy_args :
+	  '('  ')'                      { $$ = null; }
+	| '(' func_dummy_arg_list ')'   { $$ = $2; }
+	;
+
+func_dummy_arg_list :
+	  identifier_list  { $$ = $1; }
+	;
+
+subr_dummy_args :
+	                                { $$ = null; }
+	| '('  ')'                      { $$ = null; }
+	| '(' subr_dummy_arg_list ')'   { $$ = $2; }
+	;
+
+subr_dummy_arg_list :
+	  subr_dummy_arg                           { $$ = fSym.list($1); }
+	| subr_dummy_arg_list ',' subr_dummy_arg   { $$ = $1.addedLast($3); }
+	;
+
+subr_dummy_arg :
+	  IDENT   { $$ = fSym.modifiedToken($1); }
+	| '*'     { $$ = fSym.modifiedToken(new Token(0, "*".intern())); }
+	;
+
+declaration_statement :  data_spec_stmt       { $$ = $1; }
+	| functional_spec_stmt      { $$ = $1; }
+	;
+
+data_spec_stmt : type declaration_list   { $$ = fSym.declList($1, $2); }
+	| COMMON common_decl                   { $$ = fSym.commonDecl($2); }
+	| EQUIVALENCE equivalence_decl         { $$ = fSym.equivalenceDecl($2); }
+	| DATA data_decl                       { $$ = fSym.dataDecl($2); }
+	| IMPLICIT implicit_decl               { $$ = fSym.implicitDecl($2); }
+	| SAVE opt_save_list                   { $$ = fSym.saveDecl($2); }
+	| PARAM  '(' const_list ')'            { $$ = fSym.parameterDecl($3); }
+	;
+
+opt_save_list :    { $$ = null; }
+	| save_list   { $$ = $1; }
+	;
+
+functional_spec_stmt :
+	  EXTERNAL external_decl          { $$ = fSym.externalDecl($2); }
+	| INTRINSIC  intrinsic_decl       { $$ = fSym.intrinsicDecl($2); }
+	;
+
+declaration_list :  one_declaration          { $$ = fSym.list($1); }
+	| declaration_list ',' one_declaration   { $$ = $1.addedLast($3); }
+	;
+
+one_declaration :
+	  IDENT dims opt_length_spec  { $$ = fSym.arrayDecl (fSym.modifiedToken($1), $2, $3); }
+	| IDENT opt_length_spec       { $$ = fSym.scalarDecl(fSym.modifiedToken($1), $2); }
+	;
+
+opt_length_spec :
+	                 { $$ = null; }
+	| '*' expr       { $$ = $2; }
+	| '*' '(' '*' ')'{ $$ = fSym.modifiedToken(new Token(-1, "0", Parser.INT_CONST)); }
+	;
+
+type :
+	  type_name opt_length_spec   { $$ = fSym.type($1, $2); }
+	| DIMENSION                   { $$ = fSym.modifiedToken($1); }
+	;
+
+type_name :
+	  INTEGER             { $$ = fSym.modifiedToken($1); }
+	| REAL 	              { $$ = fSym.modifiedToken($1); }
+	| COMPLEX             { $$ = fSym.modifiedToken($1); }
+	| DOUBLE_PREC         { $$ = fSym.modifiedToken($1); }
+	| LOGICAL             { $$ = fSym.modifiedToken($1); }
+	| CHARACTER           { $$ = fSym.modifiedToken($1); }
+	;
+
+common_decl :
+	  start_block                       { $$ = fSym.list($1); }
+	| common_decl block_name one_block  { $$ = $1.addedLast(fSym.block($2, $3)); }
+	;
+
+
+start_block :
+	  opt_block_name one_block { $$ = fSym.block($1, $2); }
+	;
+
+opt_block_name :
+	                    { $$ = null; }
+	| block_name        { $$ = $1; }
+	;
+
+block_name : 
+	  DOUBLE_SLASH             { $$ = null; }
+	| '/' opt_identifier '/'   { $$ = fSym.modifiedToken($2); }
+	;
+
+one_block :  
+	  common_var                  { $$ = fSym.list($1); }
+	| one_block ','               { $$ = $1; }
+	| one_block ',' common_var    { $$ = $1.addedLast($3); }
+
+common_var : 
+	  IDENT dims { $$ = fSym.arrayDecl(fSym.modifiedToken($1), $2, null); }
+	| IDENT      { $$ = fSym.scalarDecl(fSym.modifiedToken($1), null);;   }
+	;
+
+external_decl :
+	  identifier_list   { $$ = $1; }
+	; 
+
+identifier_list :
+	  IDENT                        { $$ = fSym.list(fSym.modifiedToken($1)); }
+	| identifier_list ',' IDENT    { $$ = $1.addedLast(fSym.modifiedToken($3)); }
+	;
+
+intrinsic_decl :
+	  identifier_list    { $$ = $1; }
+	;
+
+equivalence_decl :
+	  equivalence_set                       { $$ = fSym.list($1); }
+	| equivalence_decl ',' equivalence_set  { $$ = $1.addedLast($3); }
+	;
+
+equivalence_set :
+	  '(' left_name_list ')'     { $$ = $2; }
+	;  
+
+left_name_list :
+	  left_name                        { $$ = fSym.list($1); }
+	| left_name_list ',' left_name     { $$ = $1.addedLast($3); }
+	;
+
+data_decl:
+	  data_seq                   { $$ = fSym.list($1); }
+	| data_decl data_seq         { $$ = $1.addedLast($2); }
+	| data_decl ',' data_seq     { $$ = $1.addedLast($3); }
+	;
+
+data_seq : data_var_list '/' data_val_list '/'   { $$ = fHir.dataSeq($1, $3); }
+	;
+
+data_val_list : 
+      data_val                      { $$ = fSym.list($1); }
+	| data_val_list ',' data_val    { $$ = $1.addedLast($3); }
+	;
+
+data_val :
+	  value	                      { $$ = fHir.dataVal(null, $1); }
+	| simple_value '*' value      { $$ = fHir.dataVal($1, $3); }
+	;
+
+value :
+	  simple_value         { $$ = fHir.value('+', $1); }
+	| '+' simple_value     { $$ = fHir.value('+', $2); }
+	| '-' simple_value     { $$ = fHir.value('-', $2); }
+	;
+
+simple_value :
+	  IDENT            { $$ = fSym.modifiedToken($1); }
+	| constant         { $$ = $1; }
+	| complex_const    { $$ = $1; }
+	;
+
+save_list :
+	  save_item                  { $$ = fSym.list($1); }
+	| save_list ',' save_item    { $$ = $1.addedLast($3); }
+	;
+
+save_item :
+	  IDENT          { $$ = fSym.modifiedToken($1); }
+	| block_name     { $$ = $1; }
+	;
+
+const_list :
+	  const_item                  { $$ = fSym.list($1); }
+	| const_list ',' const_item   { $$ = $1.addedLast($3); }
+	;
+
+const_item :
+	  IDENT '=' expr   { $$ = fHir.constItem(fSym.modifiedToken($1), $3); }
+	;
+
+data_var_list :
+	  data_var                        { $$ = fSym.list($1); }
+	| data_var_list ',' data_var      { $$ = $1.addedLast($3); }
+	;
+
+data_var :
+	  left_name                          { $$ = fHir.dataVarOne($1); }
+	| '(' data_var_list ',' do_spec ')'  { $$ = fHir.dataVarDoList($2, $4); }
+	;
+
+dims : '(' dim_list ')'       { $$ = $2; }
+	 ;
+
+dim_list :  dim   	          { $$ = fSym.list($1); }
+	| dim_list ',' dim        { $$ = $1.addedLast($3); }
+	;
+dim : upper_bound             { $$ = fSym.dim(null, $1); }
+	| expr ':' upper_bound    { $$ = fSym.dim($1, $3); }
+	;
+upper_bound :
+      '*'       { $$ = null; }
+	| expr      { $$ = $1; }
+	;
+implicit_decl :  imp_item            { $$ = fSym.list($1); }
+	| implicit_decl ',' imp_item     { $$ = $1.addedLast($3); }
+	;
+
+imp_item :
+	  IDENT opt_length_spec '(' letter_group_list ')'
+		{ $$ = fSym.impItem($1, $2, $4); }
+	| IDENT	{ $$ = fSym.impItem($1, null, null); }
+      /* for "implicit none" */
+	;
+
+letter_group_list :
+	  letter_group                        { $$ = fSym.list($1); }
+	| letter_group_list ',' letter_group  { $$ = $1.addedLast($3); }
+	;
+
+letter_group :
+	  IDENT	              { $$ = fSym.letterGroup(fSym.modifiedToken($1), null); }
+	| IDENT '-' IDENT     { $$ = fSym.letterGroup(fSym.modifiedToken($1),
+                                                      fSym.modifiedToken($3)); }
+	;
+
+executable_statement :
+	  ifable_statement          { $$ = $1; }
+	| DO label do_spec          { $$ = fHir.doLabeled($2, $3); }
+	| DO label ',' do_spec      { $$ = fHir.doLabeled($2, $4); }
+	| DO do_spec EOS do_tail    { $$ = fHir.doUnLabeled($2, $4); }
+	| IF '(' expr ')' ifable_statement
+	                            { $$ = fHir.ifStmt($3, $5); }
+	| block_if_part opt_else_if_parts opt_else_part END_IF 
+	                            { $$ = fHir.blockIfStmt($1, $2, $3); }
+	| FORMAT FORMAT_SPECIFICATION     { $$ = fHir.format($2); }
+	;
+
+do_tail :
+	  opt_label_def END_DO    { $$ = fSym.list(fHir.completeStmt($1, null)); }
+	| opt_label_def executable_statement EOS do_tail  
+					{ $$ = $4.addedFirst(fHir.completeStmt($1, $2)); }
+	;
+
+part_tail :			{ $$ = fSym.list(); }
+	| part_tail  opt_label_def executable_statement EOS
+					{ $$ = $1.addedLast(fHir.completeStmt($2, $3)); }
+	;
+
+block_if_part :
+      IF '(' expr ')' THEN EOS part_tail   { $$ = fHir.blockIfPart($3, $7); }
+	;
+
+opt_else_if_parts :     { $$ = fSym.list(); }
+	| opt_else_if_parts  ELSE_IF  '(' expr ')' THEN EOS part_tail 
+                        { $$ = $1.addedLast(fHir.elseIfPart($4, $8)); }
+	;
+
+opt_else_part :               { $$ = null; }
+	|  ELSE EOS part_tail     { $$ = $3; }
+	; 
+
+do_spec : IDENT '=' expr ',' expr opt_step
+          { $$ = fHir.doSpec(fSym.modifiedToken($1), $3, $5, $6); }
+	;
+
+opt_step : 	        { $$ = null; }
+	| ',' expr      { $$ = $2; }
+	;
+
+ifable_statement :
+	  LET  left_name '=' expr     { $$ = fHir.assignOrFunc($2, $4); }
+	| ASSIGN  label TO IDENT      { $$ = fHir.assignLabel($2, fSym.modifiedToken($4)); }
+	| CONTINUE                    { $$ = fHir.continueStmt(); }
+	| GOTO  label                 { $$ = fHir.gotoStmt($2); }
+
+	| ASSIGN_GOTO IDENT opt_labels           
+          { $$ = fHir.aGoto(fSym.modifiedToken($2), $3); }
+	| ASSIGN_GOTO IDENT ',' opt_labels           
+          { $$ = fHir.aGoto(fSym.modifiedToken($2), $4); }
+
+	| COMP_GOTO '(' label_list ')'  expr     { $$ = fHir.cGoto($3, $5); }
+	| COMP_GOTO '(' label_list ')' ',' expr  { $$ = fHir.cGoto($3, $6); }
+
+	| ARITH_IF '(' expr ')' label ',' label ',' label    { $$ = fHir.aIf($3, $5, $7, $9); }
+	| CALL IDENT opt_actual_args     { $$ = fHir.call(fSym.modifiedToken($2), $3); }
+	| RETURN  opt_expr { $$ = fHir.returnStmt($2); }
+	| PAUSE            { $$ = fHir.pause(null); }
+	| PAUSE  expr      { $$ = fHir.pause($2); }
+	| STOP             { $$ = fHir.stop(null); }
+	| STOP  expr       { $$ = fHir.stop($2); }
+	| io_statement     { $$ = $1; }
+	;
+
+opt_actual_args :             { $$ = null; }
+	|  '(' ')'            { $$ = null; }
+	|  '(' arg_list ')'   { $$ = $2; }
+	;
+
+arg_list :
+	  arg                   { $$ = fSym.list($1); }
+	| arg_list ',' arg      { $$ = $1.addedLast($3); }
+	|                       { $$ = null; }
+	;
+
+arg :
+	  expr       { $$ = $1; }
+	| '*' label  { $$ = fHir.argLabel($2); }
+	;
+
+opt_labels :
+	                         { $$ = null; }
+	 | '(' label_list ')'    { $$ = $2; }
+	;
+
+label_list :
+	  label                 { $$ = fSym.list($1); }
+	| label_list ',' label	{ $$ = $1.addedLast($3); }
+	;
+
+label : INT_CONST	{ $$ = fHir.label(fSym.modifiedToken($1)); }
+	;
+
+io_statement :
+	  PRINT format_spec opt_comma_io_list   { $$ = fHir.printStmt($2, $3); }
+	| WRITE '(' ci_list ')' opt_io_list     { $$ = fHir.writeStmt($3, $5); }
+	| READ '(' ci_list ')' opt_io_list      { $$ = fHir.readStmt($3, $5);  }
+	| READ format_spec opt_comma_io_list    { $$ = fHir.readFStmt($2, $3); }
+	| OPEN '(' ci_list ')'                  { $$ = fHir.openStmt($3);      }
+	| CLOSE '(' ci_list ')'                 { $$ = fHir.closeStmt($3);     }
+	| BACKSPACE '(' ci_list ')'             { $$ = fHir.backspace($3);     }
+	| BACKSPACE format_spec                 { $$ = fHir.backspaceF($2);    }
+	| END_FILE '(' ci_list ')'              { $$ = fHir.endfile($3);       }
+	| END_FILE format_spec                  { $$ = fHir.endfileF($2);      }
+	| REWIND '(' ci_list ')'                { $$ = fHir.rewind($3);        }
+	| REWIND format_spec                    { $$ = fHir.rewindF($2);       }
+	| INQUIRE '(' ci_list ')'               { $$ = fHir.inquire($3);       } 
+	;
+
+ci_list :
+	  io_clause             { $$ = fSym.list($1); }
+	| ci_list ',' io_clause { $$ = $1.addedLast($3); }
+	;
+
+io_clause :
+	  expr                  { $$ = fHir.ioClause(null, $1); }
+	| '*'                   { $$ = fHir.ioClause(null, null); }
+	| IDENT '=' expr        { $$ = fHir.ioClause(fSym.modifiedToken($1), $3); }
+	| IDENT '=' '*'         { $$ = fHir.ioClause(fSym.modifiedToken($1), null); }
+/*	  format_spec           { $$ = fHir.ioClause(null, $1); } */
+	;
+
+format_spec : 
+	  '*'           { $$ = null; }
+	| IDENT         { $$ = fSym.modifiedToken($1); }
+	| INT_CONST     { $$ = fSym.modifiedToken($1); }
+	| CHAR_CONST    { $$ = fSym.modifiedToken($1); }
+/*	| expr          { $$ = $1; }
+	| io_item       { $$ = $1; } */
+	;
+
+opt_io_list : 
+	           { $$ = null; }
+	| io_list  { $$ = $1; }
+	;
+
+io_list : 
+	  io_item               { $$ = fSym.list($1); }
+	| io_list ',' io_item   { $$ = $1.addedLast($3); }
+	;
+
+opt_comma_io_list :
+	                    { $$ = null; }
+	| ',' io_list       { $$ = $2;   }
+	;
+
+io_item :
+	  expr                  { $$ = fHir.ioItemExpr($1);   }
+	| '(' do_list ')'       { $$ = fHir.ioItemDoList($2); }
+	;
+
+do_list : 
+	  do_spec               { $$ = fSym.list($1); }
+	| io_item ',' do_list   { $$ = $3.addedFirst($1); }
+	;
+
+expr :
+	  left_name			{ $$ = $1; }
+	| constant			{ $$ = $1; }
+	| complex_const 		{ $$ = $1; }
+	| '(' expr ')' 			{ $$ = fHir.enclosed($2); }
+	| '-' expr %prec UMINUS		{ $$ = fHir.exprUnary(HIR.OP_NEG, $2); }
+	| '+' expr %prec UPLUS		{ $$ = $2; }
+	| expr POWER expr		{ $$ = fHir.exprPower( $1, $3); }
+	| expr '*' expr			{ $$ = fHir.exprBinary(HIR.OP_MULT, $1, $3); }
+	| expr '/' expr			{ $$ = fHir.exprBinary(HIR.OP_DIV, $1, $3); }
+	| expr '+' expr			{ $$ = fHir.exprBinary(HIR.OP_ADD, $1, $3); }
+	| expr '-' expr			{ $$ = fHir.exprBinary(HIR.OP_SUB, $1, $3); }
+	| expr DOUBLE_SLASH expr	{ $$ = fHir.exprCat($1, $3); }
+	| expr GREATER_THAN expr	{ $$ = fHir.exprBinary(HIR.OP_CMP_GT, $1, $3); }
+	| expr EQUAL expr		{ $$ = fHir.exprBinary(HIR.OP_CMP_EQ, $1, $3); }
+	| expr LESS_THAN expr		{ $$ = fHir.exprBinary(HIR.OP_CMP_LT, $1, $3); }
+	| expr NOT_EQUAL expr		{ $$ = fHir.exprBinary(HIR.OP_CMP_NE, $1, $3); }
+	| expr LESS_OR_EQUAL expr	{ $$ = fHir.exprBinary(HIR.OP_CMP_LE, $1, $3); }
+	| expr GREATER_OR_EQUAL expr	{ $$ = fHir.exprBinary(HIR.OP_CMP_GE, $1, $3); }
+	| NOT expr			{ $$ = fHir.exprUnary(HIR.OP_NOT, $2); }
+	| expr AND expr			{ $$ = fHir.exprBinary(HIR.OP_AND, $1, $3); }
+	| expr OR expr			{ $$ = fHir.exprBinary(HIR.OP_OR, $1, $3); }
+	| expr EQV expr			{ $$ = fHir.exprUnary(HIR.OP_NOT, 
+                                          fHir.exprBinary(HIR.OP_XOR, $1, $3)); }
+	| expr NEQV expr		{ $$ = fHir.exprBinary(HIR.OP_XOR, $1, $3); }
+	;
+
+
+left_name :  IDENT           { $$ = fSym.modifiedToken($1); }
+	| CHAR_CONST substring   { $$ = fHir.leftNameSubstr(fSym.modifiedToken($1), null, $2); }
+	| IDENT substring        { $$ = fHir.leftNameSubstr(fSym.modifiedToken($1), null, $2); }
+	| IDENT '(' arg_list ')' { $$ = fHir.leftName(fSym.modifiedToken($1), $3); }
+	| IDENT '(' arg_list ')' substring 
+	                         { $$ = fHir.leftNameSubstr(fSym.modifiedToken($1), $3, $5); }
+	;
+
+substring :  '(' opt_expr ':' opt_expr ')' 	{ $$ = fHir.substring($2, $4); }
+	;
+
+opt_expr : 		{ $$ = null; }
+	| expr		{ $$ = $1; }
+	;
+
+constant : 
+	  number_constant       { $$ = $1; }
+	| TRUE_CONST            { $$ = fSym.modifiedToken($1);  }
+	| FALSE_CONST           { $$ = fSym.modifiedToken($1);  }
+	| CHAR_CONST            { $$ = fSym.modifiedToken($1);  }
+	;
+
+number_constant :
+	  INT_CONST             { $$ = fSym.modifiedToken($1);  }
+	| REAL_CONST            { $$ = fSym.modifiedToken($1);  }
+	| DOUBLE_CONST          { $$ = fSym.modifiedToken($1);  }
+	;
+
+/**
+complex_const :  '(' number_constant ',' number_constant ')' 	
+	{ $$ = fHir.constComplex($2, $4); }
+	;
+*/
+complex_const :
+	  '(' io_item ',' number_constant ')'
+	        { $$ = fHir.constComplex($2, $4); }
+	| '(' io_item ',' '-' number_constant ')'
+	        { $$ = fHir.constComplex($2, fHir.exprUnary(HIR.OP_NEG, $5)); }
+	;
+%%
+
+}
+
+

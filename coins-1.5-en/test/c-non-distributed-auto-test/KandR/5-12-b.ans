@@ -1,0 +1,4 @@
+int f()
+char (*c())
+int (*pf)()
+char (*(*x())[])()

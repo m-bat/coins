@@ -1,0 +1,2501 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>	
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>Optimization for HIR</title>
+
+  </head>
+  <body>
+	<h1>5. Optimization for HIR</h1>
+
+<h3 id='i-5-1'>5.1. Overview of HIR Optimization</h3>    
+
+  HIR optimizers transform the HIR subtree of a subprogram to a better 
+subtree in some viewpoint. Most of them aim to generate efficient code, 
+however, there is a transformation  named global pattern matching that
+transforms the HIR subtree not only for efficiency but also for ease of 
+treatment in some view point. <br>
+  All of them are invoked by a compiler command of the form
+<pre>
+    java coins.driver.Driver -coins:hirOpt=hiroptspec/hiroptspec/...
+</pre>
+where each of the hiroptspec specifies some optimizing option such as 
+cf for constant folding, cpf for constant propagation, cse for local common 
+subexpression elimination, etc. <br>
+  Multiple option arguments are supported, and can be consolidated 
+using `/' as the separator.
+<pre>  
+    ex. java coins.Driver -S -coins:hirOpt=cf/cpf
+</pre>
+The order of the optimizations is approximately the same to the order
+of the optimization specifications by the command line, but in some 
+cases, some optimization may be inserted to make ready to apply another
+specified optimization, or neglected when the effect of the optimization
+is covered by another optimization specified. For example, by the command
+<pre>
+     java coins.Driver -S -coins:hirOpt=cf/cpf
+</pre>
+constant folding is done at first and then constant propagation and 
+folding.<br>
+<br>
+  The HIR optimizers are invoked for each subprogram in approximately 
+the same order as it is specified in the command line. In some case,
+a preparatory optimizer may be automatically inserted, and in other case, 
+some optimizer will be neglected when its effect is already covered by 
+other optimizer. For example, by a command
+<pre>
+     java coins.Driver -S -coins:hirOpt=pre
+</pre>
+common subexpression elimination within basic blocks is automatically
+inserted. As another example, by a command 
+<pre>
+     java coins.Driver -S -coins:hirOpt=pre/cse
+</pre>
+cse is neglected because pre will cover the effect of cse.<br>
+<br>
+  Some option may have sub-option xx in the form opt1.xx. For example, 
+loopexp.4 means loop expansion up to 4 times as it is explained later.<br>
+The invocation of HIR optimizers is controlled by coins.opt.Opt.java. 
+You can add a new HIR optimizer or change the way of control by defining 
+a subclass of Opt with doHir() method of your own.<br>
+  Most of HIR optimizers require control flow analysis of subprogram. Some
+HIR optimizers require data flow analysis and the data flow analysis
+requires alias analysis. Such relation of prerequisite processes is
+automatically solved by specifying final solution required.<br>
+<br>
+  There are basic optimization and advanced optimization. Optimizers in
+the basic optimization does addition, deletion, and modification of
+statements and expressions within basic blocks but does not change 
+the control flow structure of subprogram, and so, basic blocks are 
+not deleted even when no executable statement is left in them. <br>
+  Another optimization is &quot;fromc&quot; optimization performed in the process of 
+C to HIR transformation. It is invoked by
+<pre>
+    java coins.driver.Driver -coins:hirOpt=fromc
+</pre>
+It is not treated by coins.opt.Opt but treated by C-front
+<br>
+  The global pattern matching changes HIR subtrees based on given patterns. 
+It is invoked by
+<pre>
+    java coins.driver.Driver -coins:hirOpt=globalReform
+</pre>
+It can cover wide variety of transformations according to the patterns
+given as a part of the input program. 
+
+ 
+<h3 id='i-5-2'>5.2. HIR Basic Optimization</h3>    
+
+<h4 id='i-5-2-1'>5.2.1. Overview of basic optimization</h4>
+
+Following optimizers are provided for the basic optimization.
+<pre>
+    noSimplify  // do no simplification
+    cf    // constant folding
+    cpf   // constant propagation and folding triggered by the propagation
+    cse   // common subexpression elimination within basic blocks
+    dce   // dead code elimination
+    fromc // simple optimizations done by C parser
+    gt    // global variable temporalization within basic blocks
+</pre>
+The optimizers cf and gt do not require data flow analysis, however,
+cpf, cse, dce require some result of data flow analysis.
+noSimplify specifies not to do HIR simplification. When this option is not
+specified, unused labels are removed immediately before transforming
+HIR to LIR. It removes such labels as else-label generated for if-statement 
+without else part.
+
+<h4 id='i-5-2-2'>5.2.2. Optimizers for the basic optimization</h4>
+
+<h5 id='i-5-2-2-1'>5.2.2.1. Constant folding (hirOpt=cf)</h5>
+
+If all operands of an expression are constant, then the expression is 
+replaced with a constant obtained by evaluating the expression when the 
+value of the expression can be computed at compile time. If such 
+replacement makes surrounding expression to be computable at compile time 
+then the surrounding expression is replaced by a constant, and so on. 
+However, as for floating point expression, such replacement is done only 
+when the option hirOpt=evalFloat is specified, because there might be small 
+difference between compile time evaluation and execution time evaluation.
+
+<h5 id='i-5-2-2-2'>5.2.2.2. Constant propagation and folding (hirOpt=cpf)</h5>
+
+If a variable is assigned a constant, then the variable can be treated
+as a constant at a program point where the variable is used and no other
+definitions reach to the program point. The constant propagation and
+folding does such replacement of variable by constant if at the use point
+of the variable, there is only one reaching definition that assigns
+a constant to the variable. This replacement may triggers to another
+replacement if such variable is assigned to another variable. This
+optimization may be more effective when combined with constant folding
+in such a way as
+<pre>
+    java cooins.driver.Driver -S -coins:hirOpt=cf/cpf
+</pre>
+
+<h5 id='i-5-2-2-3'>5.2.2.3. Dead code elimination (hirOpt=dce)</h5>
+
+If a variable is not used after an assignment statement, then the
+assignment statement can be deleted and such deletion may cause
+another dead code elimination.
+For example, when 
+<pre>
+    int main ()
+    {
+      int a, b, c, d, x;
+      a = 1;
+      b = 2;
+      c = a + b;
+      d = a + b;
+      if (a+1 &lt; c-1)
+        x = a - b;
+      else
+        x = a + b;
+      printf("%d\n",x); 
+    }
+</pre>
+is compiled by
+<pre>
+    java coins.driver.Driver -S -coins:hirOpt=cf/cpf/dce,hir2c=opt
+</pre>
+then following C program will be generated by converting resulting
+HIR to C by hir2c.
+<pre>
+    int main( )
+    {
+        int a;
+        int b;
+        int c;
+        int d;
+        int x;
+        a = (int )1;
+        b = (int )2;
+        if (((int )2) &lt; ((int )2))
+        {
+            x = ((a) - (b));
+        }
+        else
+        {
+            x = ((a) + (b));
+        }
+        (&amp;(printf))( (const char * )((("%d\n"))),x);
+    }
+</pre>
+The statement
+<pre>
+    d = a + b;
+</pre>
+is eliminated as a dead code and condition expression is changed to
+an expression that can be evaluated as false at compile time.
+In the backend part of COINS, code sequence for only else-part 
+is generated for such if-statement as follows:
+<pre>
+         .global   main
+    main:
+         save    %sp,-96,%sp
+    .L18:
+         mov     1,%i1
+         mov     2,%i0
+    .L20:
+         add     %i1,%i0,%o1
+    .L21:
+         sethi   %hi(string.17),%o0
+         or      %o0,%lo(string.17),%o0
+         call     printf
+         nop
+    .L22:
+         ret
+         restore
+</pre>
+
+<h5 id='i-5-2-2-4'>5.2.2.4. Local common subexpression elimination (hirOpt=cse)</h5>
+
+If expression e1 is the same to expression e0 within a basic block and
+no operand of e1 is changed after the computation of e0, then the result
+of e0 is saved to a temporal variable and e1 is replaced by the temporal
+variable. Such expression is called a local common subexpression. 
+If the computation cost of e1 is small, then such replacement is not done 
+but e1 is re-computed. In this processing, the largest common 
+subexpression is replaced by a temporal variable and subexpressions
+contained in the expression are not replaced to minimize the replacement
+overhead. Compound variables such as array element and structure element
+are treated as expression and their use is replaced by a scalar temporal
+variable if no components of the compound variable are changed after
+the previous reference of the variable.
+
+<h5 id='i-5-2-2-5'>5.2.2.5. Global variable temporalization (hirOpt=gt)</h5>
+
+Global variables have less chance of register promotion (assignment
+of register to hold the value) because advanced alias analysis is
+required to promote it to register. The global variable temporalization
+changes uses of a global variable to temporal variable if the global
+variable is used in a basic block multiple times and satisfies
+following conditions:
+<ul>
+<li> The variable is not taken address </li>
+<li> It is neither structure element nor array element </li>
+<li> It has not volatile attribute</li>
+</ul>
+because temporal variables are more likely to be promoted to register
+and there are several machines where temporal variable access is
+more efficient than global variable access. <br>
+If the option
+<pre>
+    java -coins:regpromote
+</pre>
+is specified, it is not required to specify hirOpt=gt because 
+register promotion for global variables is done in the COINS backend.
+In many cases, regpromote option will produce more efficient code than
+hirOpt=gt option.
+
+<h4 id='i-5-2-3'>5.2.3. Invocation of basic optimizers from your code</h4>
+
+Basic optimizers may be called as pre-processing or post-processing 
+procedure of other optimizations. To invoke some basic optimizer,  
+instantiate an optimizer class and call the appropriate method
+corresponding to the optimizer.
+<pre>
+  ex. new ConstFolding(lResults).doSubp(lSubpFlow);
+</pre>
+The method will return a boolean value indicating whether the program has 
+been changed (optimized) as a result of the call to this optimizer method. 
+For more examples, see the basic optimizer driver class coins.opt.Opt.
+
+<h3 id='i-5-3'>5.3. HIR Advanced Optimization</h3>    
+
+<h4 id='i-5-3-1'>5.3.1. Overview of advanced optimization</h4>    
+
+In addition to the options cf, cpf, cse, dce, fromc, gt for
+the basic optimization, following options are provided for 
+the advanced optimization.
+<ul>
+    pre&emsp;&emsp;&emsp; partial redundancy elimination<br>
+    loopexp&emsp;       loop expansion    <br>
+    loopif&emsp;&emsp;  loop invariant if-statement expansion <br>
+    inline&emsp;&emsp;  inline expansion  <br>
+<!-- ##101 BEGIN -->
+    inlinedepth&emsp;  control recursive inline expansion  <br>
+    globalReform&emsp; global pattern matching<br>
+    complexityAllowance&emsp; control optimization for large programs<br>
+</ul>
+<!-- ##101 END -->
+The optimizers specified by above options may change the control 
+flow structure of subprograms.
+The loopexp, loopif, and inline optimizer does not require data flow
+analysis. The pre optimizer requires data flow analysis.<br>
+They are invoked for each subprogram by following commands:
+<pre>
+    java coins.driver.Driver -S -coins:hirOpt=loopexp
+    java coins.driver.Driver -S -coins:hirOpt=loopif
+    java coins.driver.Driver -S -coins:hirOpt=inline
+    java coins.driver.Driver -S -coins:hirOpt=pre
+</pre>
+<!-- ##101 BEGIN -->
+The option inlinedepth controls inline expansion 
+as it is mentioned later.
+The option globalReform is explained in section 5.7.<br>
+For large programs, the HIR optimization may require 
+large memory and long processing time. Considering this 
+fact, some optimization processing may be bypassed or simplified
+for large subprograms exceeding some predefined 
+size limits. The option complexityAllowance changes
+such size limits by selecting one of following forms<br>
+&nbsp;&nbsp; -horOpt=complexityAllowance.2<br>
+&nbsp;&nbsp; .... <br>
+&nbsp;&nbsp; -horOpt=complexityAllowance.9<br>
+so that the size limits are relaxed from 2 times 
+up to 9 times.
+<!-- ##101 END -->
+    
+<h4 id='i-5-3-2'>5.3.2. Optimizers for advanced optimization</h4>    
+
+<h5 id='i-5-3-2-1'>5.3.2.1. Loop expansion (hirOpt=loopexp)</h5>
+
+The loop expansion optimizer expand small for-loops several times to decrease
+loop overhead and to increase opportunities for other optimizations.
+The number of expansions of a loop is determined by the number of registers 
+of the target machine (getNumberOfGeneralRegisters() of MachineParam) and
+by HIR complexity of the body part of the loop. The maximal expansion
+number is
+<pre>
+    4 if number of registers N &lt;= 16
+    8 if N &gt; 16
+</pre>
+as default, but it can be changed by specifying expansion number as a
+sub-option in such a way as
+<pre>
+    hirOpt=loopexp.6
+</pre>
+Following loops are not expanded:
+<pre>
+(1) Outer loop (not an inner-most loop)
+(2) Loop including subprogram call
+(3) Loop including volatile variable
+(4) Non-simple for-loop, that is, a loop having some of following 
+    characteristics
+      not a for-loop
+      start condition is null
+      start condition is not a simple arithmetic comparison expression
+        for loop control variable
+      loop control variable is changed in the loop body (not in loop step part)
+      complexity level of the loop body is large, that is,
+        if (((R &lt;= 8)&amp;&amp;(E * N &gt; 200))||
+            ((R &lt;= 32)&amp;&amp;(E * N &gt; 300))||
+            ((R &gt;  32)&amp;&amp;(E * N &gt; 600)))
+      is true, where,
+        R: number of general registers of the target machine.
+        E: expansion number
+        N: the number of executable operators and assign-operators
+</pre>
+Statements in the loop body may be changed if reordering does not affect
+execution results. For example, following loop
+<pre>
+    for (i = 0; i &lt; 100; i++) {
+      sum1 = sum1 + i;
+      sum2 = sum2 + a[i];
+    }
+</pre>
+will be expanded as follows:
+<pre>
+    _var5 = 1*7;
+    _var7 = 1*8;
+    for (i = 0; i &lt; 100 - _var5; i = i + _var7) {
+      sum1 = sum1 + i + i + 1 + i + 2 + i + 3 + i + 4 + i + 5
+        + i + 6 + i + 7;
+      sum2 = sum2 + a[i] + a[i+1] + a[i+2] + a[i+3]
+        + a[i+4] + a[i+5] + a[i+6] + a[i+7];
+    }
+    for (; i &lt; 100; i = i + 1) {
+      sum1 = sum1 + i;
+      sum2 = sum2 + a[i];
+    }
+</pre>
+
+<h5 id='i-5-3-2-2'>5.3.2.2. Loop-if expansion (hirOpt=loopif)</h5>
+
+The loop-if expansion optimizer removes loop invariant if-condition within
+a loop by transforming the loop to an if-statement with true-case loop 
+statement in then-part and false-case loop statement in else-part.
+For example,
+<pre>
+    for (i = 0; i &lt; pn; i++) {
+      lSum = lSum + pa[i];
+      if (pMode &gt; 0)
+        lSum = lSum + i;
+      else
+        lSum = lSum + i * i;
+    }
+</pre>
+will be transformed as follows:
+<pre>
+    if (pMode &gt; 0) {
+      for (i = 0; i &lt; pn; i++) {
+        lSum = lSum + pa[i];
+        lSum = lSum + i;
+      }
+    }else {
+      for (i = 0; i &lt; pn; i++) {
+        lSum = lSum + pa[i];
+        lSum = lSum + i * i;
+      }
+    }
+</pre>
+If hirOpt=loopif/loopexp is specified, then the resultant loops in 
+then-part and else-part will be expanded by the loop expansion optimizer.
+
+<h5 id='i-5-3-2-3'>5.3.2.3. Inline expansion (hirOpt=inline)</h5>
+
+The inline expansion optimizer expand a small subprogram by replacing 
+call-expression by the body part of the subprogram. Subprogram call having
+any of following characteristics are not expanded:
+<pre>
+(1) Complexity of subprogram body is large
+   Subprograms having more than 100 HIR nodes are not expanded.
+   This complexity threshold can be changed by sub-option; for example,
+     hirOpt=inline.200
+   will expand subprograms up to 200 HIR nodes. 
+(2) Call is included in conditional expression of if-statement,
+   loop-statement, or included in case-selection expression of switch-statement.
+(3) Subprogram whose definition is not given in the same compile unit.
+</pre>
+Subprograms called before giving its definition can be expanded. Recursive
+subprograms are also expanded up to 2 times. For example,
+<pre>
+    int fact(int p) {
+      if (p &gt; 0)
+        return p * fact(p - 1);
+      else
+        return 1;
+    }
+</pre>
+will be expanded as follows:
+<pre>
+    int fact( int p ) {
+      int _var1, _var3, _var5, _var7, _var9, _var11;
+      if (p &gt; 0) {
+        _var1 = p - 1;
+        if (_var1 &gt; 0) {
+          _var5 = _var1 - 1;
+          if (_var5 &gt; 0) {
+            _var7 = _var5 - 1;
+            if (_var7 &gt;  0) {
+              _var9 = _var7 * fact(_var7 - 1);
+              goto _lab19;
+            }else {
+              _var9 = 1;
+              goto _lab19;
+            }
+          _lab19:;
+            _var11 = _var5 * _var9;
+            goto _lab22;
+          }else {
+            _var11 = 1;
+            goto _lab22;
+          }
+        _lab22:;
+          _var3 = _var1 * _var11;
+          goto _lab12;
+        }else {
+          _var3 = 1;
+          goto _lab12;
+        }
+       _lab12:;
+        return p * _var3;
+      }
+      else {
+        return 1;
+      }
+    }
+</pre>
+
+<!-- ## BEGIN -->
+The option inlinedepth changes this limitation. The option<br>
+&nbsp;&nbsp; -hirOpt=inlinedepth.3<br>
+allows up to 3 times expansion, the option<br>
+&nbsp;&nbsp; -hirOpt=inlinedepth.4<br>
+allows up to 4 times expansion, and so on.<br>
+<!-- ## END -->
+
+
+<h5 id='i-5-3-2-4'>5.3.2.4. Partial redundancy elimination (hirOpt=pre)</h5>
+
+Partial redundancy optimization is a powerful optimization method that does
+global common subexpression elimination and loop-invariant hoisting, etc. 
+by a single method. (See Morel and Renvoise[1], Muchnick[2], Nakata[3].)
+Current implementation is based on E-path_PRE formulated by Dhamdhere[4]
+as follows.<br>
+Symbols and equations according to the E-path_PRE:
+<pre>
+   locally available:  EGen (downward exposed)
+        After computation, operands are not changed.
+   available:  AvailIn
+   locally anticipable:  AntLoc (upward exposed)
+        Operands are not set in preceding operations
+        (before use) in a basic block.
+   safe:  Either anticipable or available.
+   e-path([b_i ... b_k]) = set of eliminatable computation e included
+        in b_k, i.e.
+        {e | e is locally available in b_i and locally anticipable in b_k } &amp;
+        empty((b_i ... b_k)) &amp;  // not computed in intermediate point
+        e is safe at exit of each node on the path [b_i ... b_k),
+</pre>
+where, b_i, ..., b_k are basic block i, ..., basic block k, respectively.
+e-path suffix is the maximal suffix of an E-path such that
+<pre>
+   AntIn * (not AvIn) = true for each node in it.
+</pre>
+Data flow properties are as follows:
+<pre>
+   Comp_i    : e is locally available in b_i
+   Antloc_i  : e is locally anticipable in b_i
+   Transp_i  : b_i does not contain definitions of e's operands
+   AvIn_i    : e is available at entry of b_i
+   AvOut_i   : e is available at exit  of b_i
+   AntIn_i   : e is anticipable at entry of b_i
+   AntOut_i  : e is anticipable at exit  of b_i
+   EpsIn_i   : entry of b_i is in an e-path suffix
+   EpsOut_i  : exit  of b_i is in an e-path suffix
+   Redund_i  : Occurrence of e in b_i is redundant
+   Insert_i  : Insert t_e := e in node b_i
+   Insert_i_j : Insert t_e := e along edge (b_i, b_j)
+   SaIn_i    : A Save must be inserted above the entry of b_i
+   SaOut_i   : A Save must be inserted above the exit  of b_i
+   Save_i    : e should be saved in t_e in node b_i
+</pre>
+where, t_e is a temporal variable to hold the value of e.<br>
+
+Data flow equations are as follows:
+<pre>
+   AvIn_i    = PAI_p (AvOut_p)
+   AvOut_i   = AvIn_i * Transp_i + Comp_i
+   AntIn_i   = AntOut_i * Transp_i + Antloc_i
+   AntOut_i  = PAI_s (AntIn_s)
+   EpsIn_i   = SIGMA_p (AvOut_p + EpsOut_p) * AntIn_i * (not AvIn_i)
+   EpsOut_i  = EpsIn_i * (not Antloc_i)
+   Redund_i  = (EpxIn_i + AvIn_i) * Antloc_i
+   Insert_i  = (not AvOut_i) * (not EpsOut_i) * PAI_s(EpsIn_s)
+   Insert_i_j = (not AvOut_i) * (not EpsOut_i) * (not Insert_i) * EpsIn_j
+   SaOut_i   = SIGMA_s (EpsIn_s + Redund_s + SaIn_s) * AvOut_i
+   SaIn_i    = SaOut_i * (not Comp_i)
+   Save_i    = SaOut_i * Comp_i * (not Redund_i * Transp_i)
+</pre>
+where, _s means successor and _p means predecessor. <br>
+ 
+Optimization using E-path_PRE is done by
+<pre>
+   Save the value of e: computation t_e is inserted before an
+   occurrence of e and the occurrence of e are replaced by t_e
+   (as indicated by Save_i).
+   Insert an evaluation of e: A computation t_e &lt;- e is inserted
+   (as indicated by Insert_i and Insert_i_j).
+   Eliminate a redundant evaluation of e: An occurrence of e is
+   replaced by t_e (as indicated by Redund_i).
+</pre>
+
+Before doing partial redundancy elimination, critical edges[3] in control
+flow graphs are removed by preparatory transformation phase (NormalizeHir). 
+A critical edge is an edge that goes from a basic block having multiple 
+successors to a basic block having multiple predecessors. For example,
+<pre>
+    switch (i) {
+    case 0:
+      s = 0;
+    case 1:
+      s = s + i;
+        ....
+    }
+</pre>
+will be changed by the preparatory transformation phase to
+<pre>
+    switch (i) {
+    case 0:
+      s = 0;
+      goto _lab11;
+    case 1:
+      { _lab11:;
+        s = s + i;
+      }
+      ......
+    }
+</pre>
+
+<h3 id='i-5-4'>5.4. Optimization in C-front (hirOpt=fromc)</h3>    
+
+Optimization in the process of C to HIR-base transformation is 
+performed by specifying coins option hirOpt=fromc in such a way as
+<pre>
+    java coins.driver.Driver -S -coins:hirOpt=fromc xxx.c
+</pre>
+Most optimizations done by fromc specification are covered
+by other HIR and LIR optimizations. The effect of the optimization
+in C front is to make slim the HIR representation of source program
+so that succeeding processing will be simplified.
+
+<h3 id='i-5-5'>5.5. HIR Flow Analysis</h3>    
+ 
+<h4 id='i-5-5-1'>5.5.1. Overview of flow analysis</h4>
+
+In flow analysis, there are control flow analysis and data flow analysis.
+Certain flow analyses must be done in a specific order.
+For example, if Analysis C uses the result of B and B uses the result of A,
+Analysis A must be done first and then Analysis B, then Analysis C. 
+It will be a pain to dig into this kind of dependence if all the user want is
+the fruits, i.e. some results of C in the above example. 
+In COINS flow analysis scheme, as a piece of information supports the 
+automatic analysis mechanism, the user simply has to request it, e.g. C
+and the analysis A and B will be done automatically, and the information 
+requested will eventually be returned.<br>
+There are 2 versions of flow analysis modules.
+<pre>
+
+  coins.flow: Flow analysis used currently in all HIR optimizations
+     such as loopif/loopexp/inline/cf/cpf/cse/gt/pre.
+
+  coins.aflow: Old version flow analysis which is used currently in 
+     loop parallelizer, coarse grain parallelizing module (-coins:mdf).
+</pre>
+In building new modules, it is recommended to use coins.flow version
+because coins.aflow version may take long compile time and huge
+storage space for large subprograms.
+
+<h4 id='i-5-5-2'>5.5.2. Flow analysis by coins.flow </h4>
+
+<h5 id='i-5-5-2-1'>5.5.2.1. Control flow analysis</h5>
+
+The control flow analyzer computes
+<ul>
+<li> CFG (control flow graph) </li>
+<li> Dominance relations of basic blocks (BBlock)</li>
+</ul>
+for specified subprogram.<br>
+ 
+There are several symbols widely used in control/data flow analysis.
+<pre>
+  flowRoot: instance of FlowRoot (usually passed from Driver).
+  subpDefinition: instance for SubpDefinition representing
+      the HIR subtree of a subprogram.
+  subpFlow: instance of SubpFlow to represent control/data flow information
+      of specified subprogram.
+</pre>
+The instance of HirSubpFlowImpl is required to be made only once
+for each subprogram. All control flow information and data flow
+information are linked from this instance and if you renew the 
+instance, then all flow information previously computed will be reset. <br>
+The following statement makes an instance of SubpFlow 
+<pre>
+    coins.flow.SubpFlow lSubpFlow = new HirSubpFlowImpl(flowRoot, subpDefinition);
+</pre>
+and after executing it, the instance can be referred by
+<pre>
+    flowRoot.fSubpFlow
+</pre>
+
+To do control flow analysis, it is necessary to prepare for it by
+<pre>
+    flowRoot.flow.controlFlowAnal(lSubpFlow);
+</pre>
+After executing this statement, methods related to basic blocks such as 
+<pre>
+   cfgIterator(), getEntryBBlock(), getBBlockOfIR(ir.getIndex()), 
+   bblockSubtreeIterator(bblock), ...
+</pre>
+are made available. There are many other methods for control/data flow 
+analysis as they are shown in the interface coins.flow.SubpFlow. After executing 
+controlFlowAnal(lSubpFlow), methods of coins.flow.BBlock interface such as
+<pre>
+   getPredList(), getSuccList(), 
+   getImmediateDominator(), getPostDominatedChildren(), ...
+</pre>
+are made available. 
+
+To see the result of control flow analysis, the coding sequence
+<pre>
+    coins.flow.ShowControlFlow lShow = flowRoot.controlFlow.getShowControlFlow();
+    lShow.showAll();
+</pre>
+will print the result of control flow analysis.<br>
+<br>  
+The statement
+<pre>
+    flowRoot.flow.controlFlowAnal(lSubpFlow);
+</pre>
+resets previous control flow analysis information and begins to re-compute.
+If there is no change in HIR subtree of SubpDefinition instance, then it is
+not necessary to re-compute it. It is recommended to avoid it by
+following coding sequence:
+<pre>
+    if (flowRoot.flow.getFlowAnalStateLevel() &lt;
+        coins.flow.Flow.STATE_CFG_AVAILABLE)
+      flowRoot.flow.controlFlowAnal(lSubpFlow);
+</pre>
+The method finishHir() and setIndexNumbetToAllNodes() of HIR0 interface 
+will make 
+<pre>
+    getGlowAnalStateLevel() &lt; coins.flow.Flow.STATE_CFG_AVAILABLE)
+</pre>
+true so as to inform re-computation is required. 
+
+<h5 id='i-5-5-2-2'>5.5.2.2. Data flow analysis</h5>
+
+In the implementation of data flow analysis, each variable
+is assigned a unique index number to identify
+it in data structures for flow analysis. Each program point
+defining or using variables is assigned a unique
+position number to identify it quickly.<br>
+
+Each expression is assigned an expression identifier (ExpId)
+which is the same between expressions having the same form.
+The expression identifiers are used to treat compound variables in the 
+similar way as simple variable and to identify expressions.
+FlowAnalSym is the class of symbols for data flow analysis.
+Variables and expression identifiers are instances of FlowAnalSym.
+In the data flow analysis, alias analysis is automatically done
+to find variables whose value might be changed.
+
+<h5 id='i-5-5-2-3'>5.5.2.3. Basic data flow information</h5>
+ 
+Let us use following notations:
+<pre>
+     x, y, t, u : variable or register representing an operand.
+                  (variable may be a compound variable such as
+                   array element or structure element.)
+     op         : operator.
+     def(x)     : shows that value of x is defined (value is set).
+     def(x, y, ...) : shows that values of x, y, ... are defined.
+     use(x)     : shows that x is used.
+     p(use(x))  : x is used at program point p.
+     or_all(z)  : construct a set by applying or-operation
+                  on all components indicated by z.
+     and_all(z) : construct a set by applying and-operation
+                  on all components indicated by z.
+</pre>
+The data flow analyzer will compute following information according to requests:
+<pre> 
+   Def(B)  =
+         { p | for some x, p(def(x)) is included in B and after that point 
+               there is no p'(def(x)) in B. }
+   Kill(B) =
+         { p | for some x, p(def(x)) is included in B' (where, B' != B) 
+               and there exists some defining point of x p'(def(x)) in B. }
+   Reach(B)=
+         { p | there is some path from program point p defining x 
+               (that is p(def(x))) to the entry of B such that there is 
+               no p'(def(x)) on that path. }
+               Reach(B) = or_all( (Def(B') | (Reach(B') - Kill(B')))
+                   for all predecessors B' of B)
+   Defined(B) =
+         { x | x is defined in B. }
+   Exposed(B) =
+         { x | x is used in B and x is not defined in B
+               before x is used. }
+   Used(B) = 
+         {x|x is used in B}
+   EGen(B) =
+         { op(x,y) | expression op(x,y) is computed in B and after
+                     that point, neither x nor y are defined in B. }
+           Thus, the result of op(x,y) is available after B.
+   EKill(B) =
+         { op(x,y) | operand x or y is defined in B and the
+                     expression op(x,y) is not re-evaluated after
+                     that definition in B. }
+                 If t = op(x,y) is killed in B,
+                 then op(t,u) should also be killed in B.
+   AvailIn(B) =
+         { op(x,y) | op(x,y) is computed in every paths to B and
+                     x, y are not defined after the computations
+                     on the paths. }
+           Thus, the result of op(x,y) can be used without
+           re-evaluation in B.
+   AvailOut(B) =
+         { op(x,y) | op(x,y) is computed in every paths to the exit of B and
+                     x, y are not defined after the computations
+                     on the paths. }
+           Thus, op(x,y) can be used without re-evaluation after B.
+         Following relations hold.
+           AvailIn(B) = and_all(AvailOut(B') for all predecessors B' of B)
+                if B is not an entry block;
+           AvailIn(B) = { } if B is an entry block.
+           AvailOut(B) = EGen(B) | (AvailIn(B) - EKill(B))
+   LiveIn(B) =
+         { x | x is alive at entry to B, that is, on some path from
+               entrance point of B to use point of x, x is not defined. }
+           Thus, x in LiveIn(B) should not be changed until it is used.
+   LiveOut(B) =
+         { x | x is live at exit from B, that is, there is some
+               path from B to B' where x is in Exposed(B'). }
+         Following relations hold.
+           LiveOut(B) = or_all(LiveIn(B') for all successors B' of B
+           LiveIn(B)  = Exposed(B) | (LiveOut(B) - Defined(B))
+   DefIn(B) =
+         { x | x is always defined at entry to B whichever path
+               may be taken. }
+           DefIn(B) = and_all(DefOut(B') for all predecessors B' of B)
+   DefOut(B) =
+         { x | x is always defined at exit from B whichever path
+               may be taken.}
+           DefOut(B) = Defined(B) | DefIn(B)
+   Reach(p(use(x))) =
+         { p'(def(x)) | there are some paths from p to p' on which
+               x is not re-defined. }
+   DefUseList(p(def(x))) =
+         { p'(use(x)) | p(def(x)) is included in p'(use(x)). }
+   UseDefList(p(use(x))) =
+         { p'(def(x)) | p'(def(x)) is included in p(use(x)). }
+</pre>
+ 
+<h5 id='i-5-5-2-4'>5.5.2.4. Data structure</h5>
+ 
+There are several ways of representing data flow information
+such as bit vector representation and discrete list representation.
+When a new data flow information is introduced, it will be necessary
+to solve new data flow equation concerning it. For that purpose,
+several methods treating bit vector data structures are provided
+(expVector, pointVector, vectorAnd, vectorOr, ...).
+By using these methods and methods in BitVector interface,
+we will be able to solve new data flow equation and to access the new
+data flow information.<br>
+<br>
+In the bit vector representation, information can be accessed by
+position number of IR nodes and index number of symbols which
+can be get from IR node or symbol table each respectively.
+There are also methods to access the information by symbol itself.<br>
+BBlockVector is a bit vector representing 0/1 information for each BBlock.<br>
+DefVector is a bit vector representing 0/1 information for
+each value-setting node. If its value at position p is 1, true is represented
+for the IR node at p, if it is 0, false is represented at that node.<br>
+PointVector is a bit vector representing 0/1 information for
+each IR node. If its value at position p is 1, true is represented
+for the IR node at p, if it is 0, false is represented at that node.<br>
+FlowAnalSymVector is a bit vector representing 0/1 information
+for each symbol such as variable or ExpId. A symbol is assigned a local index 
+which is unique within a subprogram. If FlowAnalSymVector value at position
+i is 1, true is represented for the symbol having index number i,
+if it is 0, false is represented for that symbol. <br>
+ExpVector is a bit vector representing 0/1 information for each 
+unique expression. Expressions having 
+the same form are assigned the same local object (ExpId). An expression is
+represented by the index number assigned to the ExpId
+corresponding to the expression. If an ExpVector's n-th bit is 1, true is 
+represented for the expression having the ExpId object whose index is i.<br>
+All the indexes such as symbol indexes are numbered 1, 2, 3, ... .
+If such numbering is not yet performed, the index value
+will be 0. Position 0 in the bit vectors is not used.
+
+<h5 id='i-5-5-2-5'>5.5.2.5. Usage</h5>
+
+Data flow analysis is done on demand, that is, if data flow information of
+kind A is requested, then only A and some information on which A depends
+are computed. If requested information is already computed, then it is
+not re-computed but reused.<br>
+<br>
+In order to prepare for data flow analysis, do
+<pre>
+    flowRoot.flow.dataFlwoAnal(subpDefinition);
+</pre>
+at the first time. This makes coins.flow.SubpFlow methods such as
+<pre>
+    getDefinedSyms(), getUsedSyms(), ...
+</pre>
+available. It also makes coins.flow.BBlock methods such as
+<pre>
+    getDefIn(), getDefOut(), getRech(), getLiveIn(), getLiveOut(),  
+    getAvailIn(), getAvailOut(),  ....
+</pre>
+available. available. There are many other methods for accessing data flow 
+information as shown in the interface SubpFlow. Such methods can be
+called via the SubpFlow instance 
+<pre>
+    flowRoot.fSubpFlow
+</pre>
+which is prepared by calling dataFlwoAnal(subpDefinition);<br>
+<br>
+The method dataFlowAnal(subpDefinition) resets data flow information 
+previously computed and prepares to re-compute it. If there is no change in 
+HIR subtree of SubpDefinition instance, then it is unnecessary to re-compute 
+it. It is recommended to avoid re-computation by following coding sequence:
+<pre>
+  if (flowRoot.flow.getFlowAnalStateLevel() &lt;
+      coins.flow.Flow.STATE_DATA_FLOW_AVAILABLE)
+    flowRoot.dataFlow = flowRoot.flow.dataFlowAnal(subpDefinition);
+</pre>
+The methods finishHir() and setIndexNumbetToAllNodes() of HIR0 interface 
+will make getFlowAnalStateLevel() as STATE_DATA_UNAVAILABLE, that is, it will
+make 
+<pre>
+    getFlowAnalStateLevel() &lt; coins.flow.Flow.STATE_DATA_FLOW_AVAILABLE
+</pre>
+true so as to inform re-computation is required. <br>
+
+If HIR is changed as a result of some optimization, finishHir() should be 
+called at the end of the optimization phase to keep consistency between 
+data structures related with HIR and to indicate that control flow and data 
+flow information are no more valid. To avoid unnecessary re-computation of 
+flow analysis, optimizers should return an indication whether HIR has
+been changed or not (See coins.Opt as an example).<br>
+<br>
+Most compiler books explain data flow analysis assuming some intermediate 
+representation of a form similar to quadruple having no hierarchical structure.
+HIR has tree structure representing nested expressions. Some special 
+consideration is required in analyzing data flow for tree structured 
+intermediate representation.<br>
+<br>
+Common subexpression in HIR takes the form of subtree. For each subtree,
+an expression identifier (ExpId) is allocated as it is mentioned before 
+and expressions having the same structure and the same operands share 
+the same ExpId, thus, the recognition of common subexpression is a trivial 
+work in HIR analysis, but it is required to find the largest common subexpression
+and to confirm that there is no possibility of the change for operand values.
+An expression may have many operands and it may have function call.
+In optimization procedures, it is required to examine what operands are
+used and what variables have possibility of changing their value
+and whether a call is included or not for statements and expressions.<br>
+<br>
+Data flow information for basic blocks can be accessed by methods of 
+BBlock as mentioned above. The data flow analyzer also provides several 
+methods to access set/refer information, etc. To see set/refer information, 
+a class named SetRefRepr is provided in the package coins.flow. ExpId is 
+also used to access operand information, etc. of corresponding expression.<br>
+<br>
+Value of a variable may be set by assign statement and call expression.
+A variable may be referred in an expression using the variable as its 
+leaf operands. In analyzing data flow of HIR subtree, it is required to
+examine assign statements, call expressions, conditional expressions
+in if-statements and loop-statements, expressions in return statements and
+case-selection expressions of switch statements. Other parts of HIR subtree
+do not set/refer variables directly.<br>
+
+An instance of SetRefRepr is assigned to each of
+<pre>
+    AssignStmt
+    Conditional expressions in LoopStmt
+    Subprogram call
+    ReturnStmt
+</pre>
+which are treated as a statement in the data flow analysis.
+Following methods are available for SetRefRepr.
+<pre>
+    defSym() returns the set of symbols definitely defined.
+    modSyms() returns the set of symbols that are possibly defined.
+    useSyms() returns the set of symbols definitely used (referred).
+</pre>
+As for expressions, ExpId interface provides following methods:
+<pre>
+    getOperandSet() returns the set of variables used as leaf operand.
+    getExpInf().hasCall() returns true if the expression has call.
+</pre>
+SubpFlow interface provides following methods for corresponding subprogram:
+<pre>
+    cfgIterator() traverses all reachable basic blocks of the subprogram.
+    bblockSubtreeItrator(BBlock pBBlock) returns iterator that traverse top 
+        subtrees of the basic block pBBlock.
+        Traversed top-subtrees are
+            LabeledStmt, AssignStmt, ExpStmt, ReturnStmt,
+            IfStmt, LoopStmt, SwitchStmt
+            Conditional expression in IfStmt and LoopStmt
+            Case-selection expression in SwitchStmt
+            Call subtree (irrespective of contained in ExpStmt or Exp)
+    bblockStmtIterator(BBlock pBBlock) returns iterator to traverse all
+        HIR statements in the basic block pBBlock.
+    bblockNodeIterator(BBlock pBBlock) returns iterator to traverse all
+        HIR nodes in the basic block pBBlock.
+    getSetRefReprOfIR(IR pIr) returns SetRefRepr corresponding to pIr 
+         or returns null if pIr has no SetRefRepr instance.
+    getExpId(IR pIr) returns ExpId corresponding to pIr.
+    getExpOfTemp(Var pTemp) returns the expression represented by 
+         the temporal variable pTemp.
+    setOfGlobalVariables() returns the set of global variables appeared.
+    setOfAddressTakenVariables() returns the set of address taken variables.
+    getRecordAlias() returns the instance of RecordAlias that is used to
+         access alias information of the subprogram.
+</pre>
+DefUseList and UseDefList are computed by the information of definitely
+defined and definitely used relations because if all possibilities are 
+unconditionally included, define/use lists and use/define lists will become 
+very large. Possibly defined symbols and possibly used symbols can be get 
+from defSyms() and useSyms() by using the set of global variables, the 
+set of address-taken variables, and the set of variables aliased to a variable. <br>
+<br>
+For the following program
+<pre>
+    int printf(char*, ...);
+    int func(int pa[10], int pn);
+    int ga1[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    int main()
+    {
+      int a = 1, b = 2, c, d;
+      int i = 0;
+      int *ptrc, *ptry;
+      int sum;
+      int x[10];
+      int y[10] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+      int z[10] = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+      int zz[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+      ptrc = &amp;c;
+      ptry = y;
+      x[i] = a;
+      *ptrc = x[i] + 1;
+      sum = c + func(z, 10);
+      d = zz[2] + zz[3];
+      printf(" sum=%d ", sum);
+      for (i = 0; i &lt; 10; i++) {
+        d = d + (zz[2] + zz[3]);
+        d = d + z[i] + z[i];
+        d = d + zz[i] + zz[i];
+        sum = ga1[i] + ga1[i];
+        sum = sum + *ptry;
+        printf(" *ptry=%d d=%d ", *ptry, d);
+        ptry = ptry + 1;
+        sum = sum + z[i] + z[i];
+        sum = sum + zz[i] + zz[i];
+        d = d + ga1[i] + ga1[i];
+      }
+      d = d + ga1[2] + ga1[2];
+      printf("\n"); 
+      d = d + (zz[2] + zz[3]);
+      d = d + ga1[2] + ga1[2];
+      printf("%d %d %d \n", sum, c, d);
+      return 0; 
+    }     
+</pre>
+basic blocks are
+<pre>
+  BBlock 1: statements from the beginning up to &quot;i=0;&quot; of for-statement
+  BBlock 2: conditional expression &quot;i &lt; 10&quot;
+  BBlock 3: from &quot;d=d+(zz[2]+zz[3]);&quot; to &quot;d=d+ga1[i]+ga1[i];&quot;
+  BBlock 4: &quot;i++&quot;
+  BBlock 5: rest of statements (from &quot;d=d+ga1[2]+ga1[2];&quot; to &quot;return 0;&quot;
+and
+  setOfAddressTakenVariables() = { c, z, y }
+Available expressions of basic blocks are
+  BBlock 1
+    AvailOut= { zz[2], zz[3], &amp;c, zz[2]+zz[3] }
+  BBlock 2
+    AvailIn = { zz[2], zz[3], &amp;c, zz[2]+zz[3] }
+    AvailOut= { zz[2], zz[3], &amp;c, zz[2]+zz[3], i&lt;10 }
+  BBlock 3
+    AvailIn = { zz[2], zz[3], &amp;c, zz[2]+zz[3] }
+    AvailOut= { zz[2], zz[3], &amp;c, zz[2]+zz[3], i&lt;10, z[i], zz[i], ga1[i] }
+  BBlock 4
+    AvailIn = { zz[2], zz[3], &amp;c, zz[2]+zz[3], i&lt;10, z[i], zz[i], ga1[i] }
+    AvailOut= { zz[2], zz[3], &amp;c, zz[2]+zz[3] }
+  BBlock 5
+    AvailIn = { zz[2], zz[3], &amp;c, zz[2]+zz[3], i&lt;10 }
+    AvailOut= { zz[2], zz[3], &amp;c, zz[2]+zz[3], i&lt;10 }
+</pre>
+At the statement &quot;ptrc = x[i] + 1;&quot; address taken variables are assumed 
+to be modified.
+<pre>
+   defSym = { *ptrc }
+   modSyms= { c, *ptrc, z, ptrc, y }
+</pre>
+At the statement &quot;sum = c + func(z, 10);&quot; global variables are assumed
+to be modified.
+<pre>
+   defSym = { sum }
+   modSyms= { z, ga1, sum }
+</pre>
+Thus, after partial redundancy elimination, z[i]+z[i] is re-computed 
+after subprogram call but z[i]+z[i] is not re-computed (eliminated
+as common subexpression), and zz[2]+zz[3] is recorded in a temporal 
+variable before entering the for-loop and all later occurrences of 
+zz[2]+zz[3] are replaced by the temporal variable.<br>
+<br>
+Following is an example to show how to use these methods where
+flowRoot is an instance of FlowRoot and subpDefinition is an instance of
+SubpDefinition. 
+<pre>
+    SubpFlow lSubpFlow = new HirSubpFlowImpl(flowRoot, subpDefinition);
+    ControlFlow lControlFlow = flowRoot.flow.controlFlowAnal(lSubpFlow);
+    DataFlow lDataFlow = flowRoot.flow.dataFlowAnal(lSubpFlow);
+    RecordAlias lRecordAlias = lSubpFlow.getRecordAlias(); 
+    for (Iterator lBBlockIterator = lSubpFlow.cfgIterator();
+         lBBlockIterator.hasNext(); ) {
+      BBlock lBBlock = (BBlock)lBBlockIterator.next();
+      ExpVector lAvailableExp  = lBBlock.getAvailIn();
+      for (BBlockSubtreeIterator lSubtreeIterator 
+               = lSubpFlow.bblockSubtreeIterator(lBBlock);
+           lSubtreeIterator.hasNext(); ) {
+        HIR lSubtree = (HIR)lSubtreeIterator.next();
+        SetRefRepr lSetRefRepr = lSubpFlow.getSetRefReprOfIR(lSubtree);
+        Set lModSyms = lSetRefRepr.modSyms();
+        Set lModSymsAlias = fRecordAlias.aliasSymGroup(lModSyms); // Set of 
+          // symbold aliased to some of modified variables.
+        for (ExpVectorIterator lExpIterator = lAvailableExp.expVectorIterator();
+             lExpIterator.hasNext(); ) {
+          ExpId lExpId = nextExpId();
+          Set lOperands = lExpId.getOperandSet();
+          if (! lOperands.retailAll(lModSymsAlias).isEmpty()) {
+              // Treat the expression corresponding to lExpId as unavailable
+              // because some operand may be changed by the subtree lSubtree.
+           }
+           ......
+        }
+        ....
+      }
+      ....
+    }
+</pre>
+To see the result of data flow analysis, execute following statement: 
+<pre>
+    flowRoot.dataFlow.showSummary();
+</pre>
+The amount of printed result may be large for subprograms with hundreds
+of statements.
+
+    
+<h5 id='i-5-5-2-6'>5.5.2.6. How to extend flow analysis</h5>
+
+If new flow analysis information is required, compute it by using
+facilities of the flow analyzer, or define a subclass of HirSubpFlow
+(a subclass of SubpFlow) and make methods to compute the new flow analysis 
+information in the subclass.<br>
+
+For example, if you want to find transparent expressions that are neither
+killed nor defined within a basic block, following coding will provide
+the information for each basic block.
+<pre>
+    package coins.flow;
+    import coins.FlowRoot;
+    import coins.ir.hir.SubpDefinition;
+    import java.util.Iterator;
+    
+    public class
+      MySubpFlow extends HirSubpFlowImpl implements HirSubpFlow
+    {
+      ExpVector fTransparent[];
+    
+      public MySubpFlow(FlowRoot pFlowRoot, SubpDefinition pSubpDefinition)
+      {
+        super(pFlowRoot, pSubpDefinition);
+      } // MySubpFlow
+    
+      public void
+        computeTransparent()
+      {
+        ExpVector lEKillAll;
+        ExpVector lTemp1 = expVector();
+        ExpVector lTemp2 = expVector();
+        FlowAnalSymVector lDefined;
+        int lBBlockNum;
+        fTransparent = new ExpVector[fBBlockCount + 1]; // Get space
+          // to record transparent vectors for all basic blocks.
+        for (Iterator lIterator = cfgIterator();
+             lIterator.hasNext(); ) { // Repeat for each basic block.
+          BBlock lBBlock = (BBlock)lIterator.next();
+          if (lBBlock == null)
+            continue;
+          lBBlockNum = lBBlock.getBBlockNumber(); // Get basic block number.
+          fTransparent[lBBlockNum] = expVector(); // Initiate by zero vector.
+          lEKillAll = lBBlock.getEKillAll(); // Get the cumulative set of
+             //expressions killed by some statements in this BBlock.
+          lEKillAll.vectorNot(lTemp1); // lTemp1 is negation of lEKillAll..
+          // Get the set of defined variables.
+          lDefined = (FlowAnalSymVector)lBBlock.getDefined();
+          lTemp2 = lDefined.flowAnalSymToExpVector(); // Change the set to vector.
+          lTemp1.vectorSub(lTemp2, fTransparent[lBBlockNum]);
+              // fTransparent[lBBlockNum] = lTemp1 - lTemp2
+          if (fDbgLevel &gt; 1) // If trace=Flow.2 or more, print the result.
+            ioRoot.dbgFlow.print(2, "Transparent B"+lBBlockNum, 
+                fTransparent[lBBlockNum].toStringShort());
+        }
+        setComputedFlag(DF_TRSNSPARENT); // Set already-computed flag.
+    } // computeTransparent
+    
+      /**
+       * Get the transparent expression for the basic block pBBlock.
+       * Expressions are represented by ExpId corresponding to the expression.
+       * @param pBBlock basic block.
+       * @return expression vector showing transparent expressions.
+       */
+    public ExpVector
+    getTransparent( BBlock pBBlock )
+    {
+      if (! isComputed(DF_TRSNSPARENT)) // If already computed,
+        computeTransparent();           // do not re-compute but reuse.
+      return fTransparent[pBBlock.getBBlockNumber()];
+    } // getTransparent
+    
+    } // MySubpFlow
+</pre>
+In this example, it is necessary to add
+<pre>
+    public static final int DF_TRANSPARENT = 26;
+</pre>
+as a flag number to SubpFlow.java. To use the subclass for extending 
+the flow analysis capability, write such coding as
+<pre>
+    SubpFlow lSubpFlow = new MySubpFlow(flowRoot, subpDefinition);
+</pre>
+instead of 
+<pre>
+    SubpFlow lSubpFlow = new HirSubpFlowImpl(flowRoot, subpDefinition);
+</pre>
+which is shown in the previous example.
+
+
+<h4 id='i-5-5-3'>5.5.3. Flow analysis by coins.aflow (old version)</h4>
+
+<h5 id='i-5-5-3-1'>5.5.3.1. Flow information</h5>
+
+The control flow information is the same as that of coins.flow version.
+As for the data flow information, both of definite information and probable
+information are computed.<br>
+ 
+Let us use following notations:
+<pre>
+    x, y, t, u : variable or register representing an operand.
+    op         : operator.
+    def(x)     : shows that value of x is definitely defined.
+    mod(x)     : shows that value of x is possibly defined.
+    use(x)     : shows that x is used.
+    p(def(x))  : value of x is (definitely) modified (i.e. via assign) 
+                 at program point p.
+    p(mod(x, y, ...))  : value of x, y, ... are modified at program point p 
+                 (modified means possibly changed).
+    p(use(x))  : x is used at program point p.
+    or_all(z)  : construct a set by applying or-operation
+                 on all components indicated by z.
+    and_all(z) : construct a set by applying and-operation
+                 on all components indicated by z.
+</pre>
+The data flow analyzer will compute following information according to requests:
+<pre> 
+  PDef(B)  =
+       { p | p(mod(x, y, ...)) is included in B and after that point there is
+             no p' s.t. p'(def(x)) nor p" s.t. p"(def(y)), ... in B. }
+   DKill(B) =
+       { p | p(def(x)) is not included in B and
+             p'(def(x)) is included in B. }
+   PReach(B)=
+       { p | there is some path from program point p
+             that modifies some variables x, y, ... (that is, p(mod(x, y, ...)))
+             to the entry of B such that there is no p'(def(x)) or no p''(def(y))
+             or ... on that path. }
+         PReach(B) = or_all( (PDef(B') | (PReach(B') - DKill(B')))
+                          for all predecessors B' of B)
+   DDefined(B) =
+       { x | x is definitely modified in B. }
+   PDefined(B) =
+       { x | x is posibly modified in B. }
+   PExposed(B) =
+       { x | x is possibly used in B and x is not definitely set in B
+             before x is used. }
+   PUsed(B) = {x|x is possibly used in B}
+   DEGen(B) =
+       { op(x,y) | expression op(x,y) is computed in B and after
+                   that point, neither x nor y are possibly set in B. }
+         Thus, the result of op(x,y) is available after B.
+   PEKill(B) =
+       { op(x,y) | operand x or y is possibly modified in B and the
+                   expression op(x,y) is not re-evaluated after
+                   that definition in B. }
+         If t = op(x,y) is killed in B,
+         then op(t,u) should also be killed in B.
+   DAvailIn(B) =
+       { op(x,y) | op(x,y) is computed in every paths to B and
+                   x, y are not modified after the computations
+                   on the paths. }
+         Thus, the result of op(x,y) can be used without
+         re-evaluation in B.
+   DAvailOut(B) =
+       { op(x,y) | op(x,y) is computed in every paths to the exit of B and
+                   x, y are not modified after the computations
+                   on the paths. }
+         Thus, op(x,y) can be used without re-evaluation after B.
+         Following relations hold.
+           DAvailIn(B) = and_all(DAvailOut(B') for all predecessors B'
+                                 of B) if B is not an entry block;
+           DAvailIn(B) = { } if B is an entry block.
+           DAvailOut(B) = DEGen(B) | (DAvailIn(B) - PEKill(B))
+   PLiveIn(B) =
+       { x | x is alive at entry to B, that is, on some path from
+             entrance point of B to use point of x, x is not definitely set. }
+         Thus, x in PLiveIn(B) should not be changed until it is used.
+   PLiveOut(B) =
+       { x | x is live at exit from B, that is, there is some
+             path from B to B' where x is in PExposed(B'). }
+       Following relations hold.
+         PLiveOut(B) = or_all(PLiveIn(B') for all successors B' of B
+         PLiveIn(B)  = PExposed(B) | (PLiveOut(B) - DDefined(B))
+   DDefIn(B) =
+       { x | x is always defined at entry to B whichever path
+             may be taken. }
+         DDefIn(B) = and_all(DDefOut(B') for all predecessors B' of B)
+   DDefOut(B) =
+       { x | x is always defined at exit from B whichever path
+             may be taken.}
+         DDefOut(B) = DDefined(B) | DefIn(B)
+</pre>
+
+<h5 id='i-5-5-3-2'>5.5.3.2. How to use in your code</h5>
+
+First, the relevant package is coins.aflow. It is not supported to refer
+both pakages of coins.aflow and coins.flow in one module simultaneously.<br>
+
+FlowResults class is central to the automatic analysis mechanism. 
+It is a Map class (it extends HashMap) with additional methods that provide 
+the automatic analysis functionality. <br>
+  
+FlowResults has 4 main methods: find(), get(), put(), and getRaw(). (For 
+precise signatures, see the API document of coins.aflow.)<br>
+
+(1) find<br>
+The method find() will trigger the analysis specified by its first argument,
+with (optional) second and third keys passed through to the analysis method. 
+The result of the analysis should be stored in this FlowResults Map.
+<pre> 
+    ex. find("Def", lBBlock);
+</pre>
+
+(2) get<br>
+The method get() will query its own map and if the key specified by its 
+arguments cannot be found, the find method explained above will be called. 
+In any case, it returns the value corresponding to the specified key, as
+Map.get() does.  
+<pre> 
+    ex. get("Def", lBBlock);
+</pre>
+  
+(3) put<br>
+The method put() will store the key-value pair in the Map. 
+This is just the same as Map.put(), but with support for multiple keys (which
+I have called simply a key so far). 
+This will be called inside the analyzer method (method called from within 
+find()), but can also be called from any context.
+The key may or may not support automatic analysis mechanism. 
+If the key does not support automatic analysis, the retrieval of the value 
+should be done via getRaw(), or an exception may be thrown.
+<pre> 
+    ex. put("Def", lBBlock, lDefVector);
+</pre>
+  
+(4) getRaw<br>
+The method getRaw() will simply retrieves the value for the specified key 
+from the Map whether the key supports automatic analysis or not. 
+This is just the same as Map.get(), with support for multiple keys that 
+correspond to the arguments of put().
+<pre>
+    ex. getRaw("Def", lBBlock)
+</pre>
+
+In the following code snippet, the Reach vector for the exit BBlock of the 
+SubpDefinition variable subpDef is going to be stored in the local variable 
+lReach.
+<pre>
+    // Establishes the map between the analysis names and the analyzer methods 
+    // that actually do the analysis. 
+    // A key of this map together with the arguments of the associated
+    // analyzer class methods forms a piece of information that supports the 
+    // automatic analysis mechanism. 
+    // This method will be called only twice during the program life; once
+    // for HIR and once for LIR.	
+    FlowResults.putRegClasses(new RegisterFlowAnalClasses());
+  
+    // Instantiate a FlowResults map. 
+    FlowResults lResults = flow.results(); 
+    
+    // Instantiate a SubpFlow object, with FlowResults object passed as an
+    // argument to the factory method.	 
+    SubpFlow lSubpFlow = flow.subpFlow(subpDef, lResults);
+
+    // Performs control flow analysis. 
+    // Control flow analysis does not support the automatic flow analysis 
+    // mechanism and must be called explicitly.                             
+    lSubpFlow.controlFlowAnal();
+  
+    // Collects some basic information that does not require a complex 
+    // algorithm. 
+    // Some pieces of information obtained here ARE part of the automatic
+    // analysis picture, but some are not, so I call it explicitly.
+     lSubpFlow.initiateDataFlow();
+
+    // Finds the Reach vector for each of the BBlocks that belong to lSubpFlow. 
+    // There is no need to call lSubpFlow.getExitBBlock().findDef() or 
+    // lSubpFlow.getExitBBlock().findKill() (or lSubpFlow.findReach()) since
+    // they are called automatically (automatic analysis).
+    lReach = lResults.get("Reach", lSubpFlow.getExitBBlock());	
+    // OR lReach = lSubpFlow.getExitBBlock().getReach();
+    ...
+</pre>
+
+<h5 id='i-5-5-3-3'>5.5.3.3 From Command Line</h5>
+
+   The flow analyzer is usually called as a preparatory phase of some
+   optimizers and parallelizers. But in some case, it may be helpful
+   to invoke it by command line (for educational purpose, etc.).<p>
+   The following command invokes HIR flow analyzer.
+<pre>
+     java coins.driver.Driver -S -coins:hirAnal,trace=Flow.2
+</pre>
+   The trace option is attached to see the result of the flow analysis.
+
+
+<h3 id='i-5-6'>5.6. Alias Analysis</h3>
+
+<h4 id='i-5-6-1'>5.6.1. Overview of alias analysis</h4>
+
+The alias analysis implemented here is an intra-procedural flow-insensitive
+analysis. There are only a few interface methods,
+so the usage should be quite straighforward.<p>
+
+There are 2 levels of analysis:
+<ul>
+<li> AliasAnalLevel1 - compute only alias groups for symbols</li> 
+<li>  AliasAnalLevel2 - compute alias relations between HIR nodes</li>
+</ul> 
+In AliasAnalLevel1, methods of RecordAlias class
+<ul>
+<li>aliasSyms(Sym pSym): returns the set of symbols aliased with pSym.</li>
+<li>aliasSymGroup(Set pSymbolSet): return the set of symbols
+     aliased with smbols in pSymbolSet.</li>
+</ul>
+are available.<p>
+
+Also, there are 2 modes of analysis for both AliasAnalLevel1 and
+AliasAnalLevel2:
+<dl>
+<dt>pessimistic mode </dt><dd>
+     Assume followings:
+<ol>
+<li>Temporal variables generated by the compiler are not
+       in alias relations with each other.</li>
+<li>Temporal variables are not in alias relation with source
+       program variables.</li>
+<li> Local variables other than parameters are not in alias
+       relations with global variables if they are not taken address.</li>
+</ol></dd>
+<dt>optimistic mode</dt><dd>
+     Assume followings in addition to those of pessimistic mode:
+<ol>
+<li>Formal parameters within a subprogram are not in alias
+       relations with each other.</li>
+<li>Subscript values of array elements do not exceed
+       the range boundary specified by declaration of the array.</li>
+<li>Pointer variables do not point to storage areas
+       whose type differs from the type specified by the
+       declaration of the pointers.</li>
+</ol></dd>
+</dl>
+The pessimistic mode is default mode. The optimistic mode is taken
+only when specified so by compiler command option
+<pre>
+    -coins:alias=opt
+</pre>
+There are fine computation mode and coarse computation mode in the alias 
+analysis. The fine computation mode will consume much time and memory.
+For large subprograms (more than 1000 HIR nodes), the coarse computation mode
+is automatically adopted. In the fine computation mode, size of set 
+showing aliased symbols will be small compared to the coarse computation mode.<br>
+
+<h4 id='i-5-6-2'>5.6.2. How to Use</h4>
+
+The alias analyzer is automatically called in process of data flow analysis.
+The result of alias analysis can be used by calling methods of RecordAlias
+such as mayAlias, aliasSyms, and aliasSymGroup. Following is an example of 
+using alias information.
+<pre>
+    RecordAlias lRecordAlias = flowRoot.subpFlow.getRecordAlias();
+    ....
+    if(lRecordAlias.mayAlias(x, y)) {
+      // Assume y may be changed when x is changed.
+      ....
+    }
+    Set lSetOfVariablesAliased = lRecordAlias.aliasSyms(x);
+</pre>
+where, x, y are variables.
+
+<h3 id='i-5-7'>5.7. Global pattern matching</h3>    
+
+<h4 id='i-5-7-1'>5.7.1. Overview</h4> 
+
+  The transformation based on global pattern matching transforms a 
+subprogram according to given global patterns each of which is composed 
+of a pair of patterns named in-pattern and out-pattern.
+The global patterns take the form of a C subprogram.
+The in-pattern and the out-pattern are a block containing an
+expression (an instance of ExpStmt) or a sequence of
+statements. If a part of the input program matches with
+some in-pattern, then it is transformed to the corresponding
+out-pattern replacing parameters as mentioned later.<br>
+<br>
+Wide variety of transformations can be done by the global pattern matching,
+however, its applicability is limited because the transformation is
+limited only to some program fragments that match with given in-patterns.
+<br>
+<br>
+  Before explaining in detail, let us show a simple example:
+<pre>
+   #pragma globalReform patternSym copy
+   #pragma globalReform target main
+   void copy( char *pa, char *pb, int pn, int pi )
+   {
+    iPattern:
+     {
+       for (pi = 0; pi < pn; pi++)
+         *pb++ = *pa++;
+     }
+    oPattern:
+     {
+       memcpy(pb, pa, pn);
+     }
+   }
+   int main()
+   {
+     char x[100] = {1, 2, 3, 4, 5, 6, 7, 8}, y[100];
+     int j;
+     char *px = x;
+     char *py = y;
+     for (j = 0; j < 100; j++)
+      *py++ = *px++;
+     printf(&quot; %d %d %d \n&quot;, y[0], y[1], y[2]);
+     return 0;
+   }
+</pre>
+In this example, the in-pattern is
+<pre>
+  for (pi = 0; pi < pn; pi++)
+    *pb++ = *pa++;
+</pre>
+and the out-pattern is
+<pre>
+  memcpy(pb, pa, pn);
+</pre>
+  The description of the global patterns may have some pragmas
+that start with the keyword &quot;globalReform&quot;.
+The pragma
+<pre>
+  #pragma globalReform patternSym copy
+</pre>
+indicates that the subprogram showing the correspondence
+of above in-pattern and out-pattern is &quot;copy&quot;.<br> 
+  The pragma
+<pre>
+  #pragma globalReform target main
+</pre>
+indicates that above transformation should be applied
+to the subprogram &quot;main&quot;.<br>
+  In this example, the statement
+<pre>
+  for (j = 0; j < 100; j++)
+    *py++ = *px++;
+</pre>
+fits in with the in-pattern and it is transformed to
+<pre>
+    memcpy(py, px, 100);
+</pre>
+where, the parameters pa, pb, pn, pi correspond
+to expressions px, py, 100, j respectively and the
+parameters contained in the out-pattern are replaced
+with these expressions, respectively.<br>
+<br>
+  The name of a subprogram showing the correspondence of
+an in-pattern and an out-pattern is called a pattern symbol
+and it should be listed up by a pragma before it appears
+in such a way as
+<pre>
+  #pragma globalReform patternSym pattern1 pattern2 ...
+</pre>
+where the keyword &quot;globalReform&quot; indicates that this pragma
+is specified for the global pattern matching, and the keyword
+&quot;patternSym&quot; indicates that names of subprograms showing
+pattern correspondence follows in the same line.<br>
+  The name of a subprogram to be transformed by the global pattern
+matching should be listed up by a pragma before it appears
+in such a way as
+<pre>
+  #pragma globalReform target subp1 subp2 ...
+</pre>
+where the keyword &quot;target&quot; indicates that names of
+subprograms to be transformed follows in the same line.<br>
+<br>
+  A subprogram showing the correspondence of an in-pattern and
+an out-pattern takes the following form:
+<pre>
+void patternSymbol( type1 pParam1, type2 pParam2, ... )
+{
+  iPattern:
+  {
+    statement1
+    statement2
+    ....
+  }
+  oPattern:
+  {
+    statement4
+    statement5
+    ....
+  }
+ }
+</pre>
+where, patternSymbol is an identifier showing the name of
+the pattern correspondence.
+Parameter types (type1, type2, ... ) are usually a type
+of expression (Exp or subclass of Exp) and the corresponding
+parameter (formal parameter pParam1, pParam2, ...) fits in
+with an expression of the type compatible with the parameter type.
+A parameter qualified as &quot;const&quot; can match only with a
+constant of the specified type.<br>
+<br>
+  The block labeled by &quot;iPattern&quot; represents an in-pattern to be matched with
+the input program. The block labeled by &quot;oPattern represents an out-pattern
+representing the result pattern of the transformation.
+The statements statement1, statement2, ..., statement4, statement5, ...
+in the in-pattern and the out-pattern
+may contain parameters. Some expressions contained in the in-pattern
+and the out-pattern may represent an expression called pattern nonterminal
+as explained later so that expressions of various forms can match with the
+in-pattern and the corresponding matched expressions
+may appear in the out-pattern.<br>
+  A parameter in the in-pattern represents usually an expression
+in an input HIR subtree that fits in with the in-pattern.
+The expression represented by the parameter is the one located
+at the position that corresponds to the location where
+the formal parameter is located in the in-pattern.
+The HIR subtree fitted in with the in-pattern is transformed to
+the corresponding out-pattern replacing parameters (formal parameters)
+contained in the out-pattern with the expression (actual parameter)
+corresponding to the formal parameter.<br>
+<br>
+  A parameter, say param1, may represent a statement instead of
+expression if it is listed up in a pragma with the keyword
+&quot;stmtParam&quot;
+<pre>
+  #pragma globalReform stmtParam param1
+</pre>
+in the scope of the parameter in such a way as
+<pre>
+void patternSymbol( type1 pParam1, type2 pParam2, ... )
+{
+#pragma globalReform stmtParam param1 param2 ...
+  iPattern:
+  {
+    statement1
+    statement2
+    ....
+  }
+  oPattern:
+  {
+    statement1
+    statement2
+    ....
+  }
+ }
+</pre>
+For the parameter representing a statement (statement parameter),
+give void* as its type in the parameter list.  The statement
+parameter fits in with a statement that is placed at the same
+position in the input program as the position where the statement
+parameter is located in the in-pattern.  As for other matters,
+the same rules as above are applied to the statement parameters.<br>
+<br>
+  If an expression is to be given as an in-pattern or an out-pattern,
+then it should be given as an expression statement (ExpStmt)
+in such a form as
+<pre>
+  iPattern
+  {
+    p * 10;
+  }
+</pre>
+If an in-pattern is an expression then corresponding out-pattern
+should also be an expression, e.g.,
+<pre>
+  oPattern:
+  {
+    p * 8 + p * 2;
+  }
+</pre>
+
+  In the global transformation, each one of in-patterns may be considered
+as a template to be matched with a part of the input program,
+where a parameter in the in-pattern may be considered as a
+hole in the template. The template is considered to be fitted in
+with a part of the input program if both of them have the same
+form except for the hole where any expression/statement may
+fall in, that is, in the pattern matching, HIR subtrees having
+the same form as some in-pattern are searched where each parameter
+in the in-pattern is treated to be a formal parameter to which
+an actual parameter of any complexity may correspond as far as
+the type of the actual parameter is compatible with the type
+of the formal parameter. <br>
+If the same parameter appears in several
+places in the in-pattern, then the corresponding actual parameter
+should be the same in every positions in the part of the input
+program.  If not, the in-pattern is treated to be failed in the
+matching.<br>
+  The part of input program to be matched with the in-pattern
+may not necessarily be a statement or an expression but
+may be a sequence of statements embedded within a longer
+sequence of statements (see Example 1).<br>
+  If a pattern symbol itself appears in an in-pattern or an out-pattern,
+then it is treated as a subprogram (see Example 3).<br>
+<br>
+As the result of pattern matching, an HIR subtree having
+the same form as the corresponding out-pattern is generated
+replacing every formal parameters included in the out-pattern
+with the corresponding actual parameter.<br>
+If an out-pattern contains a non-parameter variable that is
+(defined in the pattern definition subprogram but) not
+defined in the subprogram in which the out-pattern is to be
+expanded, the variable is replaced by a generated temporal variable.<br>
+<br>
+  When all global transformations are done, HIR body of the pattern symbols
+are set to empty block so as to suppress further optimization
+and code generation for them.
+
+<h4 id='i-5-7-2'>5.7.2. Patterns without using nonterminal symbols</h4>
+
+<h5>Example 1: Matching a sequence of statements</h5>
+
+  Consider that a target machine has SIMD (Single-Instruction Multiple-Data)
+instructions and the summation of absolute values of 8 bit signed integer
+numbers can be done quickly by using one of the SIMD instructions.
+In the following example, 
+<pre>
+  #pragma globalReform patternSym absAdd
+  #pragma globalReform target main
+  #define BSIZE 256
+  void absAdd( signed char pd[], int pi, int pm, int psum )
+  {
+   iPattern:
+    {
+      psum = 0;
+      for (pi = 0; pi < pm; pi = pi + 1 ) {
+        if (pd[pi] >= 0)
+          psum = psum + pd[pi];
+        else
+          psum = psum - pd[pi];
+      }
+    }
+   oPattern:
+    {
+      psum = absAddChar(pd, pm);
+    }
+  }
+  int main()
+  {
+    signed char buf[BSIZE], v;
+    int i, j;
+    int sum;
+    for (j = 0; j < BSIZE; j++) {
+      buf[j] = 128 - j;
+    }
+    sum = 0;
+    for (i = 0; i < BSIZE; i = i + 1) {
+      if (buf[i] >= 0)
+        sum = sum + buf[i];
+      else
+        sum = sum - buf[i];
+    }
+    printf(&quot;sum= %d\n&quot;, sum);
+    return 0;
+  }
+</pre>
+the sequence of statements
+<pre>
+    sum = 0;
+    for (i = 0; i < 256; i = i + 1) {
+      if (buf[i] >= 0)
+        sum = sum + buf[i];
+      else
+        sum = sum - buf[i];
+    }
+</pre>
+can fit in with the in-pattern of the pattern symbol named &quot;absAdd&quot;
+and it is changed to the statement calling &quot;absAddChar&quot; function
+that does the same computation by using one of the SIMD instructions.
+
+<h5>Example 2: SIMD instruction generation
+     with the help of asm inline assembler</h5>
+
+There are many coding patterns that are suitable
+for execution by SIMD instructions.
+The global pattern matching can recognize some of
+such patterns and change them to sequences of SIMD
+instructions with the help of the asm inline assembly
+feature of the C language.
+<br>
+<br>
+
+As an example, let us consider coordinate translations
+in X-, Y-, Z-axis. Rotation and scaling up/down can be
+represented by 3 dimensional translation matrix.
+By using 4 dimensional translation matrix that is
+added moving distances in X-, Y-, Z-coordinates as
+the 4-th values, all coordinate translations
+combining parallel movement, rotation, and scaling
+up/down can be treated uniformly. In this case,
+the coordinate of a point is represented as
+(x, y, z, 1).
+<br>
+In computer graphics, coordinates are usually represented
+as integer values of limited size, where computed
+results larger than the specified limit are truncated
+to the limit value (saturation operation).
+<br>
+
+When the translation matrix is represented as<br>
+&nbsp;     short m[4][4];<br>
+and the coordinate of a point is represented as<br>
+&nbsp;     short c[4];<br>
+then the translation result can be computed by
+
+<pre>
+  for (i=0; i< 4; i++) {
+    t[i]=c[3]*m[i][3]+c[2]*m[i][2]
+          +c[1]*m[i][1]+c[0]*m[i][0];
+  }
+  for(j=0; j< 4; j++) c[j]=t[j];
+</pre>
+
+using a temporal variable t and integer variables
+i and j.
+<br>
+<br>
+
+The above translation can be done by using MMX
+instructions of the Intel Pentium machine in such
+a sequence
+<pre>
+    mov    eax,c     //edi = &c[0]
+    mov    ebx,m     //ebx = &m[0][0]
+    movq mm0,[eax]   //mm0: c[3]: c[2]: c[1]: c[O]
+                     // move quad words to mm0 (64bits)
+    movq mm1,[ebx]   //mm1: m[0][3]:m[0][2]:m[0][1]:m[0][0]
+    movq mm2,[ebx+8] //mm2: m[1][3]:m[1][2]:m[1][1]:m[1][0]
+    movq mm3,[ebx+16]//mm3: m[2][3]:m[2][2]:m[2][1]:m[2][0]
+    movq mm4,[ebx+24]//mm4: m[3][3]:m[3][2]:m[3][1]:m[3][O]
+    pmaddwd mm1,mm0  //mm1: c[3]*m[0][3]+c[2]*m[0][2]: c[1]*m[0][1]+c[0]*m[0][0]
+    pmaddwd mm2,mm0  //mm2: c[3]*m[1][3]+c[2]*m[1][2]: c[1]*m[1][1]+c[0]*m[1][0]
+    pmaddwd mm3,mm0  //mm3: c[3]*m[2][3]+c[2]*m[2][2]: c[1]*m[2][1]+c[0]*m[2][0]
+    pmaddwd mm4,mm0  //mm4: c[3]*m[3][3]+c[2]*m[3][2]: c[1]*m[3][1]+c[0]*m[3][0]
+    packssdw mm1,mm2 //mm1: c[3]*m[1][3]+c[2]*m[1][2]: c[1]*m[1][1]+c[0]*m[1][0]
+                     //   : c[3]*m[0][3]+c[2]*m[0][2]: c[1]*m[0][1]+c[0]*m[0][0]
+                     // 4 packed words in mm1, mm2 to 4 packed words in mm1
+                     // with saturation operation.
+    movq [temp1],mm1 // short temp1[4];
+    packssdw mm3,mm4 //mm3: c[3]*m[3][3]+c[2]*m[3][2]: c[1]*m[3][1]+c[0]*m[3][0]
+                     //   : c[3]*m[2][3]+c[2]*m[2][2]: c[1]*m[2][1]+c[0]*m[2][0]
+    movq[temp2],mm3  // short temp2[4];
+    emms             // empty MMX state so that FPU reg can be used for floating op.
+  )
+  c[0]=temp1[0]+temp1[1]; // Move the results from temp1 and temp2.
+  c[1]=temp1[2]+temp1[3];
+  c[2]=temp2[0]+temp2[1];
+  c[3]=temp2[2]+temp2[3];
+</pre>
+
+In the MMX instruction coding, the saturation
+operation is executed but in the above C language
+coding, the saturation operation is not yet
+considered.
+<br>
+<br>
+
+The global reform optimizer catches such a coding
+pattern as described above and changes it to
+the corresponding MMX instruction sequence.
+Let us see the following program:
+<pre>
+ #pragma globalReform patternSym linearTrans
+ #pragma globalReform target main
+ int printf(char*, ...);
+
+ void linearTrans(short pc[4], short pm[4][4], short pt[4], int pi, int pj)
+ {
+   short temp1[4], temp2[4];
+  iPattern:
+   {
+     for (pi=0;pi< 4;pi++) {
+       pt[pi]=pc[3]*pm[pi][3]+pc[2]*pm[pi][2]+pc[1]*pm[pi][1]+pc[0]*pm[pi][0];
+     }
+     for(pj=0;pj< 4;pj++) pc[pj]=pt[pj];
+   }
+  oPattern:
+   {
+   asm (
+     &quot;#param %I32,%I32,%I32,%I32\n&quot;
+     &quot;#clobber %mm0,%mm1,%mm2,%mm3,%mm4\n&quot;
+      &quot;movq (%1),%mm0\n&quot;
+      &quot;movq (%2),%mm1\n&quot;
+      &quot;movq 8(%2),%mm2\n&quot;
+      &quot;movq 16(%2),%mm3\n&quot;
+      &quot;movq 24(%2),%mm4\n&quot;
+      &quot;pmaddwd %mm0,%mm1\n&quot;
+      &quot;pmaddwd %mm0,%mm2\n&quot;
+      &quot;pmaddwd %mm0,%mm3\n&quot;
+      &quot;pmaddwd %mm0,%mm4\n&quot;
+      &quot;packssdw %mm2,%mm1\n&quot;
+      &quot;movq %mm1,(%3)\n&quot;
+      &quot;packssdw %mm4,%mm3\n&quot;
+      &quot;movq %mm3,(%4)\n&quot;
+      &quot;emms\n&quot;,
+     pc, pm, temp1, temp2
+   );
+   pc[0]=temp1[0]+temp1[1];
+   pc[1]=temp1[2]+temp1[3];
+   pc[2]=temp2[0]+temp2[1];
+   pc[3]=temp2[2]+temp2[3];
+  }
+ } // linearTrans
+
+ int main()
+ {
+   int i;
+   short tt[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 1}, {0, 0, 1, 0}, {0, 0, 0, 1}};
+   short xyz[4]    = {10, 12, 13, 3};
+   short tmp[4] = {0};
+   printf(&quot;before   %d %d %d %d \n&quot;, xyz[0], xyz[1], xyz[2], xyz[3]);
+   for (i=0;i< 4;i++) {
+     tmp[i]=xyz[3]*tt[i][3]+xyz[2]*tt[i][2]+xyz[1]*tt[i][1]+xyz[0]*tt[i][0];
+   }
+   for(i=0;i< 4;i++) xyz[i]=tmp[i];
+   printf(&quot;linTrans %d %d %d %d \n&quot;, xyz[0], xyz[1], xyz[2], xyz[3]);
+   return 0;
+ }
+</pre>
+The function definition linearTrans defines the
+C coding pattern as the block labeled by iPattern
+and the corresponding MMX coding sequence as the
+block labeled by oPattern.
+<br>
+<br>
+The form of asm statement in COINS is
+
+<pre>  asm("#param descriptor-list\n"
+      "#clobber destroyed registers...\n"
+      "instruction 1\n"
+             ...
+      "instruction n\n",
+      input arguments(any expression)...);
+</pre>
+where, <br>
+&nbsp;  "descriptor-list" shows LIR type of parameters (I32, etc.)<br>
+&nbsp;  "destroyed registers" lists up registers whose contents are not preserved<br>
+&nbsp;  "instruction" represents assembly language instruction<br>
+&nbsp;  "input arguments" list up parameters (pc, pm, etc.) to be passed to the assembly<br>
+&nbsp;&nbsp;&nbsp; &nbsp;      language instructions (referred to as %1, %2, ...).<br>
+<br>
+The code fragment
+<pre>
+  for (i=0;i< 4;i++) {
+    tmp[i]=xyz[3]*tt[i][3]+xyz[2]*tt[i][2]+xyz[1]*tt[i][1]+xyz[0]*tt[i][0];
+  }
+  for(i=0;i< 4;i++) xyz[i]=tmp[i];
+</pre>
+in the main program matches with this pattern.
+<br>
+<br>
+When the coordinate translation of this program is
+executed 20000000 times on<br>
+&nbsp;    Intel Pentium 4 machine (2.8GHz)<br>
+with and without compile option<br>
+&nbsp;    hirOpt=globalReform<br>
+the measured results of execution time was<br>
+<pre>
+  with globalReform  without globalReform
+     real  8.712s    17.389s
+     user  8.624s    17.331s
+     sys   0.015s     0.031s
+</pre>
+This shows the effectiveness of MMX code generation
+by using globalReform optimization.
+<br>
+
+
+<h5>Example 3: Transform a recursion to a loop</h5>
+
+  As it is mentioned, the description of an in-pattern and
+an out-pattern is represented in the form of a subprogram,
+and its name is called a pattern symbol. If the pattern
+symbol is used in the in-pattern or out-pattern of the
+pattern description, then the pattern symbol is treated
+in the same way as a parameter that matches with a
+subprogram. In this way, a transformation for recursive
+subprogram can be described.<br>
+  In the following example, the pattern symbol recmult appears
+in the in-pattern and the out-pattern. It is treated as a
+parameter that fits in with the function fact. Thus, the
+body of the function fact is transformed to a loop.
+<pre>
+  #pragma globalReform patternSym recmult
+  #pragma globalReform target fact
+  int recmult( int px )
+  {
+   iPattern:
+    {
+      if (px <= 1)
+        return 1;
+      else
+        return px * recmult(px - 1);
+    }
+   oPattern:
+    {
+      int lx, i;
+      lx = 1;
+      for (i = 1; i <= px; i++) {
+        lx = lx * i;
+      }
+      return lx;
+    }
+  }
+  int fact( int p )
+  {
+    if (p <= 1)
+      return 1;
+    else
+      return p * fact(p - 1);
+  }
+</pre>
+
+Note that this is not a general transformation of recursion to loop
+but a transformation of program fragments that matches with the 
+given in-pattern.
+
+
+<h4 id='i-5-7-3'>5.7.3. Patterns that use nonterminal symbols</h4>
+
+  In the above examples, variant parts of patterns are represented
+by parameters and their structure cannot be specified. In some
+cases, it may be desirable to restrict a variant part to some
+specific form such as a subscripted variable. In order to specify
+the syntax of variant parts, expressions named pattern nonterminal
+are available. Let's see a simple (trivial) example.
+<pre>
+ #pragma globalReform patternSym extractPower
+ #pragma globalReform nonterminal power
+ #pragma globalReform target main
+ int _bnfOr(int p, ...);
+ double power( double p1 );
+ double transformPower( double p2 );
+ void extractPower( double pv1 )
+ {
+  iPattern:
+   {
+     power(pv1) * pv1;
+   }
+  oPattern:
+   {
+     transformPower(power(pv1) * pv1);
+   }
+ }
+ double power( double pv2)
+ {
+  _bnfOr(2,
+    pv2 * pv2,
+    power(pv2) * pv2 );
+ }
+ double a = 2.0, b = 3.0, c = 4.0;
+ int main()
+ {
+   double x, y, z;
+   x = a * a * a;
+   y = b * b * b * b;
+   z = a * a * b;
+   printf(&quot; %f %f %f \n&quot;, x, y, z);
+   return 0;
+ }
+</pre>
+  The above example extracts power expressions that multiply the same
+variable several times and call the function transformPower.
+(This example is made to explain the usage of pattern nonterminals
+and is not intended to increase execution speed.)
+The function power is a pattern nonterminal that is similar to BNF
+nonterminal. In BNF, a power expression of variable v may be
+defined as
+<pre>
+  powerExp ::= powerExp &quot;*&quot; var | var
+</pre>
+but if the symbol var is a nonterminal representing variables, then
+it is not possible to restrict its operand to the same variable.
+If nonterminals may have parameters, then such restriction
+can be specified.<br>
+  A pattern nonterminal may have parameters and its production definition
+takes the form of a function definition that may use a special
+function named &quot;_bnfOr&quot; for selecting one of productions listed up
+in the actual parameter list. 
+In the definition of the pattern nonterminal
+<pre>
+  double power( double pv2) {
+    _bnfOr(2, pv2*pv2, power(pv2)*pv2);
+  }
+</pre>
+pv2 is a formal parameter of the pattern nonterminal named &quot;power&quot;.
+<pre>
+    _bnfOr(2, pv2*pv2, power(pv2)*pv2 );
+</pre>
+represents to select either<br>
+&nbsp;    pv2 * pv2<br>
+or <br>
+&nbsp;    power(pv2) * pv2<br>
+according to given input program. The prototype declaration of 
+_bnfOr is
+<pre>
+    int _bnfOr(int, ...);
+</pre>
+The first parameter of _bnfOr is a dummy one attached
+to make _bnfOr as a C function having indefinite number of parameters.
+The search of production is done from left to right and 
+the one fitted first is selected. If there is no production fitted, 
+then the nonterminal is treated to be not fitted with the input program.<br>
+<br>
+  When
+<pre>
+    a * a * a
+</pre>
+is given as an expression of input program, then
+<pre>
+    power(pv2) * pv2
+</pre>
+is selected as the production to be matched because the other production 
+pv2*pv2 does not fit in with a*a*a.
+In the next step, trial matching of power(pv2) with a*a is performed 
+after tentatively setting pv2 to the variable &quot;a&quot;. This trial succeeds 
+by selecting the production pv2*pv2.
+Thus, the in-pattern fits in with the input expression a*a*a.<br>
+<br>
+  When
+<pre>
+    b * b * b * b
+</pre>
+is given as an input expression, at the first trial,
+<pre>
+    power(pv2) * pv2
+</pre>
+is selected matching pv2 to b and trying to match power(pv2) with
+b*b*b peeling off the trailing &quot;*b&quot;. This trial matching succeeds 
+and the in-pattern fits in with the expression b*b*b*b, too.<br>
+When
+<pre>
+     a * a * b
+</pre>
+is given as an input expression, power(pv2) does not fits in
+with it, because, at the first trial,
+<pre>
+    power(pv2) * pv2
+</pre>
+is selected matching pv2 to b, then in the second trial,
+power(pv2) fails to match with a*a 
+as the power(pv2) requests the variable b as a multiplicand.<br>
+<br>
+  The definition of the pattern nonterminal takes the form of a function
+definition that corresponds to a BNF production defining a
+BNF nonterminal. The reference of the pattern nonterminal 
+takes the form of a function call that may have parameters. <br>
+  The reference of a nonterminal in the in-pattern represents the variant 
+part of the pattern. When the in-pattern is matched with some component of 
+the input program, the nonterminal reference corresponds to a subcomponent 
+of the component with which the in-pattern is matched, and
+the position of the nonterminal in the in-pattern corresponds to the 
+position of the subcomponent in the input program component. 
+The syntax of the variant part corresponding to the nonterminal is 
+described by the nonterminal. If the syntax of the variant part differs 
+from the nonterminal, then the matching of the in-pattern fails.<br>
+  A parameter of a pattern nonterminal is usually inherited from the upper 
+construct where the upper construct means a nonterminal
+description referring this pattern nonterminal or an input
+component that fits in with the global pattern. 
+As a parameter of a global pattern corresponds to a minor subcomponent of 
+the input program component with which the global pattern is matched, 
+the parameter of the pattern nonterminal corresponds to some minor 
+subcomponent of the input program component. Such correspondence can be 
+established by tracing the correspondences between nonterminal parameters 
+and pattern parameters.<br>
+  As it is already said, the program component fitted in with a global 
+pattern is replaced with the corresponding out-pattern. In the replacement, 
+a nonterminal reference is replaced with the right hand side of the fitted 
+BNF production. Such replacement is called the expansion of the 
+nonterminal. In the final result of the out-pattern replacement, 
+parameters in the definition of a nonterminal and parameters in the 
+out-pattern are replaced with the corresponding subcomponent of the input 
+program component.<br>
+<br>
+Let's consider another example:
+<pre>
+ #pragma globalReform patternSym loopUnroll
+ #pragma globalReform nonterminal subsVar expS termS factS iExp
+ #pragma globalReform target main
+ #define BSIZE 999
+ int expS( int pzz[], int pi);
+ int termS( int pzz[], int pi);
+ int factS( int pzz[], int pi);
+ int subsVar( int pzz[], int pi);
+ int iExp( int px);
+ int printf(char*, ...);
+ void loopUnroll( int pzz[], int pi, int pFrom, int pTo)
+ {
+  iPattern:
+  {
+   for (pi = pFrom; pi < pTo; pi++) {
+     pzz[iExp(pi)] = expS(pzz, pi);
+   }
+  }
+  oPattern:
+  {
+    for (pi = pFrom; pi < pTo-1; pi=pi+2) {
+      pzz[iExp(pi)] = expS(pzz, pi);
+      pzz[iExp(pi+1)] = expS(pzz, pi+1);
+    }
+    if ((pTo-pFrom) % 2 != 0)
+      pzz[pTo-1] = expS(pzz, pTo-1);
+  }
+ }
+ int subsVar( int pzz1[], int pi1)
+ {
+   pzz1[iExp(pi1)];
+ }
+ int expS( int pzz2[], int pi2)
+ {
+ #pragma globalReform transparentFitting pc (pzz2, pi2)
+   int pc;
+   _bnfOr(1, expS(pzz2,iExp(pi2))+termS(pzz2,iExp(pi2)),
+             expS(pzz2,iExp(pi2))-termS(pzz2,iExp(pi2)),
+             expS(pzz2,iExp(pi2))+pc,
+             expS(pzz2,iExp(pi2))-pc,
+             expS(pzz2,iExp(pi2)) );
+ }
+ int termS( int pzz3[], int pi3 )
+ {
+ #pragma globalReform transparentFitting pc2 (pzz3, pi3)
+   int pc2;
+   _bnfOr(1, termS(pzz3,iExp(pi3))*factS(pzz3,iExp(pi3)),
+             termS(pzz3,iExp(pi3))/factS(pzz3,iExp(pi3)),
+             termS(pzz3,iExp(pi3))*pc2,
+             termS(pzz3,iExp(pi3))/pc2,
+             factS(pzz3,iExp(pi3)) );
+ }
+ int factS( int pzz4[], int pi4 )
+ {
+ #pragma globalReform transparentFitting pc3 (pzz4, pi4)
+   int pc3;
+   _bnfOr(2, pc3*subsVar(pzz4,iExp(pi4)),
+             pc3/subsVar(pzz4,iExp(pi4)),
+             subsVar(pzz4,iExp(pi4)));
+ }
+ int iExp( int px )
+ {
+ #pragma globalReform transparentFitting pc4 (px)
+   int pc4;
+   _bnfOr(3, px+pc4, px-pc4, px);
+}
+ int main() {
+   int zz[BSIZE]; int i, n;
+   n = BSIZE;
+   for (i = 0; i < n; i++) {
+     zz[i] = i;
+   }
+   for (i = 0; i < n; i++) {
+     zz[i] = zz[i]*2;
+   }
+   printf(&quot; %d %d %d %d %d\n&quot;, n, zz[0], zz[1], zz[n-2], zz[n-1]);
+   return 0;
+ }
+</pre>
+The pattern named loopUnroll changes loops such as
+<pre>
+   for (i = 0; i < n; i++) {
+     zz[i] = zz[i]*2;
+   }
+</pre>
+to such a form as
+<pre>
+   for (i = 0; i < n-1; i=i+2) {
+     zz[i] = zz[i]*2;
+     zz[i+1] = zz[i+1]*2;
+   }
+   if ((n-0) % 2 != 0)
+     zz[n-1] = zz[n-1]*2;
+</pre>
+by unrolling the loops. The factors of the loop body may be
+any subscripted variable having i+c2 or i-c2 as its subscript,
+where c1 and c2 may be any integer expression that does not contain i.
+Pattern nonterminals are used to specify such syntax. The pattern
+nonterminal
+<pre>
+   int iExp( int px ) {
+   #pragma globalReform transparentFitting pc4 (px)
+     int pc4;
+     _bnfOr(3, px + pc4, px - pc4, px );
+   }
+</pre>
+fits in with one of expressions px+pc4, px-pc4, px
+where the expression pc4 does not contain the variable
+px which is conveyed from the upper construct.<br>
+<br>
+  The pragma<br>
+&nbsp;    #pragma globalReform transparentFitting p (q, r, ..., s) <br>
+declares that the expression p does not contain any of
+the variables q, r, ..., s.<br>
+<br>
+  The pattern nonterminal
+<pre>
+   int subsVar( int pzz1[], int pi1) {
+     pzz1[iExp(pi1)];
+   }
+</pre>
+fits in with any subscripted variable whose subscript
+is an integer expression satisfying the restriction of
+iExp(pi1), where pzz1 is an array conveyed from the upper
+construct, and pi1 is an integer variable conveyed from
+the upper construct.<br>
+<br>
+In the above example, nonterminals expS, termS, and factS are also defined.
+The sequence of these definitions has some similarity with the following 
+sequence of BNF productions:
+<pre>
+    expS  ::= expS &quot;+&quot; termS 
+            | expS &quot;-&quot; termS
+            | expS &quot;+&quot; pc
+            | expS &quot;-&quot; pc
+            | termS
+    termS ::= termS &quot;*&quot; factS
+            | termS &quot;/&quot; factS
+            | termS &quot;*&quot; pc2
+            | termS &quot;/&quot; pc2
+            | factS
+    factS ::= pc3 &quot;*&quot; subsVar
+            | pc3 &quot;/&quot; subsVar
+            | subsVar
+
+</pre>
+  The pattern nonterminal
+<pre>
+   int factS( int pzz4[], int pi4 ) {
+   #pragma globalReform transparentFitting pc3 (pzz4, pi4)
+     int pc3;
+     _bnfOr(2,
+       pc3 * subsVar(pzz4, i(pi4)),
+       pc3 / subsVar(pzz4, iExp(pi4)),
+       subsVar(pzz4, iExp(pi4)) );
+   }
+</pre>
+fits in with a subscripted variable as described above or
+a multiplication/division expression whose first operand
+pc3 does not contain any of pzz4 and pi4. Variables
+pzz4, pi4 are conveyed from the upper construct.<br>
+<br>
+The pattern nonterminal
+<pre>
+   int termS( int pzz3[], int pi3 ) {
+   #pragma globalReform transparentFitting pc2 (pzz3, pi3)
+     int pc2;
+     _bnfOr(1,
+       termS(pzz3, iExp(pi3)) * factS(pzz3, iExp(pi3)),
+       termS(pzz3, iExp(pi3)) / factS(pzz3, iExp(pi3)),
+       termS(pzz3, iExp(pi3)) * pc2,
+       termS(pzz3, iExp(pi3)) / pc2,
+       factS(pzz3, iExp(pi3)) );
+   }
+</pre>
+fits in with any subscripted expression specified by
+factS(pzz3, iExp(pi3)) when the top
+operator of the expression is neither '*' nor '/'. If the top
+operator of the expression is either '*' or '/', then the pattern
+nonterminal fits in with the expression when its first operand
+fits in with termS(pzz3, iExp(pi3))
+and its second operand is an expression specified by
+subsVar(pzz3, iExp(pi3)) or pc2. The variables pzz3, pi3 are
+conveyed from the upper construct.<br>
+<br>
+  The pattern nonterminal
+<pre>
+   int expS( int pzz2[], int pi2) {
+   #pragma globalReform transparentFitting pc (pzz2, pi2)
+     int pc;
+     _bnfOr(1,
+       expS(pzz2, iExp(pi2)) + termS(pzz2, iExp(pi2)),
+       expS(pzz2, iExp(pi2)) - termS(pzz2, iExp(pi2)),
+       expS(pzz2, iExp(pi2)) + pc,
+       expS(pzz2, iExp(pi2)) - pc,
+       termS(pzz2, iExp(pi2)) );
+   }
+</pre>
+matches with any subscripted variable expression specified by<br>
+&nbsp;    termS(pzz2, iExp(pi2))<br>
+if its top operator
+is neither '+' nor '-'.  If its top operator is either '+' or '-',
+then the pattern nonterminal matches with the expression when
+its first operand matches with<br>
+&nbsp;    expS(pzz2, iExp(pi2))<br>
+and its second operand is an expression specified by<br>
+&nbsp;    termS(pzz2, iExp(pi2))<br>
+or pc. The variables pzz2,
+pi2 are conveyed from the upper construct.<br>
+<br>
+  In the matching process of the in-pattern with the loop of the
+main program, trial matching of the statement <br>
+&nbsp;    pzz[iExp(pi)] = expS(pzz, pi); <br>
+in the in-pattern with the statement <br>
+&nbsp;    zz[i] = zz[i] * 2; <br>
+takes place. In that trial, correspondence of pattern parameter
+pzz with variables zz is tentatively established.<br>
+  The pattern nonterminal iExp(pi) of pzz[iExp(pi)]
+fits in with i making correspondence of pi to i.<br>
+<br>
+  Let us see the process of trial matching of expS(pzz, pi)
+with the right hand side of the assign statement. As the
+right hand side expression has neither '+' nor '-' as
+its top operator, the production <br>
+&nbsp;    termS(pzz2, iExp(pi2)) <br>
+is selected to be used in the subtrial.
+As the top operator of the input expression <br>
+&nbsp;    zz[i] * 2 <br>
+is '*', the candidate of productions are <br>
+&nbsp;    termS(pzz3, iExp(pi3)) * factS(pzz3, iExp(pi3)) <br>
+&nbsp;    termS(pzz3, iExp(pi3)) * pc2 <br>
+In this case, factS(pzz3, iExp(pi3)) does not fit in with 2
+and <br>
+&nbsp;    termS(pzz3, iExp(pi3)) * pc2 <br>
+is selected as the production to be used.
+It leads to a sequence of trial matchings of <br>
+&nbsp;    termS(pzz3, iExp(pi3)),  <br>
+&nbsp;    factS(pzz3, iExp(pi3)) <br>
+and <br>
+&nbsp;    subsVar(pzz4, iExp(pi4)) <br>
+with zz[i]. <br>
+<br>
+  The matching of subsVar(pzz4, iExp(pi4))
+with zz[i] succeeds making correspondences of <br>
+&nbsp;    pi4 to i in the sub-trial. <br>
+These correspondences are recorded for the sub-trial.
+Such correspondences may differ for each sub-trial. <br>
+Thus, <br>
+&nbsp;    expS(pzz2, iExp(pi2)) <br>
+fits in with zz[i].
+In this process, pc2 fits in with 2. <br>
+<br>
+  Thus, the in-pattern fits in with the loop
+of the main program.
+It leads to the transformation of
+<pre>
+   for (i = 0; i < n; i++) {
+     zz[i] = zz[i]*2;
+   }
+</pre>
+to such form as
+<pre>
+   for (i = 0; i < n-1; i=i+2) {
+     zz[i] = zz[i]*2;
+     zz[i+1] = zz[i+1]*2;
+   }
+   if ((n-0) % 2 != 0)
+     zz[n-1] = zz[n-1]*2;
+</pre>
+
+COINS has the optimization module that is dedicated to loop unrolling.
+It is implemented in about 2000 lines of coding and can be applied
+to wide variety of loops. The above global pattern matching 
+example cannot replace the dedicated loop unrolling module but 
+shows another 
+implementation of loop unrolling transformation in less than 100 
+lines of coding applicable only for typical coding patterns.
+
+<h5>Note</h5>
+
+  In the above examples, transformations are explained as
+source program transformations for ease of understanding, however,
+in actual, they are HIR-to-HIR transformations.
+Before doing the transformation, the input program including global patterns 
+are already changed to HIR. Thus the matching of in-patterns and the 
+replacement of components fitted in with the in-patterns is done in HIR.<br>
+<br>
+
+<h4 id='i-5-7-4'>5.7.4. Usage of the global pattern matching </h4>
+
+In the previous sections, it is shown that variant parts of patterns may  
+cover various expressions by introducing pattern nonterminals 
+such as expS representing expressions containing subscripted variables.
+If we define a set of nonterminals showing typical patterns of executable 
+statements, then we can describe patterns covering wide range of 
+expressions. Traditionally, optimizing transformations such as loop 
+unrolling and recursion to loop conversion are done by modules each of which 
+is dedicated to one of such transformations. In the global pattern matching, 
+only one module can cover various kind of transformations by giving 
+global patterns. It can expand the range to be covered by adding new global 
+patterns without modifying the compiler itself.<br>
+  It is not intended, however,  
+to replace optimization modules dedicated to some transformation because it 
+covers only typical patterns and does not exhaustively cover all 
+patterns as the dedicated modules do. It will be useful as a convenient 
+way of implementing optimizing/parallelizing transformations
+in restricted cases.<br>
+  The global pattern matching will be useful also in transforming programs 
+for software engineering purposes such as detecting some special coding 
+patterns, showing better coding for naive coding.
+
+<h3 id='i-5-8'>5.8. References</h3>    
+
+[1] Morel, Etienne and Renvoise, Claude: Global optimization by suppression
+   of partial redundancies, CACM, Vol. 22, No. 2, pp.96-103 (Feb. 1979).<br>
+[2] Muchnick, Steven S.: Advanced Compiler Design and Implementation, 
+  Morgan Kaufmann Publishers (1997).<br>
+[3] Nakata, Ikuo: Compiler Construction and Optimization, Asakura Shoten, (1999).
+[4] Dhamdhere, Dhananjay M.: E-path_PRE - Partial redundancy elimination made
+  easy, ACM SIGPLAN Notices, Vol. 37, No. 8, pp. 53-65 (Aug. 2002).
+
+  </body>
+</html>
+

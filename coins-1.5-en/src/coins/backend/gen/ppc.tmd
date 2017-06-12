@@ -1,0 +1,5018 @@
+;; -----------------------------------------------------------------------
+;;%   Copyright (C) 2007 Association for the COINS Compiler Infrastructure 
+;;%       (Read COPYING for detailed information.)             
+;;------------------------------------------------------------------------ 
+;;-*-Lisp-*-
+;;; Target machine description  for PowerPC 
+;
+;-----TO DO-----
+;
+;----- Items requiring change of Coins BackEnd:
+;       structure passing
+;       prolog of function with structure parameter
+;       variable number of parameters
+;
+;-----BUG-----
+;
+;-----BETTER TO DO-----
+;       load/store with address update
+;       use of counter register
+;       use of multiple status registers
+;       use of rotate-and-mask, shift-and-mask
+;       direct accessing of location for returning structure value.
+;
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; target machine infomation
+
+;; Machine types
+(def *type-address* I32)
+(def *type-bool* I32)
+
+(def *real-reg-symtab*
+     (SYMTAB
+     		;definition of the register for evaluation of 64bit fixed-point integer
+		(foreach (@a @b) ( (3 4) (5 6) (7 8) (9 10) (13 14) (15 16)
+			(17 18) (19 20) (21 22) (23 24) (25 26) (27 28) (29 30))
+			("%r@a:@b" REG I64 8 0))
+
+		;general register/float register/vector register
+		(foreach (@header @type @size) ((r I32 4) (f F64 8) (v I128 16))
+			(foreach @n
+				(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+				("%@header@n" REG @type @size 0)))
+
+		;special-purpose register
+		(foreach @regname (CTR LR CR) ("%@regname" REG I32 4 0))
+
+		;condition register
+		(foreach @n (0 1 2 3 4 5 6 7) ("%cr@n" REG I4 1 0))))
+
+
+(def *cmplib-xref-symtab*
+     (SYMTAB
+      ;; void *memcpy(void *to, void *from, size_t n)
+      ("memcpy" STATIC UNKNOWN 4 "text" XREF)))
+
+
+;real register for fixed point integer
+(def *reg-I32* ( (foreach @n
+	(0 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+	(REG I32 "%r@n"))))
+
+;virtual register for fixed point integer
+(foreach (@name @type) ((*reg-I16* I16) (*reg-I8* I8))
+	(def @name ( (foreach @n
+		(0 2 3 4 5 6 7 8 9 10 11 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+		(SUBREG @type (REG I32 "%r@n") 0)))))
+
+;real register for floating point number
+(def *reg-F64* ( (foreach @n
+			(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+		 (REG F64 "%f@n"))))
+
+;virtual register for floating point number
+(def *reg-F32* ( (foreach @n
+			(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+		 (SUBREG F32 (REG F64 "%f@n") 0))))
+
+;register for condition manipulation
+(def *reg-I4* ( (foreach @n
+	(7 6 5 4 3 2 1 0) (REG I4 "%cr@n"))))
+
+;register for vector evaluation
+(def *reg-I128* ( (foreach @n
+			(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+		 (REG I128 "%v@n"))))
+
+
+;r0 register is prevented from beging used as the first operand
+;of addition or memory access instructions.
+(def *reg-withoutR0-I32* ( (foreach @n
+	(31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1)
+	(REG I32 "%r@n"))))
+
+
+;destination condition register of fixed-point instruction
+(def *reg-general-I4* ( (REG I4 "%cr0")))
+
+;destination condition(exception) register of floating-point instruction
+(def *reg-float-I4* ( (REG I4 "%cr1")))
+
+;destination condition register of SIMD instruction
+(def *reg-vector-I4* ( (REG I4 "%cr6")))
+
+
+;definition of 64bit fixed-point register
+(def *reg-I64* ( (foreach  (@a @b) ( (3 4) (5 6) (7 8) (9 10) (13 14) (15 16)
+	(17 18) (19 20) (21 22) (23 24) (25 26) (27 28) (29 30))
+	(REG I64 "%r@a:@b"))))
+
+(foreach (@a @b) ( (3 4) (5 6) (7 8) (9 10) (13 14) (15 16) (17 18) (19 20) (21 22)
+	(23 24) (25 26) (27 28) (29 30))
+	(def (REG I32 "%r@a") (SUBREG I32 (REG I64 "%r@a:@b") 1))
+	(def (REG I32 "%r@b") (SUBREG I32 (REG I64 "%r@a:@b") 0)))
+
+(def *reg-o01-I64* ( (REG I64 "%r3:4") ))
+(def *reg-o23-I64* ( (REG I64 "%r5:6") ))
+
+
+;+++++ "The register set has no XMM registers" will be raized. //##64
+;simd/SimdOpt.java defines many XMM registers. //##64
+
+(def *reg-o0-I32* ( (REG I32 "%r3")))
+(def *reg-o1-I32* ( (REG I32 "%r4")))
+
+;; regset clobbered by CALL
+(def *reg-call-clobbers* (
+	(foreach @n (0 2 3 4 5 6 7 8 9 10 11 12) (REG I32 "%r@n"))
+	(foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13) (REG F64 "%f@n"))
+	(foreach @n (0 1 5 6 7) (REG I32 "%cr@n"))
+	(foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19) (REG I128 "%v@n"))
+	(REG I32 "%CTR")))
+
+;; Default register set for register variables.
+(defregsetvar (I64 *reg-I64*)
+	(I32 *reg-I32*) (I16 *reg-I16*) (I8 *reg-I8*) (I4 *reg-I4*)
+	(F64 *reg-F64*) (F32 *reg-F32*) (I128 *reg-I128*))
+
+;; Start symbol
+(defstart void)
+
+;;label for jump
+(defrule label (LABEL _))
+
+;(defrule boolLabel label)
+;(defrule boolLabel (DEFLABEL))
+
+;; Supposed that all half/byte register variables are signed.
+(foreach (@type @set @size) ((regb *reg-I8* I8) (regh *reg-I16* I16) (regl *reg-I32* I32)
+	(regdi *reg-I64* I64) (regf *reg-F32* F32) (regd *reg-F64* F64) (creg *reg-I4* I4))
+	
+	;; Default register set for each nonterminals.
+	(defregset @type @set)
+	;;  xreg* can appear on first operand of SET. (l-value)
+	;;  reg* appear only on right side
+	(defrule _x@type (REG @size))
+	(defrule _x@type (SUBREG @size))
+	(defrule x@type _x@type (value (_reg $1)))
+	(defrule @type x@type))
+
+(defregset regv *reg-I128*)	;vector register
+(defrule _xregv (REG I128))
+(defrule xregv _xregv (value (_reg $1)))
+(defrule regv xregv)
+
+(defrule reglr (REG I32 "%LR"))
+(defrule regctr (REG I32 "%CTR"))
+(defrule regcr (REG I32 "%CR"))
+
+;;non-termination symbol for accessing memory address
+(defrule reg_reg_addr (ADD I32 regl regl)
+	(regset ($1 *reg-withoutR0-I32*))
+	(value (reg_mem+ $1 $2)))
+
+(defrule reg_reg_addr regl (value (reg_mem+ "r0" $1)))
+
+(defrule reg_imi_addr (ADD I32 regl s16)
+	(regset ($1 *reg-withoutR0-I32*))
+	(value (mem+ $1 $2)))
+
+(defrule reg_imi_addr (ADD I32 regl symbol_lo16)
+	(regset ($1 *reg-withoutR0-I32*))
+	(value (mem+ $1 $2)))
+
+(defrule reg_imi_addr s16 (value (mem+ "r0" $1)))
+
+(defrule reg_reg_addr_u (SET I32 regl (ADD I32 regl regl))
+	(cond "equal_register($1, $2)")
+	(value ($2 $3)))
+
+(defrule reg_imi_addr_u (SET I32 regl (ADD I32 regl s16))
+	(cond "equal_register($1, $2)")
+	(value (mem+ $2 $3)))
+
+;; non-termination symbol for call
+(defrule fun con (value (SYMBOL_NAME $1)))
+(defrule fun sta (value (FUNCTION_CALL $1)))
+
+;; non-termination symbol for symbol access
+(defrule sta statical (value (SYMBOL_NAME $1)))
+(defrule symbol statical (value (SYMBOL_ACCESS $1)))
+
+;upper number of the symbol address
+;0xffff0000
+(defrule symbol_hi16 (BAND I32 symbol (INTCONST I32 -65536)) (value (sym_hi16 $1)))
+;lower number of the symbol address
+;0x0000ffff
+(defrule symbol_lo16 (BAND I32 symbol (INTCONST I32 65535)) (value (sym_lo16 $1)))
+
+;; non-termination symbol for imidiate number
+(defrule con (INTCONST _))
+(defrule statical (STATIC _))
+
+(defrule int_0 (INTCONST _ 0))
+;(defrule int_0 con (cond "( (LirIconst)$3).value == 0"))
+
+(defrule large_im s32)
+(defrule large_im u32)
+
+(defrule shift_s16 s16s (value (HI_VALUE $1)))
+(defrule shift_u16 u16s (value (HI_VALUE $1)))
+
+;;number of power of 2
+(defrule powerOf2 powerNumber (value (power2 $1)))
+
+;;non-termination symbol for smaller number
+;signed-16bit integer(for alithmetic or memory access instructions)
+(defrule s16 (INTCONST _)
+	(cond "MeasureSignedSize( ( (LirIconst)$0).signedValue()) < 16"))
+
+;signed-32bit integer
+(defrule s32 (INTCONST _)
+	(cond "MeasureSignedSize( ( (LirIconst)$0).signedValue()) < 32"))
+
+;unsigned-32bit integer
+(defrule u32 (INTCONST _)
+	(cond "MeasureUnsignedSize( ( (LirIconst)$0).signedValue()) <= 32"))
+
+;unsigned-16bit integer(for logical instructions)
+(defrule u16 (INTCONST _)
+	(cond "MeasureUnsignedSize( ( (LirIconst)$0).signedValue()) <= 16"))
+
+
+;integer for vector
+(defrule s5 (INTCONST _)
+	(cond "MeasureSignedSize( ( (LirIconst)$0).signedValue()) < 5"))
+
+;integer for shift instructions
+(defrule u5 (INTCONST _)
+	(cond "MeasureUnsignedSize( ( (LirIconst)$0).signedValue()) <= 5"))
+
+;signed-16bit integer shifted left 16bit
+(defrule s16s (INTCONST _)
+	(cond "MeasureSignedShiftSize( ( (LirIconst)$0).signedValue()) < 16"))
+
+;unsigned-16bit integer shifted left 16bit
+(defrule u16s (INTCONST _)
+	(cond "MeasureUnsignedShiftSize( ( (LirIconst)$0).signedValue()) <= 16"))
+
+
+;signed-16bit integer for subtraction
+(defrule subs16 (INTCONST _)
+	(cond "MeasureSignedSize(-( (LirIconst)$0).signedValue()) < 16"))
+
+;signed-16bit integer for subtraction, shifted left 16bit
+(defrule subs16s (INTCONST _)
+	(cond "MeasureSignedShiftSize(-( (LirIconst)$0).signedValue()) < 16"))
+
+;power of 2
+(defrule powerNumber (INTCONST _)
+	(cond "IsPowerOf2( ( (LirIconst)$0).signedValue())"))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; mnemonic definition
+;;; register(or imidiate) to register
+;;integer
+;set imidiate integer to register
+(foreach @s (l h b)
+	(defrule reg@s large_im
+		(code (liw (_reg $0) $1))
+		(cost 3)))
+
+
+;copy the property of register
+(foreach (@t @s) ((I32 l) (I16 h) (I8 b))
+	;load from LR
+	(defrule void (SET @t xreg@s reglr)
+		(cond "($2 instanceof LirSymRef) && ((LirSymRef)$2).symbol.name.equals(\"%LR\")")
+		(code (mflr $1))
+		(cost 1))
+	
+	;store to LR
+	(defrule void (SET @t reglr reg@s)
+		(cond "($1 instanceof LirSymRef) && ((LirSymRef)$1).symbol.name.equals(\"%LR\")")
+		(code (mtlr $2))
+		(cost 1))
+	
+	;store to CTR
+	(defrule void (SET @t regctr reg@s)
+		(cond "($1 instanceof LirSymRef) && ((LirSymRef)$1).symbol.name.equals(\"%CTR\")")
+		(code (mtctr $2))
+		(cost 1))
+	
+	(defrule void (SET @t xreg@s reg@s)
+		(code (mr $1 $2))
+		(cost 2)))
+
+;floating point
+(foreach (@type @name) ((F32 f) (F64 d))
+	(defrule void (SET @type xreg@name reg@name)
+		(code (fmr $1 $2))
+		(cost 2)))
+
+
+;;; load instructions
+;;basic load instruction
+(foreach (@t @op @s) ((I32 lwz l) (I16 lhz h) (I8 lbz b) (F32 lfs f) (F64 lfd d))
+	(defrule reg@s (MEM @t reg_reg_addr)
+		(code (@opx (_reg $0) $1))
+		(cost 10))
+	
+	(defrule reg@s (MEM @t reg_imi_addr)
+		(code (@op (_reg $0) $1))
+		(cost 10))
+	
+	;;load with update
+	(defrule reg@s (MEM @t reg_reg_addr_u)
+		(code (@opux (_reg $0) $1))
+		(cost 10))
+	
+	(defrule reg@s (MEM @t reg_imi_addr_u)
+		(code (@opu (_reg $0) $1))
+		(cost 10)))
+
+;;load instructions with signed extraction
+;extract to signed-32bit integer
+(foreach (@t @op @code) ((I16 lha CONVSX) (I16 lhz CONVZX) (I8 lbz CONVZX))
+	(defrule regl (@code I32 (MEM @t reg_reg_addr))
+		(code (@opx (_reg $0) $1))
+		(cost 10))
+	
+	(defrule regl (@code I32 (MEM @t reg_imi_addr))
+		(code (@op (_reg $0) $1))
+		(cost 10))
+	
+	;;load with update
+	(defrule regl (@code I32 (MEM @t reg_reg_addr_u))
+		(code (@opux (_reg $0) $1))
+		(cost 10))
+	
+	(defrule regl (@code I32 (MEM @t reg_imi_addr_u))
+		(code (@opu (_reg $0) $1))
+		(cost 10)))
+
+
+;;; store instructions
+(foreach (@t @op @s) ((I32 stw l) (I16 sth h) (I8 stb b) (F32 stfs f) (F64 stfd d))
+	(defrule void (SET @t (MEM @t reg_reg_addr) reg@s)
+		(code (@opx $2 $1))
+		(cost 5))
+
+	(defrule void (SET @t (MEM @t reg_imi_addr) reg@s)
+		(code (@op $2 $1))
+		(cost 5))
+
+	;store with update
+	(defrule void (SET @t (MEM @t reg_reg_addr_u) reg@s)
+		(code (@opux $2 $1))
+		(cost 5))
+
+	(defrule void (SET @t (MEM @t reg_imi_addr_u) reg@s)
+		(code (@opu $2 $1))
+		(cost 5)))
+
+
+(foreach (@t @op) ((I16 sth) (I8 stb))
+	(defrule void (SET @t (MEM @t reg_reg_addr) (CONVIT @t regl))
+		(code (@opx $2 $1))
+		(cost 5))
+
+	(defrule void (SET @t (MEM @t reg_imi_addr) (CONVIT @t regl))
+		(code (@op $2 $1))
+		(cost 5))
+
+	;store with update
+	(defrule void (SET @t (MEM @t reg_reg_addr_u) (CONVIT @t regl))
+		(code (@opux $2 $1))
+		(cost 5))
+
+	(defrule void (SET @t (MEM @t reg_imi_addr_u) (CONVIT @t regl))
+		(code (@opu $2 $1))
+		(cost 5)))
+
+
+;;;branch instruction
+;;always
+(defrule void (JUMP label)
+  (code (b $1))
+  (cost 5))
+
+;;conditional branch, using condition register
+(foreach (@name @branch) ( (EQ eq) (NE ne) (LTS lt) (LES le) (GTS gt) (GES ge)
+	(LTU lt) (LEU le) (GTU gt) (GEU ge))
+
+	(defrule void (JUMPC (TST@name I4 creg (INTCONST I4 0)) label label)
+		(code (b@branch $1 $2))
+		(cost 2)))
+
+;;counter branch
+(foreach (@ctrname @ctrbranch) ((EQ dz) (NE dnz))
+	(defrule void (JUMPC (TST@ctrname I32 regctr con) label label)
+		(cond "((LirSymRef)$1).symbol.name.equals(\"%CTR\") && ((LirIconst)$2).value == 0")
+		(code (b@ctrbranch $3))
+		(cost 3)))
+
+
+;;function
+(defrule void (CALL fun)
+  (code (bl $1))
+  (cost 6))
+
+(defrule void (CALL label)
+	(code (bcl 20 31 $1)
+		(indirect_jump_label $1))
+	(cost 6))
+
+;;jump to function pointer
+(defrule void (CALL regl)
+	(code (mtctr $1)
+		(bctrl))
+	(cost 6))
+
+
+;;;fixed-point instructions
+(foreach (@name @reg @src @cost) ( (ADD add regl 2) (SUB sub regl 2) (MUL mullw regl 10)
+	(DIVS divw regl 30) (DIVU divwu regl 30) (BAND and regl 2) (BOR or regl 2) (BXOR xor regl 2)
+	(RSHU srw regl 2) (LSHS slw regl 2) (RSHS sraw regl 2) (MUL mulli s16 8)
+	(BOR ori u16 2) (BXOR xori u16 2) (BOR oris shift_u16 2) (BXOR xoris shift_u16 2) (RSHS srawi u5 2)
+	(RSHU srwi u5 2) (LSHS slwi u5 2))
+	
+	(defrule regl (@name I32 regl @src)
+		(code (@reg (_reg $0) $1 $2))
+		(cost @cost)))
+
+;r0 register is prevented from beging used as the first operand of addition.
+(foreach (@name @reg @src) ( (ADD addi s16) (SUB subi subs16) (ADD addis shift_s16) (SUB subis subs16s)
+	(ADD addis symbol_hi16) (ADD addi symbol_lo16))
+
+	(defrule regl (@name I32 regl @src)
+		(code (@reg (_reg $0) $1 $2))
+		(regset ($1 *reg-withoutR0-I32*))
+		(cost 2)))
+
+;r0 can use if add-with-carry
+(foreach (@name @reg @src) ( (ADD addic s16) (SUB subic subs16))
+	(defrule regl (@name I32 regl @src)
+		(code (@reg (_reg $0) $1 $2))
+		(cost 3)))
+
+;subtraction from imidiate
+(defrule regl (SUB I32 s16 regl)
+	(code (subfic (_reg $0) $2 $1))
+	(cost 2))
+
+
+;;AND instruction with unsigned imidiate
+(foreach (@op @right) ( (andi. u16) (andis. shift_u16))
+	(defrule regl (BAND I32 regl @right)
+		(code (@op (_reg $0) $1 $2))
+		(clobber (REG I4 "%cr0"))
+		(cost 2)))
+
+;;PowerPC can divide with imidiate which is the number of power of 2,
+;using alithmetic shift and addition
+(defrule regl (DIVS I32 regl powerOf2)
+	(code (srawi (_reg $0) $1 $2)
+		(addze (_reg $0) (_reg $0)))
+	(cost 4))
+
+
+;;logical instructions with NOT(andc orc eqv)
+(foreach (@name @op) ((BAND andc) (BOR orc) (BXOR eqv))
+	(defrule regl (@name I32 regl (BNOT I32 regl))
+		(code (@op (_reg $0) $1 $2))
+		(cost 2))
+
+	(defrule regl (@name I32 (BNOT I32 regl) regl)
+		(code (@op (_reg $0) $1 $2))
+		(cost 2)))
+
+;;logical instructions whose result is NOT(nand nor)
+(foreach (@name @reverse @op) ((BAND BOR nand) (BOR BAND nor))
+	(defrule regl (BNOT I32 (@name I32 regl regl))
+		(code (@op (_reg $0) $1 $2))
+		(cost 2))
+
+	(defrule regl (@reverse I32 (BNOT I32 regl) (BNOT I32 regl))
+		(code (@op (_reg $0) $1 $2))
+		(cost 2)))
+
+;;1 operand instructions
+(foreach (@name @op) ((NEG neg) (BNOT not))
+	(defrule regl (@name I32 regl)
+		(code (@op (_reg $0) $1))
+		(cost 2)))
+
+;;;rotate and mask instructions
+;;imidiate shift & mask
+;mask
+(defrule regl (BAND I32 regl con)
+	(cond "IsRotateMask(ObtainValue($2))")
+	(code (rlwinm (_reg $0) $1 (_rlwMask 0 $2)))
+	(cost 1))
+
+
+;;rotate shift
+(defrule regl (BOR I32 (LSHS I32 regl u5) (RSHU I32 regl u5))
+	(cond "ObtainValue($2) + ObtainValue($4) == 32 && $1.equals($3)")
+	(code (rotrwi (_reg $0) $1 $4))
+	(cost 1))
+
+
+;mask & shift left
+(defrule regl (LSHS I32 (BAND I32 regl con) u5)
+	(cond "IsRotateMask(ObtainValue($2) << ObtainValue($3))")
+	(code (rlwinm (_reg $0) $1 (_rlwMask $3 (<< $2 $3))))
+	(cost 1))
+
+
+;mask & logical shift right
+(defrule regl (RSHU I32 (BAND I32 regl con) u5)
+	(cond "IsRotateMask(ObtainValue($2) >>> ObtainValue($3))")
+	(code (rlwinm (_reg $0) $1 (_rlwMask (- 32 $3) (>>> $2 $3))))
+	(cost 1))
+
+
+;;rotate shift & mask
+;shift left + mask & logical shift right
+(defrule regl (BOR I32 (LSHS I32 regl u5) (RSHU I32 (BAND I32 regl con) u5))
+	(cond "equal_register($1, $3) && ObtainValue($2) + ObtainValue($5) == 32 && IsMergeMask(null, $2, $4, $5, null)")
+	(code (rlwinm (_reg $0) $1 (_rlwMask $2 (_mergeMask 0 $2 $4 $5))))
+	(cost 1))
+
+
+;mask & shift left + logical shift right
+(defrule regl (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 regl u5))
+	(cond "equal_register($1, $4) && ObtainValue($3) + ObtainValue($5) == 32 && IsMergeMask($2, $3, null, $5, null)")
+	(code (rlwinm (_reg $0) $1 (_rlwMask $3 (_mergeMask $2 $3 0 $5))))
+	(cost 1))
+
+
+;mask & shift left + mask & logical shift right
+(defrule regl (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 (BAND I32 regl con) u5))
+	(cond "equal_register($1, $4) && ObtainValue($3) + ObtainValue($6) == 32 && IsMergeMask($2, $3, $5, $6, null)")
+	(code (rlwinm (_reg $0) $1 (_rlwMask $3 (_mergeMask $2 $3 $5 $6))))
+	(cost 1))
+
+
+;;;valiable rotate shift & mask
+;rotate shift left
+(defrule regl (BOR I32 (LSHS I32 regl regl) (RSHU I32 regl (SUB I32 con regl)))
+	(cond "ObtainValue($4) == 32 && equal_register($2, $5) && equal_register($1, $3)")
+	(code (rotlw (_reg $0) $1 $2))
+	(cost 1))
+
+
+;rotate shift right
+(defrule regl (BOR I32 (LSHS I32 regl (SUB I32 con regl)) (RSHU I32 regl regl))
+	(cond "ObtainValue($2) == 32 && equal_register($1, $4) && equal_register($3, $5)")
+	(code (neg (_reg "%r0") $3)
+		(rotlw (_reg $0) $1 (_reg "%r0")))
+	(clobber (REG I32 "%r0"))
+	(cost 2))
+
+
+;;;mask & insertion instruction
+;;which is imidiate instruction. No valiable one.
+;insert
+(defrule regl (BOR I32 (BAND I32 regl con) (BAND I32 regl con))
+	(cond "IsRotateMask(ObtainValue($2)) && (int)ObtainValue($2) == ~(int)ObtainValue($4)")
+	(code (alt_rlwimi (_reg $0) $1 $3 $4))
+	(cost 1))
+
+
+;shift left + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (LSHS I32 regl u5))
+	(cond "IsRotateMask(ObtainValue($2)) && (int)ObtainValue($2) == (1 << (int)ObtainValue($4)) - 1")
+	(code (rlwimi (_reg $0) $3 (_rlwMask $4 (~ $2))))
+	(eqreg ($1 $0))
+	(cost 1))
+
+ 
+;logical shift right + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (RSHU I32 regl u5))
+	(cond "IsRotateMask(ObtainValue($2)) && ~(int)ObtainValue($2) == (1 << 32 - (int)ObtainValue($4)) - 1")
+	(code (rlwimi (_reg $0) $3 (_rlwMask (- 32 $4) (~ $2))))
+	(eqreg ($1 $0))
+	(cost 1))
+
+
+;mask & shift left + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (LSHS I32 (BAND I32 regl con) u5))
+	(cond "IsRotateMask(ObtainValue($4) << ObtainValue($5)) && ~(int)(ObtainValue($4) << ObtainValue($5)) == (int)ObtainValue($2)")
+	(code (rlwimi (_reg $0) $3 (_rlwMask $5 (<< $4 $5))))
+	(eqreg ($1 $0))
+	(cost 1))
+
+
+;mask & logical shift right + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (RSHU I32 (BAND I32 regl con) u5))
+	(cond "IsRotateMask(ObtainValue($4) >>> ObtainValue($5)) && ~(int)(ObtainValue($4) >>> ObtainValue($5)) == (int)ObtainValue($2)")
+	(code (rlwimi (_reg $0) $3 (_rlwMask (- 32 $5) (>>> $4 $5))))
+	(eqreg ($1 $0))
+	(cost 1))
+
+
+;mask & shift left + logical shift right + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 regl u5)))
+	(cond "equal_register($3, $6) && IsMergeMask($4, $5, null, $7, $2)")
+	(code (rlwimi (_reg $0) $3 (_rlwMask $5 (_mergeMask $4 $5 0 $7))))
+	(eqreg ($1 $0))
+	(cost 1))
+
+
+;shift left + mask & logical shift right + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (BOR I32 (LSHS I32 regl u5) (RSHU I32 (BAND I32 regl con) u5)))
+	(cond "equal_register($3, $5) && IsMergeMask(null, $4, $6, $7, $2)")
+	(code (rlwimi (_reg $0) $3 (_rlwMask $4 (_mergeMask 0 $4 $6 $7))))
+	(eqreg ($1 $0))
+	(cost 1))
+
+
+;mask & shift left + mask & logical shift right + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 (BAND I32 regl con) u5)))
+	(cond "equal_register($3, $5) && IsMergeMask($4, $5, $7, $8, $2)")
+	(code (rlwimi (_reg $0) $3 (_rlwMask $5 (_mergeMask $4 $5 $7 $8))))
+	(eqreg ($1 $0))
+	(cost 1))
+
+
+;rotate shift & mask + insert
+(defrule regl (BOR I32 (BAND I32 regl con) (BAND I32 (BOR I32 (LSHS I32 regl u5) (RSHU I32 regl u5)) con))
+	(cond "equal_register($3, $5) && ObtainValue($4) + ObtainValue($6) == 32 && (int)ObtainValue($2) == ~(int)ObtainValue($7)")
+	(code (rlwimi (_reg $0) $3 (_rlwMask $4 $7)))
+	(eqreg ($1 $0))
+	(cost 1))
+
+
+;;signed fixed-point instructions with comparation
+(foreach @cmp (EQ NE LTS LES GTS GES)
+
+	(foreach (@name @reg @src @cost) ( (ADD add regl 2) (SUB sub regl 2) (DIVS divw regl 30)
+		(MUL mullw regl 10) (RSHS sraw regl 2))
+
+		(defrule creg (CONVIT I4 (TST@cmp I32 (@name I32 regl @src) int_0))
+			(code (@reg. (_reg "%r0") $1 $2))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost @cost)))
+	
+	;1 operand instructions with comparation
+	(foreach (@name @op @src) ( (NEG neg regl) (CONVSX extsh regh) (CONVSX extsb regb))
+		(defrule creg (CONVIT I4 (TST@cmp I32 (@name I32 @src) int_0))
+			(code (@op. (_reg "%r0") $1))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost 2)))
+
+	(defrule creg (CONVIT I4 (TST@cmp I32 (DIVS I32 regl powerOf2) int_0))
+		(code (srawi (_reg "%r0") $1 $2)
+			(addze. (_reg "%r0") (_reg "%r0")))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 4)))
+
+;;unsigned fixed-point instructions with comparation
+(foreach @cmp (EQ NE LTU LEU GTU GEU)
+
+	(foreach (@name @reg @src @cost) ( (DIVU divwu regl 30) (BAND and regl 2) (BOR or regl 2)
+		(BXOR xor regl 2) (RSHU srw regl 2) (LSHS slw regl 2)
+		(BAND andi u16 2) (BAND andis shift_u16 2) (RSHU srwi u5 2) (LSHS slwi u5 2))
+		
+		(defrule creg (CONVIT I4 (TST@cmp I32 (@name I32 regl @src) int_0))
+			(code (@reg. (_reg "%r0") $1 $2))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost @cost)))
+
+	;1 operand instructions with comparation
+	(foreach (@name @op @src) ( (BNOT not regl))
+		(defrule creg (CONVIT I4 (TST@cmp I32 (@name I32 @src) int_0))
+			(code (@op. (_reg "%r0") $1))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost 2)))
+	
+	(foreach (@src @bit) ( (regh 16) (regb 24))
+		(defrule creg (CONVIT I4 (TST@cmp I32 (CONVZX I32 @src) int_0))
+			(code (clrlwi. (_reg "%r0") $1 @bit))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost 2)))
+	
+	(foreach (@name @reg) ( (BAND andc) (BOR orc) (BXOR eqv))
+		(defrule creg (CONVIT I4 (TST@cmp I32 (@name I32 regl (BNOT I32 regl)) int_0))
+			(code (@reg. (_reg "%r0") $1 $2))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost 2))
+	
+		(defrule creg (CONVIT I4 (TST@cmp I32 (@name I32 (BNOT I32 regl) regl) int_0))
+			(code (@reg. (_reg "%r0") $1 $2))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost 2)))
+	
+	(foreach (@name @reverse @op) ((BAND BOR nand) (BOR BAND nor))
+		(defrule creg (CONVIT I4 (TST@cmp I32 (BNOT I32 (@name I32 regl regl)) int_0))
+			(code (@op. (_reg "%r0") $1 $2))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost 2))
+	
+		(defrule creg (CONVIT I4 (TST@cmp I32 (@reverse I32 (BNOT I32 regl) (BNOT I32 regl)) int_0))
+			(code (@op. (_reg "%r0") $1 $2))
+			(clobber (REG I32 "%r0"))
+			(regset ($0 *reg-general-I4*))
+			(cost 2)))
+	
+	;;rotate & mask
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BAND I32 regl con) int_0))
+		(cond "IsRotateMask(ObtainValue($2))")
+		(code (rlwinm. (_reg "%r0") $1 (_rlwMask 0 $2)))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (LSHS I32 regl u5) (RSHU I32 regl u5)) int_0))
+		(cond "ObtainValue($2) + ObtainValue($4) == 32 && $1.equals($3)")
+		(code (rotrwi. (_reg "%r0") $1 $4))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+
+	(defrule creg (CONVIT I4 (TST@cmp I32 (LSHS I32 (BAND I32 regl con) u5) int_0))
+		(cond "IsRotateMask(ObtainValue($2) << ObtainValue($3))")
+		(code (rlwinm. (_reg "%r0") $1 (_rlwMask $3 (<< $2 $3))))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (RSHU I32 (BAND I32 regl con) u5) int_0))
+		(cond "IsRotateMask(ObtainValue($2) >>> ObtainValue($3))")
+		(code (rlwinm. (_reg "%r0") $1 (_rlwMask (- 32 $3) (>>> $2 $3))))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (LSHS I32 regl u5) (RSHU I32 (BAND I32 regl con) u5)) int_0))
+		(cond "equal_register($1, $3) && ObtainValue($2) + ObtainValue($5) == 32 && IsMergeMask(null, $2, $4, $5, null)")
+		(code (rlwinm. (_reg "%r0") $1 (_rlwMask $2 (_mergeMask 0 $2 $4 $5))))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 regl u5)) int_0))
+		(cond "equal_register($1, $4) && ObtainValue($3) + ObtainValue($5) == 32 && IsMergeMask($2, $3, null, $5, null)")
+		(code (rlwinm. (_reg "%r0") $1 (_rlwMask $3 (_mergeMask $2 $3 0 $5))))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 (BAND I32 regl con) u5)) int_0))
+		(cond "equal_register($1, $4) && ObtainValue($3) + ObtainValue($6) == 32 && IsMergeMask($2, $3, $5, $6, null)")
+		(code (rlwinm. (_reg "%r0") $1 (_rlwMask $3 (_mergeMask $2 $3 $5 $6))))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (LSHS I32 regl regl) (RSHU I32 regl (SUB I32 con regl))) int_0))
+		(cond "ObtainValue($4) == 32 && equal_register($2, $5) && equal_register($1, $3)")
+		(code (rotlw. (_reg "%r0") $1 $2))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (LSHS I32 regl (SUB I32 con regl)) (RSHU I32 regl regl)) int_0))
+		(cond "ObtainValue($2) == 32 && equal_register($1, $4) && equal_register($3, $5)")
+		(code (neg (_reg "%r0") $3)
+			(rotlw. (_reg "%r0") $1 (_reg "%r0")))
+		(clobber (REG I32 "%r0"))
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (BAND I32 regl con)) int_0))
+		(cond "IsRotateMask(ObtainValue($2)) && (int)ObtainValue($2) == ~(int)ObtainValue($4)")
+		(code (rlwimi. $1 $3  (_rlwMask 0 $2)))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (LSHS I32 regl u5)) int_0))
+		(cond "IsRotateMask(ObtainValue($2)) && (int)ObtainValue($2) == (1 << (int)ObtainValue($4)) - 1")
+		(code (rlwimi. $1 $3 (_rlwMask $4 (~ $2))))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	 
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (RSHU I32 regl u5)) int_0))
+		(cond "IsRotateMask(ObtainValue($2)) && ~(int)ObtainValue($2) == (1 << 32 - (int)ObtainValue($4)) - 1")
+		(code (rlwimi. $1 $3 (_rlwMask (- 32 $4) (~ $2))))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (LSHS I32 (BAND I32 regl con) u5)) int_0))
+		(cond "IsRotateMask(ObtainValue($4) << ObtainValue($5)) && ~(int)(ObtainValue($4) << ObtainValue($5)) == (int)ObtainValue($2)")
+		(code (rlwimi. $1 $3 (_rlwMask $5 (<< $4 $5))))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (RSHU I32 (BAND I32 regl con) u5)) int_0))
+		(cond "IsRotateMask(ObtainValue($4) >>> ObtainValue($5)) && ~(int)(ObtainValue($4) >>> ObtainValue($5)) == (int)ObtainValue($2)")
+		(code (rlwimi. $1 $3 (_rlwMask (- 32 $5) (>>> $4 $5))))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 regl u5))) int_0))
+		(cond "equal_register($3, $6) && IsMergeMask($4, $5, null, $7, $2)")
+		(code (rlwimi. $1 $3 (_rlwMask $5 (_mergeMask $4 $5 0 $7))))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (BOR I32 (LSHS I32 regl u5) (RSHU I32 (BAND I32 regl con) u5))) int_0))
+		(cond "equal_register($3, $5) && IsMergeMask(null, $4, $6, $7, $2)")
+		(code (rlwimi. $1 $3 (_rlwMask $4 (_mergeMask 0 $4 $6 $7))))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (BOR I32 (LSHS I32 (BAND I32 regl con) u5) (RSHU I32 (BAND I32 regl con) u5))) int_0))
+		(cond "equal_register($3, $5) && IsMergeMask($4, $5, $7, $8, $2)")
+		(code (rlwimi. $1 $3 (_rlwMask $5 (_mergeMask $4 $5 $7 $8))))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 (BOR I32 (BAND I32 regl con) (BAND I32 (BOR I32 (LSHS I32 regl u5) (RSHU I32 regl u5)) con)) int_0))
+		(cond "equal_register($3, $5) && ObtainValue($4) + ObtainValue($6) == 32 && (int)ObtainValue($2) == ~(int)ObtainValue($7)")
+		(code (rlwimi. $1 $3 (_rlwMask $4 $7)))
+		(clobber $1)
+		(regset ($0 *reg-general-I4*))
+		(cost 2)))
+
+
+;;;floatint-point instructions
+;2 operand instructions
+(foreach (@size @type @name @code @cost) ((d F64 ADD fadd 2) (f F32 ADD fadds 2)
+	(d F64 SUB fsub 2) (f F32 SUB fsubs 2) (d F64 MUL fmul 4) (f F32 MUL fmuls 4)
+	(d F64 DIVS fdiv 5) (f F32 DIVS fdivs 5))
+	
+	(defrule reg@size (@name @type reg@size reg@size)
+		(code (@code (_reg $0) $1 $2))
+		(cost @cost)))
+
+;1 operand instructions
+(foreach (@size @type) ((f F32) (d F64))
+	(defrule reg@size (NEG @type reg@size)
+		(code (fneg (_reg $0) $1))
+		(cost 2)))
+
+;;complex instructions
+(foreach (@size @type @madd @msub @nmadd @nmsub) ((f F32 fmadds fmsubs fnmadds fnmsubs)
+	(d F64 fmadd fmsub fnmadd fnmsub))
+	;;x * y + z
+	(defrule reg@size (ADD @type (MUL @type reg@size reg@size) reg@size)
+		(code (@madd (_reg $0) $1 $2 $3))
+		(cost 5))
+
+	;;x + y * z
+	(defrule reg@size (ADD @type reg@size (MUL @type reg@size reg@size))
+		(code (@madd (_reg $0) $2 $3 $1))
+		(cost 5))
+
+	;;x * y - z
+	(defrule reg@size (SUB @type (MUL @type reg@size reg@size) reg@size)
+		(code (@msub (_reg $0) $1 $2 $3))
+		(cost 5))
+
+	;;z - x * y
+	(defrule reg@size (SUB @type reg@size (MUL @type reg@size reg@size))
+		(code (@nmsub (_reg $0) $2 $3 $1))
+		(cost 5)))
+
+
+;;;type conversion instruction
+;;to 32bit integer
+(defrule regl (CONVSX I32 regl))
+(defrule regl (CONVZX I32 regl))
+
+(foreach (@from @name @clear-bit) ((h extsh 16) (b extsb 24))
+	(defrule regl (CONVSX I32 reg@from)
+		(code (@name (_reg $0) $1))
+		(cost 2))
+		
+	(defrule regl (CONVZX I32 reg@from)
+		(code (clrlwi (_reg $0) $1 @clear-bit))
+		(cost 2)))
+
+
+;;to 16bit integer
+;32 -> 16
+(defrule regh (CONVSX I16 regl)
+	(code (extsh (_reg $0) $1))
+	(cost 2))
+
+(defrule regh (CONVZX I16 regl)
+	(code (clrlwi (_reg $0) $1 16))
+	(cost 2))
+
+
+;from 8bit to 16bit integer
+(defrule regh (CONVSX I16 regb)
+	(code (extsb (_reg $0) $1))
+	(cost 2))
+
+
+(defrule regh (CONVZX I16 regb)
+	(code (clrlwi (_reg $0) $1 24))
+	(cost 2))
+
+
+;;to 8bit integer
+(foreach @from (l h)
+	(defrule regb (CONVSX I8 reg@from)
+		(code (extsb (_reg $0) $1))
+		(cost 2))
+	
+	(defrule regb (CONVZX I8 reg@from)
+		(code (clrlwi (_reg $0) $1 24))
+		(cost 2)))
+
+
+;;others
+(defrule regh (CONVIT I16 regl)
+  (code (clrlwi (_reg $0) $1 16))
+	  (cost 2))
+
+(defrule regb (CONVIT I8 regl)
+  (code (clrlwi (_reg $0) $1 24))
+  (cost 2))
+
+(defrule regb (CONVIT I8 regh)
+  (code (clrlwi (_reg $0) $1 24))
+  (cost 2))
+
+
+;;conversion of floating-point
+(defrule regd (CONVFX F64 regd))
+(defrule regd (CONVFX F64 regf))
+
+(defrule regf (CONVFT F32 regd)
+  (code (frsp (_reg $0) $1))
+  (cost 2))
+
+;;from floating-point to fixed-point
+(defrule regd (CONVFS I32 regd)
+	(code (fctiwz (_reg $0) $1))
+	(cost 5))
+
+;AltiVec has single precidion floating-point to integer instruction
+;(defrule regf (CONVSF F32 regl)
+;	(code (li "r0" -4)
+;				(stw $1 (mem (mem+ "%r1" -4)))
+;				(lvewx "v0" (mem+ "%r1" "%r0")))
+;				(vcfsx "v0" "v0" 0)
+;				(stvewx "v0" (mem+ "%r1" "%r0")))
+;				(lfs (_reg $0) (mem+ "%r1" -4))))
+;	(clobber (REG I32 "%r0") (REG I128 "%v0"))
+;	(cost 30))
+
+
+;selection instruction
+;fsel fD, fA, fB, fC	->	fD = fA >= 0 ? fB : fC;
+(foreach (@cmp_size @cmp_to) ( (F64 d) (F32 f) (I32 d) (I32 f))
+	(foreach (@size @to) ( (F64 d) (F32 f))
+		(defrule reg@to (IF @size (TSTEQ @cmp_size reg@cmp_to reg@cmp_to) reg@to reg@to)
+			(code (fsub (_reg "%f0") $1 $2)
+				(fnabs (_reg "%f0") (_reg "%f0"))
+				(fsel (_reg $0) (_reg "%f0") $3 $4))
+			(clobber (REG F64 "%f0"))
+			(cost 5))
+
+		(defrule reg@to (IF @size (TSTNE @cmp_size reg@cmp_to reg@cmp_to) reg@to reg@to)
+			(code (fsub (_reg "%f0") $1 $2)
+				(fabs (_reg "%f0") (_reg "%f0"))
+				(fsel (_reg $0) (_reg "%f0") $3 $4))
+			(clobber (REG F64 "%f0"))
+			(cost 5))
+
+		(defrule reg@to (IF @size (TSTGES @cmp_size reg@cmp_to reg@cmp_to) reg@to reg@to)
+			(code (fsub (_reg "%f0") $1 $2)
+				(fsel (_reg $0) (_reg "%f0") $3 $4))
+			(clobber (REG F64 "%f0"))
+			(cost 5))
+
+		(defrule reg@to (IF @size (TSTLTS @cmp_size reg@cmp_to reg@cmp_to) reg@to reg@to)
+			(code (fsub (_reg "%f0") $2 $1)
+				(fsel (_reg $0) (_reg "%f0") $3 $4))
+			(clobber (REG F64 "%f0"))
+			(cost 5))
+
+		(defrule reg@to (IF @size (TSTGTS @cmp_size reg@cmp_to reg@cmp_to) reg@to reg@to)
+			(code (fsub (_reg "%f0") $2 $1)
+				(fsel (_reg $0) (_reg "%f0") $4 $3))
+			(clobber (REG F64 "%f0"))
+			(cost 5))
+
+		(defrule reg@to (IF @size (TSTLES @cmp_size reg@cmp_to reg@cmp_to) reg@to reg@to)
+			(code (fsub (_reg "%f0") $1 $2)
+				(fsel (_reg $0) (_reg "%f0") $4 $3))
+			(clobber (REG F64 "%f0"))
+			(cost 5))))
+
+
+;;;logical instructions for condition reigister
+;;instruction of copy the property
+(defrule void (SET I4 xcreg creg)
+	(code (_crmove (_reg $0) $1))
+	(cost 1))
+
+;;2 operand logical instructions
+(foreach (@name @op) ((BAND crand) (BOR cror) (BXOR crxor))
+	(defrule creg (@name I4 creg creg)
+		(code (@op (_reg $0) $1 $2))
+		(cost 1)))
+
+;;2 operand logical instructions(one used NOT)
+(foreach (@name @op) ((BAND crandc) (BOR crorc) (BXOR creqv))
+	(defrule creg (@name I4 (BNOT I4 creg) creg)
+		(code (@op (_reg $0) $2 $1))
+		(cost 1))
+
+	(defrule creg (@name I4 creg (BNOT I4 creg))
+		(code (@op (_reg $0) $1 $2))
+		(cost 1)))
+
+;;2 operand logical evaluation and NOT instructions
+(foreach (@name @op) ((BAND crnand) (BOR crnor))
+	(defrule creg (BNOT I4 (@name I4 creg creg))
+		(code (@op (_reg $0) $1 $2))
+		(cost 1)))
+
+;1 operand instruction
+(defrule creg (BNOT I4 creg)
+	(code (crnot (_reg $0) $1))
+	(cost 1))
+
+;;load-store
+(defrule creg (MEM I4 reg_imi_addr)
+	(code (lwz (_reg "%r0") $1)
+		(mtcrf (_crmask (_reg $0)) (_reg "%r0")))
+	(clobber (REG I32 "%r0"))
+	(cost 10))
+
+(defrule void (SET I4 (MEM I4 reg_imi_addr) creg)
+	(code (mfcr (_reg "%r0"))
+		(stw (_reg "%r0") $1))
+	(clobber (REG I32 "%r0"))
+	(cost 8))
+
+;;compare instruction
+;comparation with signed number
+(foreach @name (LTS LES GTS GES EQ NE)
+	(defrule creg (CONVIT I4 (TST@name I32 regl regl))
+		(code (cmpw (_reg $0) $1 $2))
+		(cost 2))
+
+	(defrule creg (CONVIT I4 (TST@name I32 regl s16))
+		(code (cmpwi (_reg $0) $1 $2))
+		(cost 2))
+	
+	(foreach (@t @left @right) ((F64 d d) (F64 f d) (F32 f f) (I32 d d) (I32 d f) (I32 f f))
+		(defrule creg (CONVIT I4 (TST@name @t reg@left reg@right))
+			(code (fcmpu (_reg $0) $1 $2))
+			(cost 2))))
+
+;comparation with unsigned number
+(foreach @name (EQ NE LTU LEU GTU GEU)
+	(defrule creg (CONVIT I4 (TST@name I32 regl regl))
+		(code (cmplw (_reg $0) $1 $2))
+		(cost 2))
+	
+	(defrule creg (CONVIT I4 (TST@name I32 regl u16))
+		(code (cmplwi (_reg $0) $1 $2))
+		(cost 2)))
+
+
+;;;64bit integer instructions when the mode is 32bit
+;32bit integer <-> 64bit integer
+(defrule regl (SUBREG I32 regdi 0) (value (_loword $1)))
+(defrule regl (SUBREG I32 regdi 1) (value (_hiword $1)))
+
+;(defrule void (SET I32 (SUBREG I32 xregdi 0) regl)
+;	(code (mr (_loword $1) $2))
+;	(cost 1))
+;
+;(defrule void (SET I32 (SUBREG I32 xregdi 1) regl)
+;	(code (mr (_hiword $1) $2))
+;	(cost 1))
+
+
+;loading imidiate number
+;64bit integer
+(defrule regdi con
+	(code (lidi (_hiword $0) (_loword $0) $1))
+	(cost 6))
+
+
+;copy of property
+(defrule void (SET I64 xregdi regdi)
+	(code (mr (_loword  $1) (_loword $2))
+		 (mr (_hiword  $1) (_hiword $2)))
+	(cost 4))
+
+;;memory access
+;load
+(defrule regl (SUBREG I32 (MEM I64 reg_reg_addr) 1)
+	(code (lwzx (_reg $0) $1))
+	(cost 10))
+
+(defrule regl (SUBREG I32 (MEM I64 reg_reg_addr) 0)
+	(regset ($0 *reg-withoutR0-I32*))
+	(code (addi_or_li (_reg $0) (mem_1 $1) 4)
+		(lwz (_reg $0) (_reg $0) (mem_2 $1)))
+	(cost 12))
+
+(defrule regl (SUBREG I32 (MEM I64 reg_imi_addr) 1)
+	(code (lwz (_reg $0) $1))
+	(cost 10))
+
+(defrule regl (SUBREG I32 (MEM I64 reg_imi_addr) 0)
+	(regset ($0 *reg-withoutR0-I32*))
+	(code (addi_or_li (_reg $0) (mem_2 $1) 4)
+		(lwz (_reg $0) (mem+ (_reg $0) (mem_1 $1))))
+	(cost 12))
+
+(defrule regdi (MEM I64 reg_reg_addr)
+	(code (addi_or_li (_loword $0) (mem_1 $1) 4)
+		(lwzx (_hiword $0) $1)
+		(lwzx (_loword $0) (_loword $0) (mem_2 $1)))
+	(cost 22))
+ 
+(defrule regdi (MEM I64 reg_imi_addr)
+	(code (addi_or_li (_loword $0) (mem_2 $1) (mem_1 $1))
+		(lwz (_hiword $0) $1)
+		(lwz (_loword $0) (mem+ (_loword $0) 4)))
+	(cost 22))
+
+;store
+(defrule void (SET I32 (SUBREG I32 (MEM I64 reg_reg_addr) 1) regl)
+	(code (stwx $2 $1))
+	(cost 5))
+
+(defrule void (SET I32 (SUBREG I32 (MEM I64 reg_reg_addr) 0) regl)
+	(code (addi (_reg "%r0") (mem_2 $1) 4)
+		(stwx $2 (reg_mem+ (mem_1 $1) (_reg "%r0"))))
+	(clobber (REG I32 "%r0"))
+	(cost 7))
+
+(defrule void (SET I32 (SUBREG I32 (MEM I64 reg_imi_addr) 1) regl)
+	(code (stw $2 $1))
+	(cost 5))
+
+(defrule void (SET I32 (SUBREG I32 (MEM I64 reg_imi_addr) 0) regl)
+	(code (addi_or_li (_reg "%r10") (mem_2 $1) 4)
+		(stwx $2 (_reg "%r10") (mem_1 $1)))
+	(clobber (REG I32 "%r10"))
+	(cost 7))
+
+
+(defrule void (SET I64 (MEM I64 reg_reg_addr) regdi)
+	(code (addi (_reg "%r0") (mem_2 $1) 4)
+		(stwx (_hiword $2) $1)
+		(stwx (_loword $2) (reg_mem+ (mem_1 $1) (_reg "%r0"))))
+	(clobber (REG I32 "%r0"))
+	(cost 12))
+
+(defrule void (SET I64 (MEM I64 reg_imi_addr) regdi)
+	(code (addi_or_li (_reg "%r10") (mem_2 $1) (mem_1 $1))
+		(stw (_hiword $2) $1)
+		(stw (_loword $2) (mem+ (_reg "%r10") 4)))
+	(clobber (REG I32 "%r10"))
+	(cost 12))
+
+;;64bit integer instructions
+(foreach (@name @upper @lower @cost) ( (ADD adde addc 4) (BAND and and 4) (BOR or or 4) (BXOR xor xor 4))
+	(defrule regdi (@name I64 regdi regdi)
+		(code (@lower (_loword $0) (_loword $1) (_loword $2))
+			(@upper (_hiword $0) (_hiword $1) (_hiword $2)))
+		(cost @cost)))
+
+
+(defrule regdi (SUB I64 regdi regdi)
+	(code (subfc (_loword $0) (_loword $2) (_loword $1))
+		(subfe (_hiword $0) (_hiword $2) (_hiword $1)))
+	(cost 4))
+
+
+(defrule regdi (MUL I64 regdi regdi)
+	(code (mulhwu (_reg "%r0") (_loword $1) (_loword $2))
+		(mullw (_loword $0) (_loword $1) (_hiword $2))
+		(mullw (_hiword $0) (_loword $2) (_hiword $1))
+		(add (_reg "%r0") (_loword $0) (_reg "%r0"))
+		(mullw (_loword $0) (_loword $1) (_loword $2))
+		(add (_hiword $0) (_hiword  $0) (_reg "%r0")))
+	(clobber (REG I32 "%r0"))
+	(cost 50))
+
+(defrule regdi (BNOT I64 regdi)
+	(code (not (_loword $0) (_loword $1))
+		 (not (_hiword  $0) (_hiword $1)))
+	(cost 4))
+
+(defrule regdi (NEG I64 regdi)
+	(code (subfic (_loword $0) (_loword $1) 0)
+		(subfze (_hiword $0) (_hiword $1)))
+	(cost 4))
+
+;;type conversion
+;sign extraction
+(defrule regdi (CONVSX I64 regl)
+	(code (mr (_loword $0) $1)
+		(srawi (_hiword $0) $1 31))
+	(cost 4))
+
+(foreach (@type @ext) ( (h extsh) (b extsb))
+	(defrule regdi (CONVSX I64 reg@type)
+		(code (@ext (_loword $0) $1)
+			(srawi (_hiword $0) (_loword $0) 31))
+		(cost 4)))
+
+;sign cut
+(defrule regdi (CONVZX I64 regl)
+	(code (mr (_loword $0) $1)
+		(li (_hiword $0) 0))
+	(cost 4))
+
+(foreach (@type @ext) ( (h 16) (b 24))
+	(defrule regdi (CONVSX I64 reg@type)
+		(code (clrlwi (_loword $0) $1 @bit)
+			(li (_hiword $0) 0))
+		(cost 4)))
+
+(defrule regl (CONVIT I32 regdi)
+	(code (mr (_reg $0) (_loword $1)))
+	(cost 2))
+
+(foreach (@to @size @bit) ( (h I16 16) (b I8 24))
+	(defrule reg@to (CONVIT I8 regdi)
+		(code (clrlwi (_reg $0) (_loword $1) @bit))
+		(cost 2)))
+
+;;compare instructions 
+(foreach @cmp (EQ NE)
+	(defrule creg (CONVIT I4 (TST@cmp I32 regdi regdi))
+		(code (cmplw (_reg "%cr5") (_loword $1) (_loword $2))
+			 (cmplw (_reg $0) (_hiword $1) (_hiword $2))
+			(crand (_crtype (_reg $0) eq) (_crtype (_reg $0) eq) (_crtype (_reg "%cr5") eq)))
+		(clobber (REG I4 "%cr5"))
+		(cost 4)))
+
+
+(foreach (@cmp @first @type) ( (GTU cmplw gt) (LEU cmplw gt) (LTU cmplw lt) (GEU cmplw lt)
+	(GTS cmpw gt) (LES cmpw gt) (LTS cmpw lt) (GES cmpw lt))
+	
+	(defrule creg (CONVIT I4 (TST@cmp I32 regdi regdi))
+		(code (cmplw (_reg "%cr5") (_loword $1) (_loword $2))
+			(@first (_reg $0) (_hiword $1) (_hiword $2))
+			(crand (_crtype (_reg "%cr5") @type)
+				(_crtype (_reg $0) eq) (_crtype (_reg "%cr5") @type))
+			(cror (_crtype (_reg $0) @type)
+				(_crtype (_reg $0) @type) (_crtype (_reg "%cr5") @type)))
+		(clobber (REG I4 "%cr5"))
+		(cost 6)))
+
+;;;vector instructions
+;;set imidiate integer to vector
+(defrule void (PARALLEL (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+		(SET I8 (SUBREG I8 regv (INTCONST I32 @n)) s5)))
+	(code (vspltisb $1 $2))
+	(cost 2))
+
+
+(defrule void (PARALLEL (foreach @n (0 1 2 3 4 5 6 7)
+	(SET I16 (SUBREG I16 regv (INTCONST I32 @n)) s5)))
+	(code (vspltish $1 $2))
+	(cost 2))
+
+
+(defrule void (PARALLEL (foreach @n (0 1 2 3)
+	(SET I32 (SUBREG I32 regv (INTCONST I32 @n)) s5)))
+	(code (vspltisw $1 $2))
+	(cost 2))
+
+
+;;copy register property
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+		(SET I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i)))))
+	(code (vor $1 $2 $2))
+	(cost 2))
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7)
+		(SET I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i)))))
+	(code (vor $1 $2 $2))
+	(cost 2))
+
+
+(foreach @type (I32 F32)
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG @type regv (INTCONST I32 @i)) (SUBREG @type regv (INTCONST I32 @i)))))
+		(code (vor $1 $2 $2))
+		(cost 2)))
+
+
+;load to vector
+;;we could use lvx instruction, only if the alignment is adjusted...
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+	(SET I8 (SUBREG I8 regv (INTCONST I32 @i)) (MEM I8 reg_reg_addr))))
+	(code (addi (_reg "%r0") (mem_2 $2) 16)
+		(lvx $1 $2)
+		(lvx (_reg "%v18") (reg_mem+ (mem_1 $2) (_reg "%r0")))
+		(lvsl (_reg "%v19") $2)
+		(vperm $1 $1 (_reg "%v18") (_reg "%v19")))
+	(clobber (REG I32 "%r0") (REG I128 "%v18") (REG I128 "%v19"))
+	(cost 20))
+
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7)
+	(SET I16 (SUBREG I16 regv (INTCONST I32 @i)) (MEM I16 reg_reg_addr))))
+	(code (addi (_reg "%r0") (mem_2 $2) 16)
+		(lvx $1 $2)
+		(lvx (_reg "%v18") (reg_mem+ (mem_1 $2) (_reg "%r0")))
+		(lvsl (_reg "%v19") $2)
+		(vperm $1 $1 (_reg "%v18") (_reg "%v19")))
+	(clobber (REG I32 "%r0") (REG I128 "%v18") (REG I128 "%v19"))
+	(cost 20))
+
+
+(foreach @type (I32 F32)
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET @type (SUBREG @type regv (INTCONST I32 @i)) (MEM @type reg_reg_addr))))
+		(code (addi (_reg "%r0") (mem_2 $2) 16)
+			(lvx $1 $2)
+			(lvx (_reg "%v18") (reg_mem+ (mem_1 $2) (_reg "%r0")))
+			(lvsl (_reg "%v19") $2)
+			(vperm $1 $1 (_reg "%v18") (_reg "%v19")))
+		(clobber (REG I32 "%r0") (REG I128 "%v18") (REG I128 "%v19"))
+		(cost 20)))
+
+
+;store instruction for vector
+;;too large codes. stvx must be used to store the data.
+(defrule void (SET I128 (MEM I128 reg_reg_addr) regv)
+	(code (stvx $2 $1))
+	(cost 5))
+
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+		(SET I8 (MEM I8 reg_reg_addr) (SUBREG I8 regv (INTCONST I32 @i)))))
+
+	(code (lvsr (_reg "%v19") $1)
+		(vperm (_reg "%v19") $2 $2 (_reg "%v19"))
+		(stvebx (_reg "%v19") $1)
+		(addi (_reg "%r0") (mem_2 $1) 1)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 2)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 3)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 4)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 5)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 6)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 7)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 8)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 9)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 10)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 11)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 12)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 13)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 14)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 15)
+		(stvebx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0"))))
+	(clobber (REG I32 "%r0") (REG I128 "%v19"))
+	(cost 16))
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7)
+		(SET I16 (MEM I16 reg_reg_addr) (SUBREG I16 regv (INTCONST I32 @i)))))
+
+	(code (lvsr (_reg "%v19") $1)
+		(vperm (_reg "%v19") $2 $2 (_reg "%v19"))
+		(stvehx (_reg "%v19") $1)
+		(addi (_reg "%r0") (mem_2 $1) 2)
+		(stvehx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 4)
+		(stvehx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 6)
+		(stvehx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 8)
+		(stvehx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 10)
+		(stvehx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 12)
+		(stvehx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+		(addi (_reg "%r0") (mem_2 $1) 14)
+		(stvehx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0"))))
+	(clobber (REG I32 "%r0") (REG I128 "%v19"))
+	(cost 16))
+
+
+(foreach @type (I32 F32)
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET @type (MEM @type reg_reg_addr) (SUBREG @type regv (INTCONST I32 @i)))))
+
+		(code (lvsr (_reg "%v19") $1)
+			(vperm (_reg "%v19") $2 $2 (_reg "%v19"))
+			(stvewx (_reg "%v19") $1)
+			(addi (_reg "%r0") (mem_2 $1) 4)
+			(stvewx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+			(addi (_reg "%r0") (mem_2 $1) 8)
+			(stvewx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0")))
+			(addi (_reg "%r0") (mem_2 $1) 12)
+			(stvewx (_reg "%v19") (reg_mem+ (mem_1 $1) (_reg "%r0"))))
+		(clobber (REG I32 "%r0") (REG I128 "%v19"))
+		(cost 16)))
+
+
+;;simple instructions for integer vector
+(foreach (@name @op8 @op16 @op32) ( (ADD vaddubm vadduhm vadduwm)
+	(SUB vsububm vsubuhm vsubuwm)  (BAND vand vand vand) (BOR vor vor vor)
+	(BXOR vxor vxor vxor) (RSHS vsrab vsrah vsraw) (RSHU vsrb vsrh vsrw) (LSHS vslb vslh vslw))
+	
+	(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+		(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+			(@name I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i))))))
+		(code (@op8 $1 $2 $3))
+		(cost 2))
+	
+	(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7)
+		(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+			(@name I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i))))))
+		(code (@op16 $1 $2 $3))
+		(cost 2))
+
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(@name I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i))))))
+		(code (@op32 $1 $2 $3))
+		(cost 2)))
+
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+	(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+		(BAND I8 (BNOT I8 (SUBREG I8 regv (INTCONST I32 @i))) (SUBREG I8 regv (INTCONST I32 @i))))))
+	(code (vandc $1 $3 $2))
+	(cost 2))
+
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7)
+	(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+		(BAND I16 (BNOT I16 (SUBREG I16 regv (INTCONST I32 @i))) (SUBREG I16 regv (INTCONST I32 @i))))))
+	(code (vandc $1 $3 $2))
+	(cost 2))
+
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3)
+	(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+		(BAND I32 (BNOT I32 (SUBREG I32 regv (INTCONST I32 @i))) (SUBREG I32 regv (INTCONST I32 @i))))))
+	(code (vandc $1 $3 $2))
+	(cost 2))
+
+
+;;convertion of vector
+(foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+	(defrule void (SET I8 (SUBREG I8 regv (INTCONST I32 @n)) (MEM I8 reg_reg_addr))
+	(code (lvebx $1 $2)
+		(vspltb $1 $1 0))
+	(cost 8)))
+
+
+(foreach @n (0 1 2 3 4 5 6 7)
+	(defrule void (SET I16 (SUBREG I16 regv (INTCONST I32 @n)) (MEM I16 reg_reg_addr))
+	(code (lvehx $1 $2)
+		(vsplth $1 $1 0))
+	(cost 8)))
+
+
+(foreach @type (I32 F32)
+	(foreach @n (0 1 2 3)
+		(defrule void (SET @type (SUBREG @type regv (INTCONST I32 @n)) (MEM @type reg_reg_addr))
+		(code (lvewx $1 $2)
+			(vspltw $1 $1 0))
+		(cost 8))))
+
+;;floating point vector
+;integer -> float
+(foreach (@op @node) ( (vcfsx CONVSF) (vcfux CONVUF))
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET F32 (SUBREG F32 regv (INTCONST I32 @i))
+			(@node F32 (SUBREG I32 regv (INTCONST I32 @i))))))
+		(code (@op $1 $2 0))
+		(cost 4)))
+
+
+;float -> integer
+(foreach (@op @node) ( (vctsxs CONVFS) (vctuxs CONVFU))
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(@node I32 (SUBREG F32 regv (INTCONST I32 @i))))))
+		(code (@op $1 $2 0))
+		(cost 4)))
+
+
+;multiplication
+;To obtain the result, we must use 2 multiplication and 1 pack instructions.
+;And If we obtain the result of 32bit integer multiplication,
+;we must use 16bit integer multiplication.
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+		(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+			(MUL I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i))))))
+	(code (vmuleub (_reg "%v19") $2 $3)
+		(vmuloub $1 $2 $3)
+		(vpkuhum $1 $1 (_reg "%v19")))
+	(clobber (REG I128 "%v19"))
+	(cost 10))
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7)
+		(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+			(MUL I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i))))))
+	(code (vmuleuh (_reg "%v19") $2 $3)
+		(vmulouh $1 $2 $3)
+		(vpkuwum $1 $1 (_reg "%v19")))
+	(clobber (REG I128 "%v19"))
+	(cost 10))
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(MUL I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v18") -16)
+		(vspltisw (_reg "%v17") 0)
+		(vrlw (_reg "%v19") $3 (_reg "%v18"))
+		(vmulouh (_reg "%v16") $2 $3)
+		(vmsumuhm $1 $2 (_reg "%v19") (_reg "%v17"))
+ 		(vslw $1 $1 (_reg "%v18"))
+		(vadduwm $1 $1 (_reg "%v16")))
+	(clobber (REG I128 "%v16") (REG I128 "%v17") (REG I128 "%v18") (REG I128 "%v19"))
+	(cost 16))
+
+
+;-----vector instruction for floating point
+(foreach (@op @node) ( (vaddfp ADD) (vsubfp SUB) (vand BAND) (vor BOR) (vxor BXOR))
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET F32 (SUBREG F32 regv (INTCONST I32 @i))
+			(@node F32 (SUBREG F32 regv (INTCONST I32 @i))
+				(SUBREG F32 regv (INTCONST I32 @i))))))
+		(code (@op $1 $2 $3))
+		(cost 4)))
+
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3)
+	(SET F32 (SUBREG F32 regv (INTCONST I32 @i))
+		(MUL F32 (SUBREG F32 regv (INTCONST I32 @i))
+			(SUBREG F32 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v19") 0)
+		(vmaddfp $1 $2 $3 (_reg "%v19")))
+	(clobber (REG I128 "%v19"))
+	(cost 8))
+
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3)
+ 	(SET F32 (SUBREG F32 regv (INTCONST I32 @i))
+		(DIVS F32 (FLOATCONST F32 1.0)
+				(SUBREG F32 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v18") 1)
+		(vrefp (_reg "%v19") $3)
+		(vcfsx (_reg "%v18") (_reg "%v18"), 0)
+		(vnmsubfp $1 (_reg "%v19") $3 (_reg "%v18"))
+		(vmaddfp $1 $1 (_reg "%v19") (_reg "%v19")))
+	(clobber (REG I128 "%v18") (REG I128 "%v19"))
+	(cost 16))
+
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3)
+	(SET F32 (SUBREG F32 regv (INTCONST I32 @i))
+		(DIVS F32 (SUBREG F32 regv (INTCONST I32 @i))
+			(SUBREG F32 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v18") 1)
+		(vrefp (_reg "%v19") $3)
+		(vcfsx (_reg "%v18") (_reg "%v18"), 0)
+		(vnmsubfp (_reg "%v18") (_reg "%v19") $3 (_reg "%v18"))
+		(vmaddfp (_reg "%v18") (_reg "%v18") (_reg "%v19") (_reg "%v19"))
+		(vspltisw (_reg "%v19") 0)
+		(vmaddfp $1 $2 (_reg "%v18") (_reg "%v19")))
+	(clobber (REG I128 "%v18") (REG I128 "%v19"))
+	(cost 20))
+
+
+;;1 operand instruction
+;y = ~x
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+	(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+		(BNOT I8 (SUBREG I8 regv (INTCONST I32 @i))))))
+	(code (vnor $1 $2 $2))
+	(cost 2))
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7)
+	(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+		(BNOT I16 (SUBREG I16 regv (INTCONST I32 @i))))))
+	(code (vnor $1 $2 $2))
+	(cost 2))
+
+
+(foreach @type (I32 F32)
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET @type (SUBREG @type regv (INTCONST I32 @i))
+			(BNOT @type (SUBREG @type regv (INTCONST I32 @i))))))
+		(code (vnor $1 $2 $2))
+		(cost 2)))
+
+;y = -x
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+	(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+		(NEG I8 (SUBREG I8 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v19") 0)
+		(vsububm $1 (_reg "%v19") $2))
+	(clobber (REG I128 "%v19"))
+	(cost 2))
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7)
+	(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+		(NEG I16 (SUBREG I16 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v19") 0)
+		(vsubuhm $1 (_reg "%v19") $2))
+	(clobber (REG I128 "%v19"))
+	(cost 2))
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3)
+	(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+		(NEG I32 (SUBREG I32 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v19") 0)
+		(vsubuwm $1 (_reg "%v19") $2))
+	(clobber (REG I128 "%v19"))
+	(cost 2))
+
+(defrule void (PARALLEL (foreach @i (0 1 2 3)
+	(SET F32 (SUBREG F32 regv (INTCONST I32 @i))
+		(NEG F32 (SUBREG F32 regv (INTCONST I32 @i))))))
+	(code (vspltisw (_reg "%v19") 0)
+		(vsubfp $1 (_reg "%v19") $2))
+	(clobber (REG I128 "%v19"))
+	(cost 2))
+
+;;complex instructions for integer
+;average of signed integer
+;z = (x + y + 1) >> 1
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+		(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+			(RSHS I8 (ADD I8 (ADD I8 (SUBREG I8 regv (INTCONST I32 @i))
+				(SUBREG I8 regv (INTCONST I32 @i))) (INTCONST I8 1))
+				(INTCONST I8 1)))))
+	(code (vavgsb $1 $2 $3))
+	(cost 2))
+
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7)
+		(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+			(RSHS I16 (ADD I16 (ADD I16 (SUBREG I16 regv (INTCONST I32 @i))
+				(SUBREG I16 regv (INTCONST I32 @i))) (INTCONST I16 1))
+				(INTCONST I16 1)))))
+	(code (vavgsh $1 $2 $3))
+	(cost 2))
+
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(RSHS I32 (ADD I32 (ADD I32 (SUBREG I32 regv (INTCONST I32 @i))
+				(SUBREG I32 regv (INTCONST I32 @i))) (INTCONST I32 1))
+				(INTCONST I32 1)))))
+	(code (vavgsw $1 $2 $3))
+	(cost 2))
+
+
+;;average of unsigned integer
+;z = (x + y + 1) >> 1
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+		(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+			(RSHU I8 (ADD I8 (SUBREG I8 regv (INTCONST I32 @i))
+				(SUBREG I8 regv (INTCONST I32 @i))) (INTCONST I8 1)))))
+	(code (vavgub $1 $2 $3))
+	(cost 2))
+
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7)
+		(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+			(RSHU I16 (ADD I16 (SUBREG I16 regv (INTCONST I32 @i))
+				(SUBREG I16 regv (INTCONST I32 @i))) (INTCONST I16 1)))))
+	(code (vavguh $1 $2 $3))
+	(cost 2))
+
+
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(RSHU I32 (ADD I32 (SUBREG I32 regv (INTCONST I32 @i))
+				(SUBREG I32 regv (INTCONST I32 @i))) (INTCONST I32 1)))))
+	(code (vavguw $1 $2 $3))
+	(cost 2))
+
+
+;;greater or lesser
+(foreach (@op @node) ( (vmaxs TSTGES) (vmaxu TSTGEU) (vmins TSTLES) (vminu TSTLEU))
+	(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+			(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+				(BOR I8 (BAND I8 (SUBREG I8 regv (INTCONST I32 @i))
+						(@node I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i))))
+					(BAND I8 (SUBREG I8 regv (INTCONST I32 @i)) (BNOT I8
+						(@node I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i)))))))))
+		(code (@opb $1 $3 $4))
+		(cost 2))
+
+
+	(defrule void (PARALLEL (foreach @i (0 1 2 3 4 5 6 7)
+			(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+				(BOR I16 (BAND I16 (SUBREG I16 regv (INTCONST I32 @i))
+						(@node I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i))))
+					(BAND I16 (SUBREG I16 regv (INTCONST I32 @i)) (BNOT I16
+						(@node I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i)))))))))
+		(code (@oph $1 $3 $4))
+		(cost 2))
+
+
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(BOR I32 (BAND I32 (SUBREG I32 regv (INTCONST I32 @i))
+					(@node I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i))))
+				(BAND I32 (SUBREG I32 regv (INTCONST I32 @i)) (BNOT I32
+					(@node I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i)))))))))
+		(code (@opw $1 $3 $4))
+		(cost 2)))
+
+
+;;multiply+addition
+;2byte integer only has multiply + addition instruction, without floating-point
+(defrule void (PARALLEL
+	(foreach @i (0 1 2 3 4 5 6 7)
+		(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+			(ADD I16 (MUL I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i)))
+				(SUBREG I16 regv (INTCONST I32 @i))))))
+	(code (vmladduhm $1 $2 $3 $4))
+	(cost 5))
+
+
+;;vector compare instructions
+(foreach (@tst @op) ( (TSTEQ equ) (TSTGTS gts) (TSTGTU gtu))
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+			(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+				(BOR I8 (BAND I8 con
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i))))
+					(BAND I8 con (BNOT I8
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@opb $1 $3 $4))
+		(cost 2))
+
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7)
+			(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+				(BOR I16 (BAND I16 con
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i))))
+					(BAND I16 con (BNOT I16
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@oph $1 $3 $4))
+		(cost 2))
+
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(BOR I32 (BAND I32 con
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i))))
+				(BAND I32 con (BNOT I32
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i)))))))))
+	(cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+	(code (vcmp@opw $1 $3 $4))
+	(cost 2)))
+
+
+(foreach (@tst @op) ( (TSTLTS gts) (TSTLTU gtu))
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+			(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+				(BOR I8 (BAND I8 con
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i))))
+					(BAND I8 con (BNOT I8
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@opb $1 $4 $3))
+		(cost 2))
+
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7)
+			(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+				(BOR I16 (BAND I16 con
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i))))
+					(BAND I16 con (BNOT I16
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@oph $1 $4 $3))
+		(cost 2))
+
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(BOR I32 (BAND I32 con
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i))))
+				(BAND I32 con (BNOT I32
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i)))))))))
+	(cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+	(code (vcmp@opw $1 $4 $3))
+	(cost 2)))
+
+
+(foreach (@tst @op) ( (TSTNE equ) (TSTGES gts) (TSTGEU gtu))
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+			(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+				(BOR I8 (BAND I8 con
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i))))
+					(BAND I8 con (BNOT I8
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@opb $1 $4 $3)
+			(vnor $1 $1 $1))
+		(cost 4))
+
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7)
+			(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+				(BOR I16 (BAND I16 con
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i))))
+					(BAND I16 con (BNOT I16
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@oph $1 $4 $3)
+			(vnor $1 $1 $1))
+		(cost 4))
+
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(BOR I32 (BAND I32 con
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i))))
+				(BAND I32 con (BNOT I32
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i)))))))))
+	(cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+	(code (vcmp@opw $1 $4 $3)
+		(vnor $1 $1 $1))
+	(cost 4)))
+
+
+(foreach (@tst @op) ( (TSTLES gts) (TSTLEU gtu))
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+			(SET I8 (SUBREG I8 regv (INTCONST I32 @i))
+				(BOR I8 (BAND I8 con
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i))))
+					(BAND I8 con (BNOT I8
+						(@tst I8 (SUBREG I8 regv (INTCONST I32 @i)) (SUBREG I8 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@opb $1 $3 $4)
+			(vnor $1 $1 $1))
+		(cost 4))
+
+	(defrule void (PARALLEL
+		(foreach @i (0 1 2 3 4 5 6 7)
+			(SET I16 (SUBREG I16 regv (INTCONST I32 @i))
+				(BOR I16 (BAND I16 con
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i))))
+					(BAND I16 con (BNOT I16
+						(@tst I16 (SUBREG I16 regv (INTCONST I32 @i)) (SUBREG I16 regv (INTCONST I32 @i)))))))))
+		(cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+		(code (vcmp@oph $1 $3 $4)
+			(vnor $1 $1 $1))
+		(cost 4))
+
+	(defrule void (PARALLEL (foreach @i (0 1 2 3)
+		(SET I32 (SUBREG I32 regv (INTCONST I32 @i))
+			(BOR I32 (BAND I32 con
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i))))
+				(BAND I32 con (BNOT I32
+					(@tst I32 (SUBREG I32 regv (INTCONST I32 @i)) (SUBREG I32 regv (INTCONST I32 @i)))))))))
+	(cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+	(code (vcmp@opw $1 $3 $4
+		(vnor $1 $1 $1))
+	(cost 4))))
+
+
+;;defrewrite for vector
+(foreach @type (I8 I16 I32)
+	(defrewrite (SET @type (SUBREG @type (REG I128) (INTCONST I32 0)) (REG @type))
+		(to (eval "Reg2Vector($0, pre)"))
+		(phase late))
+
+	(defrewrite (SET @type (SUBREG @type (REG I128) (INTCONST I32 0)) (SUBREG @type _))
+		(to (eval "Reg2Vector($0, pre)"))
+		(phase late))
+
+	(defrewrite (SET @type (REG @type) (SUBREG @type (REG I128) (INTCONST I32 0)))
+		(to (eval "Vector2Reg($0, pre)"))
+		(phase late)))
+
+
+(foreach (@op @left @right) ( (CONVFU I32 F32) (CONVFS I32 F32) (CONVSF F32 I32) (CONVUF F32 I32))
+	(defrewrite (PARALLEL (foreach @i (0 1 2 3)
+		(SET @left (SUBREG @left (REG I128) (INTCONST I32 @i))
+			(@op @right (SUBREG @right (REG I128) (INTCONST I32 @i))))))
+		(to (norescan $0))
+		(phase late)))
+
+
+;;;rewrite node
+;;floating-point imidiate is put to constant memory
+(foreach @t (F32 F64)
+	(defrewrite (FLOATCONST @t)
+		(to (MEM @t (STATIC I32 (eval "module.constToData($0)"))))
+		(phase late)))
+
+
+;; prologue
+(defrewrite (PROLOGUE)
+	(to (norescan (eval "rewritePrologue($0, pre, post)")))
+	(phase late))
+
+
+;; Epilogue
+(defrewrite (EPILOGUE)
+	(to (norescan (eval "rewriteEpilogue($0, pre)")))
+	(phase late))
+
+
+;; Call
+(defrewrite (CALL)
+	(to (eval "rewriteCall($0, pre, post)"))
+	(phase late))
+
+
+;;accessing valiable argument
+(defrewrite (CALL (STATIC I32 "__builtin_va_start")  (LIST _) (LIST _))
+	(to (SET I32 $2 (eval "makeVaStart($1)")))
+	(phase early))
+
+
+;; JUMPN
+(defrewrite (JUMPN)
+	(to (eval "rewriteJumpn($0, pre)"))
+	(phase early) )
+
+
+;; copy operation for aggregate
+(defrewrite (SET)
+	(cond "Type.tag($0.type) == Type.AGGREGATE")
+	(to (eval "rewriteAggregateCopy($0, pre)"))
+	(phase late))
+
+
+;;rewrite mask operation
+(foreach @op (LSHS RSHS RSHU)
+	(defrewrite (BAND I32 (@op I32 _ (INTCONST _)) (INTCONST _))
+		(to (eval "rewriteMask($0)"))
+		(phase late)))
+
+
+;;rewrite symbol access
+(foreach @op (MEM)
+	(defrewrite (@op _ (STATIC _))
+		(to (eval "rewriteSTATIC_1($0, pre)"))
+		(phase late)))
+
+(foreach @op (SET ADD SUB TSTEQ TSTNE TSTGES TSTGTS TSTLES TSTLTS TSTGTU TSTGEU TSTLTU TSTLES)
+	(defrewrite (@op I32 _ (STATIC _))
+		(to (eval "rewriteSTATIC_2($0, pre)"))
+		(phase late))
+
+	(defrewrite (@op I32 (STATIC _) _)
+		(to (eval "rewriteSTATIC_2($0, pre)"))
+		(phase late)))
+
+
+;modulate instruction is cracked to multiply, division, and subtraction
+(defrewrite (MODS _ _ _)
+	(to (eval "rewriteMOD($0, pre, true)"))
+	(phase early))
+
+	
+(defrewrite (MODU _ _ _)
+	(to (eval "rewriteMOD($0, pre, false)"))
+	(phase early))
+
+
+;;crack of alitmetic instruction with 32bit imidiate number
+;we cannot crack BAND
+(foreach @name (ADD SUB BOR BXOR)
+	(defrewrite (@name I32 _ (INTCONST _))
+		(to (eval "rewriteEvalImidiate32($0, pre)"))
+		(phase late)))
+
+
+;;from floating-point to integer
+(defrewrite (CONVFS _)
+	(to (norescan (eval "rewriteCONVFI($0, true, pre, post)")))
+	(phase late))
+
+(defrewrite (CONVFU _)
+	(to (norescan (eval "rewriteCONVFI($0, false, pre, post)")))
+	(phase late))
+
+;;from integer to floating-point
+(defrewrite (CONVSF _)
+	(to (eval "rewriteCONVF($0, pre, true)"))
+	(phase late))
+
+(defrewrite (CONVUF _)
+	(to (eval "rewriteCONVF($0, pre, false)"))
+	(phase late))
+
+
+;;crack of conditional branch
+(defrewrite (JUMPC _ _ _)
+	(to (norescan (eval "rewriteJUMPC($0, pre)")))
+	(phase late))
+
+
+(defrewrite (RSHS I32 (BAND I32 _ (INTCONST _)) (INTCONST _))
+	(to (eval "rewriteRSHSMask($0)"))
+	(phase late))
+
+
+(foreach (@left @right) ( (RSHU LSHS) (RSHU BAND) (LSHS BAND))
+	(defrewrite (BOR I32 (@left I32 _ _) (@right I32 _ _))
+		(to (eval "swapLeftRight($0)"))
+		(phase late)))
+
+
+(foreach (@first @second @third) ( (LSHS RSHU BAND) (LSHS BAND RSHU) (RSHU LSHS BAND) (RSHU BAND LSHS) (BAND LSHS RSHU) (BAND RSHU LSHS))
+	(defrewrite (BOR I32 (@first I32 _ _) (BOR I32 (@second I32 _ _) (@third I32 _ _)))
+		(to (eval "orderForMask($0)"))
+		(phase late))
+	
+	(defrewrite (BOR I32 (BOR I32 (@second I32 _ _) (@third I32 _ _)) (@first I32 _ _))
+		(to (eval "orderForMask($0)"))
+		(phase late)))
+
+
+(defrewrite (BAND I32 (BOR I32 (LSHS I32 (REG _) (INTCONST _)) (RSHU I32 (REG _) (INTCONST _))) (INTCONST _))
+	(to (eval "transmissonAND($0)"))
+	(phase late))
+
+
+;( (signed)x >> n) & ( (1 << n) - 1) -> x >>> n
+(defrewrite (BAND I32 (RSHS I32 _ _) (SUB I32 (LSHS I32 (INTCONST _) _) (INTCONST _)))
+	(to (eval "regRightShiftSigned($0)"))
+	(phase early))
+
+
+;; PARALLEL with only one instruction
+(defrule void (PARALLEL void))
+
+
+%%
+
+import coins.backend.ana.*;
+import coins.backend.cfg.BasicBlk;
+import coins.backend.CantHappenException;
+import coins.backend.Function;
+import coins.backend.Data;
+import coins.backend.ModuleElement;
+import coins.backend.Module;
+import coins.backend.Op;
+import coins.backend.SyntaxError;
+import coins.backend.Type;
+import coins.backend.Storage;
+import coins.backend.lir.*;
+import coins.backend.sym.*;
+import coins.backend.util.BiLink;
+import coins.backend.util.BiList;
+import coins.backend.util.ImList;
+import coins.backend.util.NumberSet;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.lang.Math;
+
+%State methods
+//=====function for deciding size of imidiate=====//
+/////returns how many bits the signed integer has/////
+private int MeasureSignedSize(long iValue)
+{
+	//positive is similar to unsigned version
+	if(iValue >= 0)	return MeasureUnsignedSize(iValue);
+	
+	//negative has 1 more bit than positive, so check with NOT
+	return MeasureUnsignedSize(~iValue);
+}
+
+
+/////returns how many bits the unsigned integer has/////
+//if it was inputed negative number, returns 1024
+private int MeasureUnsignedSize(long iValue)
+{
+	int resultBit;
+	
+	resultBit = 0;
+	do{
+		resultBit++;
+		iValue >>>= 1;
+	}while(iValue > 0);
+	
+	return resultBit;
+}
+
+
+/////returns how many bits the signed integer has, when the lower-16bit is 0/////
+private int MeasureSignedShiftSize(long iValue)
+{
+	if( (iValue & 0xffff) != 0)	return 32;
+	return MeasureSignedSize(iValue >> 16);
+}
+
+
+/////returns how many bits the unsigned integer has, when the lower-16bit is 0/////
+//if it was inputed negative number, returns 1024
+private int MeasureUnsignedShiftSize(long iValue)
+{
+	if( (iValue & 0xffff) != 0)	return 32;
+	
+	if(iValue >> 32 == -1)	iValue = (iValue >> 16) & 0xffff;
+	else iValue >>>= 16;
+	
+	return MeasureUnsignedSize(iValue);
+}
+
+
+//======
+/////obtain the number of general register/////
+private int GetRegisterNumber(LirNode iNode)
+{
+	if(iNode.opCode != Op.REG && iNode.opCode != Op.SUBREG)	return 32;
+	
+	String s;
+	int l, r;
+	s = iNode.toString();
+	l = s.indexOf("\"%r");
+	r = s.lastIndexOf("\"");
+	if (l < 0) return 32;
+	if (r < 0) return 32;
+	return Integer.parseInt(s.substring(l+3,r));
+}
+
+
+//=====functions for cheking the special number=====//
+/////checks input number is the power of 2 or not/////
+//if the number was the power of 2, returns shift number: otherwise -1
+private boolean IsPowerOf2(long iValue)
+{
+	if(iValue == 0)	return false;
+	
+	//is the '1' bit only one?
+	return (iValue & (iValue - 1)) == 0;
+}
+
+
+/////if input number could be 'mask' value, returns true/////
+public boolean IsRotateMask(long iValue)
+{
+	int value, allCount, rightCount;
+	boolean rightBit;
+	
+	value = (int)iValue;
+	if(value == 0)	return false;
+	
+	//k & -k
+	//obtain most lower 1 bit
+	
+	//count all '1'bit
+	allCount = 0;
+	for(int k = value; k != 0; k = k & ~(k & -k)){
+		allCount++;
+	}
+	
+	//count '1'bit from higher bit
+	rightBit = (value & 1) != 0;
+	if(rightBit)	value = ~value;
+
+	rightCount = 0;
+	for(int k = value & -value; (k & value) != 0; k <<= 1){
+		rightCount++;
+	}
+	
+	//if '1'bit was not equevalence, the number cannot be mask
+	return (rightBit ? 32 - rightCount : rightCount) == allCount;
+}
+
+
+/////returns true, if after rotate shift, we can use the number as mask/////
+private boolean IsMergeMask(LirNode iLeftMask, LirNode iLeftSh, LirNode iRightMask, LirNode iRightSh, LirNode iMask)
+{
+	int leftMask, rightMask, mask;
+
+	if(iLeftMask == null)	leftMask = ~( (1 << (int)( (LirIconst)iLeftSh).value) - 1);
+	else{
+		leftMask = (int)( (LirIconst)iLeftMask).value;
+		if(iLeftSh != null)	leftMask <<= (int)( (LirIconst)iLeftSh).value;
+	}
+
+	if(iRightMask == null)	rightMask = (1 << 32 - (int)( (LirIconst)iRightSh).value) - 1;
+	else{
+		rightMask = (int)( (LirIconst)iRightMask).value;
+		if(iRightSh != null) rightMask >>>= (int)( (LirIconst)iRightSh).value;
+	}
+	
+	if( (leftMask & rightMask) != 0)	return false;
+	mask = leftMask | rightMask;
+	
+	if(iMask != null){
+		if( (int)( (LirIconst)iMask).value != ~mask)	return false;
+	}
+
+	return IsRotateMask(mask);
+}
+
+
+//=====checing of name=====//
+/////returns true, if they are the same register/////
+boolean equal_register(LirNode p1,LirNode p2)
+{
+	LirSymRef reg1, reg2;
+	
+	if (p1.opCode != Op.REG) return false;
+	if (p2.opCode != Op.REG) return false;
+	
+	reg1 = (LirSymRef)p1;
+	reg2 = (LirSymRef)p2;
+	
+	return reg1.symbol.name == reg2.symbol.name;
+}
+
+
+/////returns true, if input reigster is special-purpose register/////
+boolean IsSpecialRegister(String iRegName)
+{
+	final String[] args = {"LR", "CTR", "CR"};
+	
+	if(iRegName.charAt(0) == '%')	iRegName = iRegName.substring(1);
+	
+	for(int i = 0; i < args.length; i++){
+		if(iRegName.equals(args[i]))	return true;
+	}
+	
+	return false;
+}
+
+
+%CodeGenerator methods
+
+ImList regCallClobbers = $def(*reg-call-clobbers*);
+
+
+//===== PowerPC function attribute =====//
+//=====type size=====//
+static final int I32 = Type.type(Type.INT, 32);
+static final int I16 = Type.type(Type.INT, 16);
+static final int I8 = Type.type(Type.INT, 8);
+static final int I4 = Type.type(Type.INT, 4);
+static final int F64 = Type.type(Type.FLOAT, 64);
+static final int F32 = Type.type(Type.FLOAT, 32);
+
+static final int I128 = Type.type(Type.INT, 128);
+
+static final int REG_TYPE = I32;
+static final int ADDR_TYPE = REG_TYPE;
+
+static final int INT_REGISTER_SIZE = Type.bytes(REG_TYPE);
+static final int FLOAT_REGISTER_SIZE = 8;
+static final int VECTOR_REGISTER_SIZE = 16;
+
+static final boolean PPC_64 = (INT_REGISTER_SIZE == 8);
+
+
+//=====argument=====//
+static final int STACK_POINTER_STACK = 0;
+static final int LINK_REGISTER_STACK = INT_REGISTER_SIZE;
+static final int CONDITION_REGISTER_STACK = 2 * INT_REGISTER_SIZE;
+
+static final int INT_REGISTER_COUNT = 8;
+static final int INT_START_REGISTER = 3;
+
+static final int FLOAT_REGISTER_COUNT = 13;
+static final int FLOAT_START_REGISTER = 1;
+
+static final int ARG_AREA_MIN_SIZE = INT_REGISTER_SIZE * INT_REGISTER_COUNT;
+static final int LINK_AREA_SIZE = 6 * INT_REGISTER_SIZE;
+static final int RED_ZONE_SIZE = 220;
+
+
+//=====global=====//
+ArrayList gAccessor = new ArrayList();
+
+//=====PowerPCAttr=====//
+static final int EXTERNAL_FUNCTION = 1 << 0;
+static final int INTERNAL_FUNCTION = 1 << 1;
+
+static final int EXTERNAL_VALIABLE = 1 << 2;
+static final int INTERNAL_VALIABLE = 1 << 3;
+
+static final int EXTERNAL_CONSTANCE = 1 << 4;
+static final int INTERNAL_CONSTANCE = 1 << 5;
+
+
+static class PowerPCAttr extends FunctionAttr {
+	static Module sCurrentModule = null;
+	
+	int mArgAreaSize;	//size of argument area
+	int mSaveAreaSize;	//size of save area
+	int mLocalAreaBorder;	//border of local valiable area
+	
+	LirNode mArgAreaRef;	//temp register is setted when we need to access argument area
+	LirNode mReturnAggregate;	//temp register is setted when the return value is aggregate
+	int mVarArgHeader;	//valiable argument register number is setted when the function accepts valiable number of arguments
+	int mVecConv;			//
+	
+	LirNode mGlobalTemp;	//temp register is setted when the function uses global valiable(s)
+	LirNode mFramePointer;	//frame pointer is setted when the function has no function-call
+	Label mAddressLabel;	//label for obtaining global address
+	 
+	String mGeneralRegisters[];
+	String mFloatRegisters[];
+	String mVectorRegisters[];
+	
+	ArrayList mFrameNames;	//has the names and address of local valiables which are allocated in stack frame
+	
+	int mGeneralCount;		//number of non-volatile global register
+	int mFloatCount;		//number of non-volatile floating-point register
+	int mVectorCount;		//number of non-volatile vector register
+	
+	boolean mUsedCR;	//true if the function uses non-volatile condition register
+	boolean mHasCaller;	//true if the function has function-call
+	boolean mUsedVector;	//true if the function has SIMD instruction
+	
+	//-----static function------//
+	//=====accessing module=====//
+	/////finds the symbol which has input condition/////
+	static ArrayList FindSymbol(int iType)
+	{
+		ArrayList list = new ArrayList();
+		
+		for(Iterator k = sCurrentModule.globalSymtab.iterator(); k.hasNext();){
+			int flag;
+			Symbol obj = (Symbol)(k.next());
+			
+			if(obj.storage != Storage.STATIC)	continue;
+			SymStatic sym = (SymStatic)obj;
+			
+			flag = 0;
+			
+			//local access
+			//".data" LDEF
+			//".data" XDEF
+			//
+			//address access
+			//".data" XREF
+			//".bss" XDEF
+			//
+			if(sym.segment.equals(".text")){
+				//read only
+				//decide with type 'cause this is the function or imidiate
+				if(Type.toString(sym.type).equals("UNKNOWN")){
+					//function
+					flag = EXTERNAL_FUNCTION;
+				}else{
+					//imidiate
+					flag = EXTERNAL_CONSTANCE;
+				}
+			}else if(sym.segment.equals(".data")){
+				//global or static valiable
+				flag = EXTERNAL_VALIABLE;
+
+				if(sym.linkage.equals("XDEF")){
+					//local data
+					flag <<= 1;
+				}
+			}else if(sym.segment.equals(".bss")){
+				//global or static valiable
+				flag = EXTERNAL_VALIABLE;
+
+				if(!sym.linkage.equals("XDEF") && !sym.linkage.equals("LDEF")
+				  && !sym.linkage.equals("XREF"))  //## Nakata 060516
+				{
+					flag <<= 1;
+				}
+			}else{
+				//???
+				continue;
+			}
+			
+			if(sym.linkage.equals("LDEF")){
+				//local data
+				flag <<= 1;
+			}
+			
+			if( (iType & flag) != 0){
+				//this symbol has the required condition
+				list.add("_" + sym.name);
+			}
+		}
+		
+		return list;
+	}
+	
+	/////checks whether the symbol had the required condition/////
+	static boolean CheckSymbolType(String iSymbol, int iType)
+	{
+		ArrayList list = FindSymbol(iType);
+		iSymbol = "_" + iSymbol;
+		
+		for(Iterator k = list.iterator(); k.hasNext(); ){
+			String cmp = (String)(k.next());
+			
+			if(cmp.equals(iSymbol))	return true;
+		}
+		
+		return false;
+	}
+	
+	//-----member function-----//
+	PowerPCAttr(Function iFunc)
+	{
+		super(iFunc);
+		
+		sCurrentModule = func.module;
+		
+		mFrameNames = new ArrayList();
+		mGeneralRegisters = mFloatRegisters = mVectorRegisters = null;
+		mGeneralCount = mFloatCount = mVectorCount = 0; 
+		mArgAreaRef = null;
+		mVecConv = 0;
+		
+		mVarArgHeader = 0;
+		mUsedCR = mUsedVector = mHasCaller = false;
+		
+		//check whether return value was aggregate
+		mReturnAggregate = null;
+		BiList list = func.localSymtab.symbols();
+		BiLink q;
+		for (q = list.first(); !q.atEnd(); q = q.next()) {
+			Symbol sym = (Symbol)q.elem();
+			if((sym.name).startsWith("returnvalue")){
+				if(Type.tag(sym.type) == Type.AGGREGATE){
+					mReturnAggregate = func.newTemp(ADDR_TYPE);
+				}
+				break;
+			}
+		}
+
+		//we always make link-area and argument-area.
+		//link-area always has same size.
+		//argument-area has valiable size with the number of function-calls' argument in this function.
+		SearchFunctor functor;
+		
+		//check whether function-call existed, and whether the symbol access existed.
+		//And compute argument-area size.
+		mArgAreaSize = ARG_AREA_MIN_SIZE;
+		mGlobalTemp = mFramePointer = null;
+		mAddressLabel = null;
+
+		functor = new SearchFunctor(){
+			public boolean Execute(LirNode iNode){
+				if(iNode.opCode == Op.CALL){
+					mHasCaller = true;
+
+					LirNode args = iNode.kid(1);
+					int paramCounter = 0;
+					
+					LirNode ret = iNode.kid(2);
+					LirNode name = iNode.kid(0);
+					
+					//if the type of the return value was aggregate, argument r3 register is the destination to return.
+					if(ret != null && ret.nKids() > 0 && Type.tag(ret.kid(0).type)  == Type.AGGREGATE){
+						paramCounter += INT_REGISTER_SIZE;
+					}
+					
+					if(args != null){
+						for (int i = 0; i < args.nKids(); i++) {
+							LirNode arg = args.kid(i);
+							paramCounter += (Type.bytes(arg.type) + INT_REGISTER_SIZE - 1) & ~(INT_REGISTER_SIZE - 1);
+						}
+						
+						if(mArgAreaSize < paramCounter)	mArgAreaSize = paramCounter;
+					}
+				}else if(mGlobalTemp == null){
+
+					//check symbol access except function-call
+					for(int k = 0; k < iNode.nKids(); k++){
+						switch(iNode.kid(k).opCode){
+						case Op.STATIC:
+						case Op.FLOATCONST:
+							mGlobalTemp = func.newTemp(ADDR_TYPE);
+							mAddressLabel = func.newLabel();
+							return false;
+						}
+					}
+				}
+				
+				return false;
+			}
+		};
+		SearchProcedure(functor);
+		
+		mSaveAreaSize = 0;
+		mLocalAreaBorder = mArgAreaSize + LINK_AREA_SIZE;
+	}
+	
+	
+	//=====obtaining size of stack frame=====//
+	/////compute all stack size/////
+	int ComputeStackSize()
+	{
+		int size;
+		size = mLocalAreaBorder + mSaveAreaSize;
+		
+		return (size  + 0xf) & ~0xf;
+	}
+	
+	int ComputeRedZoneSize()
+	{
+		int size;
+		return ComputeStackSize() - mArgAreaSize - LINK_AREA_SIZE;
+	}
+	
+	//=====searching=====//
+	static public abstract class SearchFunctor{
+		public abstract boolean Execute(LirNode iNode);
+	};
+	
+	/////searches the node in the function with functor/////
+	public boolean SearchProcedure(SearchFunctor iFunc)
+	{
+		for(BiLink link = func.lirList().first(); !link.atEnd(); link = link.next()){
+			LirNode ins = (LirNode)link.elem();
+			
+			//some target obstacle found, and exit searching
+			if(RecSearchProcedure(ins, iFunc)){
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public boolean RecSearchProcedure(LirNode iNode, SearchFunctor iFunc)
+	{
+		int kidCount = iNode.nKids();
+		
+		if(iNode.opCode == Op.CLOBBER)	return false;
+		
+		for(int k = 0; k < kidCount; k++){
+			LirNode node = iNode.kid(k);
+			
+			if(node == null)	continue;
+			
+			if(RecSearchProcedure(node, iFunc))	return true;
+		}
+		
+		return iFunc.Execute(iNode);
+	}
+
+	/////returns all 'non-volatile' registers used in the function/////
+	public void TraceUsedRegisters()
+	{
+		//r13 ~ r31, f14 ~ f31 are non-volatile register
+		//search the non-volatile register with functor
+		SearchFunctor functor = new SearchFunctor (){
+			public boolean Execute(LirNode iNode)
+			{
+				if(iNode.opCode != Op.REG)	return false;
+
+				//some register found!
+				String reg = ( (LirSymRef)iNode).symbol.name;
+				int j, regNum;
+				
+				if(reg.charAt(0) == '%')	reg = reg.substring(1);
+				
+				switch(reg.charAt(0)){
+				case 'c':
+					//condition register
+					regNum = Integer.valueOf(reg.substring(2)).intValue();
+					break;
+				
+				case 'C':	//condition register(32bit)or counter register
+				case 'L':	//link register
+					return false;
+				
+				default:
+					if(reg.indexOf(':') >= 0){	//64bit general register access
+						//1st register
+						regNum = Integer.valueOf(reg.substring(reg.indexOf('r') + 1, reg.indexOf(':'))).intValue();
+
+						if(regNum >= 13 && regNum <= 31){
+							for(j = 0; j < mGeneralCount && reg.equals(mGeneralRegisters[j]) == false; j++){}
+							
+							if(j == mGeneralCount){
+								mGeneralRegisters[mGeneralCount++] = "r" + regNum;
+							}
+						}
+						
+						//2nd register
+						reg = "r" + reg.substring(reg.indexOf(':') + 1);
+					}
+
+					regNum = Integer.valueOf(reg.substring(1)).intValue();
+					break;
+				}
+				
+				switch(reg.charAt(0)){
+				case 'r':	//general purpose register
+					if(regNum >= 13 && regNum <= 31){
+						for(j = 0; j < mGeneralCount && reg.equals(mGeneralRegisters[j]) == false; j++){}
+						
+						if(j == mGeneralCount){
+							mGeneralRegisters[mGeneralCount++] = reg;
+						}
+					}
+					break;
+				
+				case 'f':	//floating point register
+					if(regNum >= 14 && regNum <= 31){
+						for(j = 0; j < mFloatCount && reg.equals(mFloatRegisters[j]) == false; j++){}
+						
+						if(j == mFloatCount){
+							mFloatRegisters[mFloatCount++] = reg;
+						}
+					}
+					break;
+				
+				case 'v':	//vector register
+					mUsedVector = true;
+					
+					if(regNum >= 20 && regNum <= 31){
+						for(j = 0; j < mVectorCount && reg.equals(mVectorRegisters[j]) == false; j++){}
+						
+						if(j == mVectorCount){
+							mVectorRegisters[mVectorCount++] = reg;
+						}
+					}
+					break;
+				
+				case 'c':	//condition register
+					if(regNum >= 2 && regNum <= 4)	mUsedCR = true;
+					break;
+				}
+				
+				return false;
+			}
+		};
+		
+		mGeneralRegisters = new String[32];
+		mFloatRegisters = new String[32];
+		mVectorRegisters = new String[32];
+		mGeneralCount = mFloatCount = mVectorCount = 0;
+		mUsedVector = false;
+		mUsedCR = false;
+		
+		SearchProcedure(functor);
+		
+		mSaveAreaSize = mFloatCount * FLOAT_REGISTER_SIZE + mGeneralCount * INT_REGISTER_SIZE;
+	}
+	
+	//-----function to reference the argument area-----//
+	LirNode GetArgumentSP()
+	{
+		if(mArgAreaRef == null){
+			mArgAreaRef = func.newTemp(ADDR_TYPE);
+		}
+		return mArgAreaRef;
+	}
+	
+	//-----for stack frame valiable-----//
+	private class FrameValiable{
+		public String mName;
+		public int mHead;
+		public int mSize;
+		
+		int TryFrame(String iName){
+			if(mName.equals(iName))	return mHead;
+			return 0;
+		}
+	}
+	
+	/////searches the address of the valiable allocated in stack frame/////
+	public int FindPlaceOfFrame(String iName, int iSize, int iBoundary){
+		int limit = mFrameNames.size();
+		for(int k = 0; k < limit; k++){
+			int pt;
+			FrameValiable frame = (FrameValiable)mFrameNames.get(k);
+			
+			//had already been registered
+			pt = frame.TryFrame(iName);
+			if(pt != 0)	return pt;
+		}
+		
+		int localHead, head, pad, hiBit;
+		FrameValiable val = new FrameValiable();
+		val.mName = iName;
+		
+		head = mLocalAreaBorder;
+		
+		//head is ordered to the byte alignment
+		pad = (head & (iBoundary - 1));
+		if(pad != 0)	head += iBoundary - pad;
+		
+		mLocalAreaBorder = head + iSize;
+
+		val.mHead = head;
+		val.mSize = iSize;
+		mFrameNames.add(val);
+
+		return head;
+	}
+}
+
+FunctionAttr newFunctionAttr(Function func)
+{
+	return new PowerPCAttr(func);
+}
+
+
+//=====for Code generation of PowerPC=====//
+/////FRAME to memory address/////
+LirNode rewriteFrame(LirNode node)
+{
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+	LirNode stack;
+	SymAuto symbol = (SymAuto)((LirSymRef)node).symbol;
+	
+	if(attr.mHasCaller)	stack = regnode(ADDR_TYPE, "%r1");
+	else{
+		if(attr.mFramePointer == null)	attr.mFramePointer = func.newTemp(ADDR_TYPE);
+		stack = attr.mFramePointer;
+	}
+	
+	return lir.node(Op.ADD, ADDR_TYPE, stack,
+		lir.iconst(ADDR_TYPE, attr.FindPlaceOfFrame(symbol.name,
+			Type.bytes(symbol.type), (symbol.boundary > 0 ? symbol.boundary : 4))));
+}
+
+
+/////rewrite function's 'prologue' procedure/////
+LirNode rewritePrologue(LirNode node, BiList pre, BiList post)
+{
+	int k = 0;
+	int n = node.nKids();
+	int intCounter = 0;
+	int floatCounter = 0;
+	LirNode base = regnode(REG_TYPE, "%r1");
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+
+	LirNode[] args = new LirNode[n + 8];
+	args[0] = node.kid(0);
+
+	//there are some access to argument area, use r2 to save last stack pointer
+	if(attr.mArgAreaRef != null){
+		args[++k] = regnode(ADDR_TYPE, "%r2");
+		post.add(lir.node(Op.SET, ADDR_TYPE, attr.GetArgumentSP(), regnode(ADDR_TYPE, "%r2")));
+	}
+
+	//we must obtain PC address 'cause the function has the access of global valiable(s).
+	if(attr.mGlobalTemp != null){
+		//dummy jump to obtain PC.
+		post.add(noRescan(lir.node(Op.CALL, Type.UNKNOWN,
+				lir.labelRef(attr.mAddressLabel),
+				lir.node(Op.LIST, Type.UNKNOWN, func.newTemp(ADDR_TYPE)),
+				lir.node(Op.LIST, Type.UNKNOWN, func.newTemp(ADDR_TYPE)))));
+		//obtain the memory address from LR
+		post.add(lir.node(Op.SET, ADDR_TYPE, attr.mGlobalTemp, regnode(ADDR_TYPE, "%LR")));
+		
+		//reset LR if the function has no function-call.
+		if(attr.mHasCaller == false){
+			post.add(lir.node(Op.SET, ADDR_TYPE,
+				regnode(ADDR_TYPE, "%LR"), regnode(ADDR_TYPE, "%r0")));
+		}
+	}
+	
+	//if the function had return value which was aggregate,
+	//r3 register has the address of return value
+	if(attr.mReturnAggregate != null){
+		intCounter++;
+		
+		args[++k] = regnode(ADDR_TYPE, "%r3");
+		post.add(lir.node(Op.SET, ADDR_TYPE, attr.mReturnAggregate, args[k]));
+		
+		//rewrite all access of return aggregate
+		final PowerPCAttr ppcAttr = attr;
+		
+		PowerPCAttr.SearchFunctor functor = new PowerPCAttr.SearchFunctor(){
+			public boolean Execute(LirNode iNode){
+				int count = iNode.nKids();
+				
+				for(int k = 0; k < count; k++){
+					LirNode node = iNode.kid(k);
+					
+					//rewrite return aggregate FRAME
+					if(node.opCode == Op.FRAME && ( (LirSymRef)node).symbol.name.startsWith("returnvalue")){
+						iNode.setKid(k, ppcAttr.mReturnAggregate);
+					}
+				}
+				return false;
+			}
+		};
+		
+		attr.SearchProcedure(functor);
+	}
+	
+	int storeHead = attr.mVarArgHeader;
+	for (int i = 1; i < n; i++) {
+		LirNode arg = node.kid(i);
+		
+		if(storeHead != 0 && storeHead <= i){
+			//valiable arguments must be moved to stack
+			if(intCounter < INT_REGISTER_COUNT){
+				LirNode reg = NextIntParam(REG_TYPE, intCounter, base, true);
+				
+				pre.add(lir.node(Op.SET, REG_TYPE,
+					NextStackParam(REG_TYPE, intCounter, base, true), reg));
+				args[++k] = reg;
+				
+				intCounter++;
+			}
+			
+			break;
+		}else{
+			switch (Type.tag(arg.type)) {
+			case Type.INT:
+				if(Type.bytes(arg.type) <= INT_REGISTER_SIZE){
+					post.add(lir.node(Op.SET, arg.type, arg,
+						NextIntParam(arg.type, intCounter, base, true)));
+					
+					if(intCounter < INT_REGISTER_COUNT){
+						args[++k] = NextIntParam(arg.type, intCounter, base, true);
+					}
+	 				intCounter++;
+				}else{
+					//complex integer argument
+					if( (intCounter & 1) == 0 && intCounter < INT_REGISTER_COUNT){
+						//similar to usage of complex integer.
+						int firstNum, secondNum;
+						
+						firstNum = intCounter + INT_START_REGISTER;
+						secondNum = firstNum + 1;
+						
+						post.add(lir.node(Op.SET, arg.type, arg,
+							regnode(arg.type, "%r" + firstNum + ":" + secondNum)));
+						
+						args[++k] = NextIntParam(REG_TYPE, intCounter++, base, true);
+						args[++k] = NextIntParam(REG_TYPE, intCounter++, base, true);
+					}else{
+						//obtain with cracking
+						for(int j = 1; j >= 0; j--){
+							post.add(lir.node(Op.SET, REG_TYPE,
+								lir.node(Op.SUBREG, REG_TYPE, arg, lir.untaggedIconst(I32, j)),
+								NextIntParam(REG_TYPE, intCounter, base, true)));
+							
+							if(intCounter++ < INT_REGISTER_COUNT){
+								args[++k] = NextIntParam(REG_TYPE, intCounter, base, true);
+							}
+						}
+					}
+				}
+				break;
+	
+			case Type.FLOAT:
+				post.add(lir.node(Op.SET, arg.type, arg, NextFloatParam(arg.type, intCounter, floatCounter, base, true)));
+				
+				if(floatCounter < FLOAT_REGISTER_COUNT){
+					args[++k] = NextFloatParam(arg.type, intCounter, floatCounter, base, true);
+				}
+				
+				floatCounter++;
+				intCounter += Type.bytes(arg.type) / INT_REGISTER_SIZE;
+				break;
+			
+			case Type.AGGREGATE:
+				{
+					int head = intCounter * INT_REGISTER_SIZE;
+					int count = Type.bytes(arg.type) / INT_REGISTER_SIZE;
+	
+					for(int j = 0; j < count; j++){
+						LirNode src;
+						
+						//aggregate is in register. Copy it!
+						if(intCounter < INT_REGISTER_COUNT){
+							src = NextIntParam(REG_TYPE, intCounter, base, true);
+						}else{
+							//in stack frame, move using register
+							src = func.newTemp(REG_TYPE);
+							post.add(lir.node(Op.SET, REG_TYPE, src,
+								NextIntParam(REG_TYPE, intCounter, base, true)));
+						}
+						
+						post.add(lir.node(Op.SET, REG_TYPE,
+							lir.node(Op.MEM, REG_TYPE,
+								lir.node(Op.ADD, REG_TYPE, arg.kid(0),
+									lir.iconst(REG_TYPE, j * INT_REGISTER_SIZE))), src));
+						intCounter++;
+					}
+				}
+				break;
+			}
+		}
+	}
+	
+	//tempolaly of LR
+	if(attr.mHasCaller || attr.mGlobalTemp != null){
+		args[++k] = regnode(ADDR_TYPE, "%r0");
+	}
+	
+	//the function has no call-function.
+	//So we don't have to make stack frame but compute frame pointer.
+	if(!attr.mHasCaller){
+		args[++k] = regnode(ADDR_TYPE, "%r11");
+		
+		if(attr.mFramePointer == null)	attr.mFramePointer = func.newTemp(ADDR_TYPE);
+		post.add(lir.node(Op.SET, ADDR_TYPE, attr.mFramePointer, args[k]));
+	}
+	
+	LirNode[] argv = new LirNode[k + 1];
+	for(int j = 0; j <= k; j++)	argv[j] = args[j];
+	
+	return lir.node(Op.PROLOGUE, Type.UNKNOWN, argv);
+}
+
+
+private LirNode regnode(int type, String name)
+{
+	if (Type.tag(type) == Type.INT) {
+		LirNode master = lir.symRef(module.globalSymtab.get(name));
+
+		if(type == master.type)		return master;
+		return lir.node(Op.SUBREG, type, master, lir.untaggedIconst(I32, 0));
+		
+	}else if (Type.tag(type) == Type.FLOAT) {
+		LirNode master = lir.symRef(module.globalSymtab.get(name));
+
+		if (type == F64)	return master;
+		return lir.node(Op.SUBREG, type, master, lir.untaggedIconst(I32, 0));
+	}
+	
+	System.out.println("illegal regnode");
+	return null;
+}
+
+
+//=====for PPC=====//
+private LirNode NextIntParam(int iType, int iRegNumber, LirNode iBase, boolean iBackStack)
+{
+	if(iRegNumber < INT_REGISTER_COUNT){
+		return regnode(iType, "%r" + (iRegNumber + INT_START_REGISTER));
+	}
+	
+	return NextStackParam(iType, iRegNumber, iBase, iBackStack);
+}
+
+
+private LirNode NextFloatParam(int iType, int iIntRegNumber, int iRegNumber, LirNode iBase, boolean iBackStack)
+{
+	if(iRegNumber < FLOAT_REGISTER_COUNT){
+		return regnode(iType, "%f" + (iRegNumber + FLOAT_START_REGISTER));
+	}
+	
+	return NextStackParam(iType, iIntRegNumber, iBase, iBackStack);
+}
+
+
+private LirNode NextStackParam(int iType, int iArgPlace, LirNode iBase, boolean iBackStack)
+{
+	if(iBackStack){
+		return lir.node(Op.MEM, iType,
+			lir.node(Op.ADD, I32, ( (PowerPCAttr)getFunctionAttr(func)).GetArgumentSP(),
+				lir.iconst(iType, LINK_AREA_SIZE + iArgPlace * 4)));
+	}
+	
+	return lir.node(Op.MEM, iType,
+		lir.node(Op.ADD, I32, iBase,
+		lir.iconst(iType, LINK_AREA_SIZE + iArgPlace * 4)));
+}
+
+
+/** Rewrite EPILOGUE **/
+LirNode rewriteEpilogue(LirNode node, BiList pre)
+{
+	LirNode output;
+	
+	if (node.nKids() < 2)	return node;
+
+	LirNode ret = node.kid(1);
+	LirNode reg;
+
+	switch (Type.tag(ret.type)) {
+	case Type.INT:
+		if(Type.bytes(ret.type) <= INT_REGISTER_SIZE){
+			reg = regnode(ret.type, "%r3");
+		}else{
+			//return complex integer
+			reg = regnode(ret.type, "%r3:4");
+		}
+		pre.add(lir.node(Op.SET, ret.type, reg, ret));
+		
+		output = lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0), reg);
+		break;
+
+	case Type.FLOAT:
+		reg = regnode(ret.type, "%f1");
+		pre.add(lir.node(Op.SET, ret.type, reg, ret));
+		output = lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0), reg);
+		break;
+
+	case Type.AGGREGATE:
+		output = lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0));
+		break;
+	
+	default:
+		System.out.println("illegal epilogue");
+		output = null;
+		break;
+	}
+	return output;
+}
+
+
+/** Return true if node is a complex one. **/
+boolean isComplex(LirNode node) {
+  switch (node.opCode) {
+  case Op.INTCONST:
+  case Op.REG:
+  case Op.STATIC:
+  case Op.FRAME:
+    return false;
+  default:
+    return true;
+  }
+}
+
+
+/////rewrites call-function to make function communication procedure/////
+LirNode rewriteCall(LirNode node, BiList pre, BiList post)
+{
+	ArrayList regArray = new ArrayList();
+	BiList list = new BiList();
+	LirNode base, callee, args, regNode, temp, ret;
+	boolean reta;
+	
+	reta = false;
+	base = regnode(I32, "%r1");
+	callee = node.kid(0);
+	args = node.kid(1);
+	ret = (node.kid(2).nKids() > 0) ? node.kid(2).kid(0) : null;
+	
+	// callee
+	if (isComplex(callee)) {
+		temp = func.newTemp(callee.type);
+		list.add(lir.node(Op.SET, callee.type, temp, callee));
+		node.setKid(0, temp);
+	}
+
+	// parameters
+	int n, intCounter, floatCounter, valiableArgs;
+	boolean isUnknownArg;
+	
+	n = args.nKids();
+	intCounter = floatCounter = 0;
+	isUnknownArg = false;
+
+	//if the return value was aggregate, 1st argument must be return value's address
+	if(ret != null && Type.tag(ret.type) == Type.AGGREGATE){
+		temp = NextIntParam(I32, intCounter++, base, false);
+		list.add(lir.node(Op.SET, ADDR_TYPE, temp, ret.kid(0)));
+		
+		regArray.add(temp);
+	}
+
+	//for valiable number of arguments
+	String funcName = ( (LirSymRef)node.kid(0)).symbol.name;
+	
+	if(funcName.equals("printf"))	valiableArgs = 1;
+	else if(funcName.equals("fprintf"))	valiableArgs = 2;
+	else	valiableArgs = 0x7fffffff;	//non-valiable argument
+	
+	for (int i = 0; i < n; i++) {
+		LirNode arg = args.kid(i);
+
+		switch (Type.tag(arg.type)) {
+		case Type.INT:
+			if(Type.bytes(arg.type) <= INT_REGISTER_SIZE){
+				//simple integer
+				regNode = NextIntParam(arg.type, intCounter, base, false);
+				if(intCounter++ < INT_REGISTER_COUNT){
+					regArray.add(regNode);
+				}
+				
+				list.add(lir.node(Op.SET, arg.type, regNode, arg));
+			}else{
+				//complex integer
+				
+				if(intCounter < INT_REGISTER_COUNT && (intCounter & 1) == 0){
+					//similar to complex integer
+					int firstNum, secondNum;
+					
+					firstNum = intCounter + INT_START_REGISTER;
+					secondNum = firstNum + 1;
+					
+					regNode = regnode(arg.type, "%r" + firstNum +":" + secondNum);
+					regArray.add(regNode);
+					
+					list.add(lir.node(Op.SET, arg.type, regNode, arg));
+					intCounter += 2;
+
+//					System.out.println(regNode.toString());
+				}else{
+					//crack and set
+					for(int j = 1; j >= 0; j--){
+						regNode = NextIntParam(REG_TYPE, intCounter, base, false);
+						
+						if(intCounter++ < INT_REGISTER_COUNT){
+							regArray.add(regNode);
+						}
+						
+						list.add(lir.node(Op.SET, REG_TYPE, regNode,
+							lir.node(Op.SUBREG, REG_TYPE, arg, lir.untaggedIconst(I32, j))));
+					}
+				}
+			}
+			break;
+
+		case Type.FLOAT:
+			if(valiableArgs > i || isUnknownArg){
+				//ordinally function
+				regNode = NextFloatParam(arg.type, intCounter, floatCounter, base, false);
+				
+				if(floatCounter < FLOAT_REGISTER_COUNT)	regArray.add(regNode);
+				
+				if(!isUnknownArg)	intCounter += Type.bytes(arg.type) / INT_REGISTER_SIZE;
+				floatCounter++;
+				
+				list.add(lir.node(Op.SET, arg.type, regNode, arg));
+			}
+			
+			if(valiableArgs <= i || isUnknownArg){
+				//valiable argument
+				//pass to GENERAL register as DOUBLE precidion floating point
+				list.add(lir.node(Op.SET, F64,
+					NextStackParam(F64, intCounter, base, false),
+					lir.node(Op.CONVFX, F64, arg)));
+
+				for(int k  = FLOAT_REGISTER_SIZE / INT_REGISTER_SIZE; k > 0; k--){
+					//we can use general register, yet
+					if(intCounter < INT_REGISTER_COUNT){
+						regNode = NextIntParam(REG_TYPE, intCounter, base, false);
+						
+						regArray.add(regNode);
+						list.add(lir.node(Op.SET, REG_TYPE, regNode,
+							NextStackParam(REG_TYPE, intCounter, base, false)));
+					}
+					//or we already passed to stack
+					intCounter++;
+				}
+			}
+			break;
+
+		case Type.AGGREGATE:
+			{	//pass all the property of aggregate to general register(s)
+				int size = (Type.bytes(arg.type) + INT_REGISTER_SIZE - 1) / INT_REGISTER_SIZE;
+				
+				for(int k = 0; k < size; k++){
+					regNode = NextIntParam(REG_TYPE, intCounter, base, false);
+					if(intCounter++ < INT_REGISTER_COUNT)	regArray.add(regNode);
+					
+					list.add(lir.node(Op.SET, regNode.type, regNode,
+						lir.node(Op.MEM, regNode.type,
+							lir.node(Op.ADD, regNode.type, arg.kid(0),
+								lir.iconst(ADDR_TYPE, k * INT_REGISTER_SIZE)))));
+				}
+			}
+			break;
+
+		default:
+			throw new CantHappenException("Unexpected CALL parameter" + node);
+		}
+	}
+	
+	PowerPCAttr at = (PowerPCAttr)getFunctionAttr(func);
+	at.mHasCaller = true;
+
+	LirNode[] newargv = new LirNode[regArray.size()];
+	int j = 0;
+	
+	for(Iterator k = regArray.iterator(); k.hasNext();){
+		newargv[j++] = (LirNode)k.next();
+	}
+
+	try {
+		node = lir.node(Op.PARALLEL, Type.UNKNOWN, noRescan(lir.operator(Op.CALL, Type.UNKNOWN,
+			node.kid(0), lir.node(Op.LIST, Type.UNKNOWN, newargv), node.kid(2),
+			reta ? ImList.list("&reta", new Integer(Type.bytes(ret.type))) : ImList.list())),
+			lir.decodeLir(new ImList("CLOBBER", regCallClobbers), func, module));
+	} catch (SyntaxError e) {
+		throw new CantHappenException();
+	}
+	
+	pre.concatenate(list);
+
+	//the function has some return value
+	if (ret != null) {
+		switch (Type.tag(ret.type)) {
+		case Type.INT:
+			temp = func.newTemp(ret.type);
+			
+			if(Type.bytes(ret.type) <= INT_REGISTER_SIZE){
+				regNode = regnode(ret.type, "%r3");
+			}else{
+				regNode = regnode(ret.type, "%r3:4");
+			}
+
+			post.add(lir.node(Op.SET, ret.type, temp, regNode));
+			post.add(lir.node(Op.SET, ret.type, ret, temp));
+			node.kid(0).kid(2).setKid(0, regNode);
+			break;
+
+		case Type.FLOAT:
+			regNode = regnode(ret.type, "%f1");
+			temp = func.newTemp(ret.type);
+
+			post.add(lir.node(Op.SET, ret.type, temp, regNode));
+			post.add(lir.node(Op.SET, ret.type, ret, temp));
+			node.kid(0).kid(2).setKid(0, regNode);
+			break;
+
+		case Type.AGGREGATE:
+			//aggregate value has already passed to address
+			break;
+		}
+	}
+
+	return node;
+}
+
+ 
+/** Return offset for va_start position. **/
+LirNode makeVaStart(LirNode arg)
+{
+	System.out.println("hoge");
+
+	PowerPCAttr at = (PowerPCAttr)getFunctionAttr(func);
+	LirNode node = null;
+	
+	for (BiLink p = func.firstInstrList().first(); !p.atEnd(); p = p.next()) {
+		node = (LirNode)p.elem();
+		if (node.opCode == Op.PROLOGUE)	break;
+	}
+	
+	int i, n, head;
+	
+	//find the variable argument's start register
+	n = node.nKids();
+	head = 0;
+	for (i = 1; i < n; i++) {
+		LirNode x = node.kid(i); 
+		
+		head += (Type.bytes(x.type) + INT_REGISTER_SIZE - 1) / INT_REGISTER_SIZE;
+		if (equalArg(arg, x))	break;
+	}
+	
+	//it may be error 
+	if(i == n)	return at.GetArgumentSP();
+	
+	//obtain valiable argument's head address
+	at.mVarArgHeader = i;
+	return lir.node(Op.ADD, ADDR_TYPE, at.GetArgumentSP(),
+		lir.iconst(I32, (head - INT_START_REGISTER) * INT_REGISTER_SIZE + LINK_AREA_SIZE));
+}
+
+
+boolean equalArg(LirNode x, LirNode y)
+{
+	if (x.opCode == Op.MEM)	x = x.kid(0);
+	if (y.opCode == Op.MEM)	y = y.kid(0);
+
+	return ((LirSymRef)x).symbol == ((LirSymRef)y).symbol;
+}
+
+
+//=====cracking the node=====//
+/////rewrite symbol access/////
+LirNode rewriteSTATIC_1(LirNode iNode, BiList pre)
+{
+	LirNode addr = rewriteSTATIC_Low((LirSymRef)iNode.kid(0), pre);
+	return lir.node(iNode.opCode, iNode.type, addr);
+}
+
+
+LirNode rewriteSTATIC_2(LirNode iNode, BiList pre)
+{
+	LirNode left, right;
+
+	left = iNode.kid(0);
+	right = iNode.kid(1);
+	
+	if(left.opCode == Op.STATIC)	left = rewriteSTATIC_Low( (LirSymRef)left, pre);
+	if(right.opCode == Op.STATIC)	right = rewriteSTATIC_Low( (LirSymRef)right, pre);
+
+	return lir.node(iNode.opCode, iNode.type, left, right);
+}
+
+
+/////modulate to division, multiply and subtraction/////
+LirNode rewriteMOD(LirNode base, BiList pre, boolean iIsSigned)
+{
+	LirNode div, mul, divisor;
+	
+	divisor	= base.kid(1);
+	if(divisor.opCode == Op.INTCONST){
+		LirIconst iConst = (LirIconst)divisor;
+
+		if(iIsSigned){
+			//we can make some code to obtain signed integer of power of 2...
+		}else{
+			//we can rewrite to AND
+			if(iConst.value != 0 && (iConst.value & -iConst.value) == 0){
+				return lir.node(Op.BAND, base.type,
+					base.kid(0), lir.iconst(iConst.type, iConst.value - 1));
+			}
+		}
+	}
+
+	div = ToRegister(base.kid(1), pre);
+	mul = ToRegister(base.kid(0), pre);
+	
+	return lir.node(Op.SUB, base.type, mul,
+		lir.node(Op.MUL, base.type, lir.node(iIsSigned ? Op.DIVS : Op.DIVU, base.type, mul, div), div));
+}
+
+
+/////crack the evaluation with 32bit imidiate value/////
+LirNode rewriteEvalImidiate32(LirNode base, BiList pre)
+{
+	LirNode reg, iconst, temp;
+	LirIconst iConst;
+	int firstOp, nextOp;
+	boolean isSigned;
+	
+	reg = base.kid(0);
+	iconst = base.kid(1);
+	iConst = (LirIconst)iconst;
+	
+	firstOp = base.opCode;
+	isSigned = false;
+	
+	switch(base.opCode){
+	case Op.ADD:
+		isSigned = true;
+		nextOp = Op.SUB;
+		break;
+		
+	case Op.SUB:
+		isSigned = true;
+		nextOp = Op.ADD;
+		break;
+
+	default:
+		nextOp = base.opCode;
+		break;
+	}
+	
+	//if the value was not 32bit imidiate, nothing is done
+	if(CheckMust32bit(base.opCode == Op.SUB ? -iConst.value : iConst.value, isSigned) == false){
+		return noRescan(base);
+	}
+	
+	//needed to crack
+	long upper, lower;
+	upper = iConst.value & 0xffff0000;
+	lower = iConst.value & 0xffff;
+	
+	//when the imidiate is signed value, lower 16bit value's highest bit is sign.
+	//So there would be some complex
+	if(isSigned && (lower & 0x8000) != 0){
+//		upper = 0x00010000 + upper;
+//		lower = 0x00010000 - lower;
+//->
+//ADD	output = (reg + upper) - lower
+//SUB	output = (reg - upper) + lower
+
+		upper += 0x10000;
+		lower = 0x10000 - lower;
+	}else{
+		nextOp = firstOp;
+	}
+	
+	temp = ToRegister(reg, pre);
+	pre.add(lir.node(Op.SET, base.type, temp,
+		lir.node(firstOp, base.type, temp,
+			lir.iconst(iconst.type, upper))));
+	
+	return lir.node(nextOp, base.type, temp, lir.iconst(iconst.type, lower));
+}
+
+
+/////rewrite conversion from floating point to fixed point/////
+LirNode rewriteCONVFI(LirNode base, boolean iSigned, BiList pre, BiList post)
+{
+	LirNode srcReg, toStore, temp, output, condition;
+	
+	srcReg = ToRegister(lir.node(Op.CONVFX, F64, base.kid(0)), pre);
+	toStore = func.newTemp(F64);
+	temp = GainConvertionFrame();
+	condition = null;
+
+	if(!iSigned){
+		//+++++WE MUST USE the instruction 'fsel'
+		LirNode fr0, fr1, fr2, fr3, fr4, fr5, cond2;
+		long max, min;
+		Label succ, fail;
+		
+		max = 0xffff;
+		max |= max << 16;
+		min = 0x8000;
+		min <<= 16;
+		
+		fr0 = ToRegister(lir.fconst(F64, 0), pre);
+		fr1 = srcReg;
+		fr3 = ToRegister(lir.fconst(F64, (double)max), pre);
+		fr4 = ToRegister(lir.fconst(F64, (double)min), pre);
+		
+		//if(x < 0) x = 0;
+/*
+		//selection code
+		fr2 = lir.node(Op.IF, F64, lir.node(Op.TSTGES, F64, fr1, fr0), fr1, fr0);
+/*/
+		//branch code
+		succ = func.newLabel();
+		fail = func.newLabel();
+		
+		condition = ToRegister(lir.node(Op.CONVIT, I4, lir.node(Op.TSTGES, F64, fr1, fr0)), pre);
+		fr2 = func.newTemp(F64);
+		pre.add(lir.node(Op.SET, F64, fr2, fr0));
+		cond2 = ToRegister(lir.node(Op.CONVIT, I4, lir.node(Op.TSTGES, F64, fr1, fr3)), pre);
+		
+		pre.add(lir.node(Op.JUMPC, 0, lir.node(Op.TSTGES, I4, condition,
+			lir.iconst(I4, 0)), lir.labelRef(succ), lir.labelRef(fail)));
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(succ)));
+		pre.add(lir.node(Op.SET, F64, fr2, fr1));
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(fail)));
+//*/
+		//if(x > 0xffffffff) x = 0xffffffff
+/*
+		fr2 = ToRegister(lir.node(Op.IF, F64, lir.node(Op.TSTGES, F64, fr3, fr1), fr2, fr3), pre);
+/*/
+		succ = func.newLabel();
+		fail = func.newLabel();
+
+		pre.add(lir.node(Op.JUMPC, 0, lir.node(Op.TSTGES, I4, cond2,
+			lir.iconst(I4, 0)), lir.labelRef(succ), lir.labelRef(fail)));
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(succ)));
+		pre.add(lir.node(Op.SET, F64, fr2, fr3));
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(fail)));
+//*/
+		condition = ToRegister(lir.node(Op.CONVIT, I4, lir.node(Op.TSTLTS, F64, fr2, fr4)), pre);
+		fr5 = ToRegister(lir.node(Op.SUB, F64, fr2, fr4), pre);
+/*
+		fr2 = lir.node(Op.IF, F64, lir.node(Op.TSTGES, F64, fr5, fr0), fr5, fr2);
+/*/
+		succ = func.newLabel();
+		fail = func.newLabel();
+		
+		pre.add(lir.node(Op.JUMPC, 0, lir.node(Op.TSTGES, I4, condition,
+			lir.iconst(I4, 0)), lir.labelRef(succ), lir.labelRef(fail)));
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(succ)));
+		pre.add(lir.node(Op.SET, F64, fr5, fr2));
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(fail)));
+		
+		fr2 = fr5;
+//*/
+		srcReg = fr2;
+	}
+	
+	//pass the integer with memory
+	pre.add(lir.node(Op.SET, F64, toStore, noRescan(lir.node(Op.CONVFS, I32, srcReg))));
+	pre.add(lir.node(Op.SET, F64, lir.node(Op.MEM, F64, temp), toStore));
+	
+	output = lir.node(iSigned ? Op.CONVSX : Op.CONVZX, base.type,
+		ToRegister(lir.node(Op.MEM, I32, lir.node(Op.ADD, ADDR_TYPE, temp,
+			lir.iconst(ADDR_TYPE, 4 + 4 - Type.bytes(base.type)))), pre));
+	
+	if(!iSigned){
+		Label exe, skip;
+		exe = func.newLabel();
+		skip = func.newLabel();
+		
+		output = ToRegister(output, pre);
+		
+		pre.add(lir.node(Op.JUMPC, 0, lir.node(Op.TSTLTS, I4, condition, lir.iconst(I4, 0)),
+			lir.labelRef(exe), lir.labelRef(skip)));
+		
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(exe)));
+		pre.add(lir.node(Op.SET, output.type, output,
+			lir.node(Op.BXOR, output.type, output, lir.iconst(I32, 0x80000000))));
+		pre.add(lir.node(Op.DEFLABEL, ADDR_TYPE, lir.labelRef(skip)));
+	}
+	
+	return output;
+}
+
+
+/////conversion from fixed point to floating point/////
+LirNode rewriteCONVF(LirNode base, BiList pre, boolean iSign)
+{
+	LirNode srcReg, destMem, out;
+	srcReg = base.kid(0);
+	destMem = GainConvertionFrame();
+	
+	if(iSign){
+		//switch the sign bit
+		long xValue = 0x8000;
+		srcReg = lir.node(Op.BXOR, I32, srcReg, lir.iconst(I32, xValue << 16));
+	}
+
+	//store upper (constant) integer
+	pre.add(lir.node(Op.SET, I32,
+		lir.node(Op.MEM, ADDR_TYPE, destMem), lir.iconst(I32, 0x43300000)));
+	
+	//store the number which is the target of conversion
+	pre.add(lir.node(Op.SET, I32,
+		lir.node(Op.MEM, I32,
+			lir.node(Op.ADD, ADDR_TYPE, destMem, lir.iconst(I32, 4))), srcReg));
+
+	out = lir.node(Op.SUB, F64,
+		ToRegister(lir.node(Op.MEM, F64, destMem), pre),
+			lir.node(Op.CONVFX, F64,
+				lir.fconst(F32, Float.intBitsToFloat(iSign ? 0x59800004 : 0x59800000))));
+
+	if(base.type == F32)	return lir.node(Op.CONVFT, F32, ToRegister(out, pre));
+	return out;
+}
+
+
+LirNode rewriteJUMPC(LirNode iNode, BiList pre)
+{
+	if(iNode.kid(0).type == I4)	return iNode;
+	
+	LirNode temp, left, right;
+	
+	temp = iNode.kid(0);
+	left = temp.kid(0);
+	right = temp.kid(1);
+
+	temp = ToRegister(lir.node(Op.CONVIT, I4, temp), pre);
+	return lir.node(Op.JUMPC, iNode.type,
+		lir.node(iNode.kid(0).opCode, I4, temp, lir.iconst(I4, 0)),
+		iNode.kid(1), iNode.kid(2));
+}
+
+
+/////rewrite mask evalation///// 
+LirNode rewriteMask(LirNode iNode)
+{
+	int opCode, maskNum, shiftNum;
+	LirNode op, reg, mask, shift, output;
+	
+	output = iNode;
+	
+	op = iNode.kid(0);
+	mask = iNode.kid(1);
+	
+	reg = op.kid(0);
+	shift = op.kid(1);
+	
+	opCode = op.opCode;
+	
+	maskNum = (int)( (LirIconst)mask).value;
+	shiftNum = (int)( (LirIconst)shift).value;
+	
+	switch(op.opCode){
+	case Op.LSHS:
+		maskNum = maskNum >>> shiftNum;
+
+		// rewrite is not permitted if mask has continuous bits. //##64
+		//mask has some crack. we can't rewrite
+		if(!IsRotateMask(maskNum))	return iNode;
+		
+		//similar to shift left
+		if(maskNum == (1 << 32 - shiftNum) - 1)	return lir.node(Op.LSHS, I32, reg, shift);
+		break;
+	
+	case Op.RSHS:
+		//mask has influence in the sign bit. we cannot rewrire
+		if( (maskNum & ~( (1 << (32 - shiftNum)) - 1)) != 0)	return iNode;
+		
+		opCode = Op.RSHU;
+	case Op.RSHU:
+		maskNum = maskNum << shiftNum;
+		if(!IsRotateMask(maskNum))	return iNode;
+
+		//similar to logical shift right
+		if(~maskNum == (1 << shiftNum) - 1)	return lir.node(Op.RSHU, I32, reg, shift);
+		break;
+	}
+	
+	return lir.node(opCode, I32, lir.node(Op.BAND, I32, reg, lir.iconst(I32, maskNum)), shift);
+}
+
+
+LirNode rewriteRSHSMask(LirNode iNode)
+{
+	LirNode mask;
+	
+	mask = iNode.kid(0).kid(1);
+	
+	if( ( (LirIconst)mask).value < 0)	return noRescan(iNode);
+	return lir.node(Op.RSHU, I32, iNode.kid(0), iNode.kid(1));
+}
+
+
+LirNode swapLeftRight(LirNode iNode)
+{
+	return lir.node(iNode.opCode, iNode.type, iNode.kid(1), iNode.kid(0));
+}
+
+
+LirNode orderForMask(LirNode iNode)
+{
+	LirNode first, second, third, swap;
+
+	first = iNode.kid(0);
+	if(first.opCode == Op.BOR){
+		second = first.kid(0);
+		third = first.kid(1);
+		first = iNode.kid(1);
+	}else{
+		second = iNode.kid(1);
+		third = second.kid(1);
+		second = second.kid(0);
+	}
+
+	if(first.opCode != Op.BAND){
+		if(second.opCode == Op.BAND){
+			swap = second;
+			second = first;
+			first = swap;
+		}else{
+			swap = third;
+			third = first;
+			third = swap;
+		 }
+	}
+	
+	switch(InOrderMask(first, second, third)){
+	case 0:	//third | (first | second)
+		iNode = lir.node(Op.BOR, I32, third, lir.node(Op.BOR, I32, first, second));
+		break;
+		
+	case 1:	//second | (first | third)
+		iNode = lir.node(Op.BOR, I32, second, lir.node(Op.BOR, I32, first, third));
+		break;
+		
+	case 2:	//first | (second | third)
+		iNode = lir.node(Op.BOR, I32, first, lir.node(Op.BOR, I32, second, third));
+		break;
+	}
+
+	return noRescan(iNode);
+}
+
+
+/////if the AND node had the OR node whose souces were shift left and logical shift right,
+//	rewrite to rotate shift and mask/////
+LirNode transmissonAND(LirNode iNode)
+{
+	LirNode left, right;
+	LirIconst leftSh, rightSh, mask;
+	
+	left = iNode.kid(0).kid(0);
+	right = iNode.kid(0).kid(1);
+	mask = (LirIconst)iNode.kid(1);
+	
+	leftSh = (LirIconst)left.kid(1);
+	rightSh = (LirIconst)right.kid(1);
+	
+	if(!left.kid(0).equals(right.kid(0)) || leftSh.value + rightSh.value != 32 || !IsRotateMask(mask.value)){
+		return noRescan(iNode);
+	}
+	
+	return lir.node(Op.BOR, I32,
+		lir.node(Op.BAND, I32, left, mask),
+		lir.node(Op.BAND, I32, right, mask));
+}
+
+
+/////conversion from alithmetic shift right with valiable to logical shift right/////
+LirNode regRightShiftSigned(LirNode iNode)
+{
+	long sub;
+	LirNode left, right;
+	
+	left = iNode.kid(0);
+	right = iNode.kid(1);
+	
+	//if there were no mask, we can't convert this
+	sub = ( (LirIconst)right.kid(1)).value;
+	switch(right.opCode){
+	case Op.ADD:
+		sub = -sub;
+	case Op.SUB:
+		if(sub != 1)	return noRescan(iNode);
+		break;
+	}
+	
+	right = right.kid(0);
+	
+	//to create mask, operation must use '1'
+	//shift valiable must equals to the valiable used to create mask
+	if( ( (LirIconst)right.kid(0)).value != 1 || !left.kid(1).equals(right.kid(1)))	return noRescan(iNode);
+	
+	//conversion to logical shift right
+	return lir.node(Op.RSHU, I32, left.kid(0), left.kid(1));
+}
+
+
+/////convert GPR to vector/////
+LirNode Reg2Vector(LirNode iNode, BiList pre)
+{
+	LirNode src, dest, mem;
+	
+	dest = iNode.kid(0);
+	src = iNode.kid(1);
+	mem = GainVecConvertionFrame();
+	
+	pre.add(lir.node(Op.SET, src.type, lir.node(Op.MEM, src.type, mem), src));
+	pre.add(lir.node(Op.SET, src.type, dest, lir.node(Op.MEM, src.type, mem)));
+
+	return lir.node(Op.SET, src.type, src, src);
+}
+
+
+/////convert vector to GPR/////
+LirNode Vector2Reg(LirNode iNode, BiList pre)
+{
+	LirNode src, dest, mem;
+	
+	dest = iNode.kid(0);
+	src = iNode.kid(1).kid(0);
+	mem = GainVecConvertionFrame();
+	
+	pre.add(lir.node(Op.SET, I128, lir.node(Op.MEM, I128, mem), src));
+	pre.add(lir.node(Op.SET, dest.type, dest, lir.node(Op.MEM, dest.type, mem)));
+
+	return lir.node(Op.SET, dest.type, dest, dest);
+}
+
+
+/////check whether the value can use as rotate-shift-and-mask/////
+static public boolean IsRotateMask(long iValue)
+{
+	int value, allCount, rightCount;
+	boolean rightBit;
+	
+	value = (int)iValue;
+	if(value == 0)	return false;
+	
+	/////k & -k
+	//this is the evaluation to obtain lowest '1' bit
+	
+	//count '1' bit
+	allCount = 0;
+	for(int k = value; k != 0; k = k & ~(k & -k)){
+		allCount++;
+	}
+	
+	//count the same value bit from the highest
+	rightBit = (value & 1) != 0;
+	if(rightBit)	value = ~value;
+
+	rightCount = 0;
+	for(int k = value & -value; (k & value) != 0; k <<= 1){
+		rightCount++;
+	}
+	
+	//'1'bit is not equivalent, we cannot make mask.
+	return (rightBit ? 32 - rightCount : rightCount) == allCount;
+}
+
+
+static int InOrderMask(LirNode iFirst, LirNode iSecond, LirNode iThird)
+{
+	//first	...	(x & ~mask)
+	//second/third...	(y & maskA/maskB)
+	LirNode reg2, reg3;
+	int mask1, mask2, mask3, sh2, sh3;
+
+	reg2 = iSecond.kid(0);
+	reg3 = iThird.kid(0);
+	mask2 = mask3 = 0;
+	
+	//this is not mask. failure
+	if(!(iFirst.kid(1) instanceof LirIconst) || !IsRotateMask( ( (LirIconst)iFirst.kid(1)).value))	return 2;
+	
+	/////if the shift value was valiable, failure
+	if(!(iSecond.kid(1) instanceof LirIconst))	return 1;
+	if(!(iThird.kid(1) instanceof LirIconst))	return 0;
+	
+	//make mask of second
+	mask2 = -1;
+	sh2 = (int)( (LirIconst)iSecond.kid(1)).value;
+
+	if(reg2.opCode == Op.BAND){
+		//obtain register in AND node.
+		//if 2nd source of AND node couldn't be mask, failure
+		if(!(reg2.kid(1) instanceof LirIconst))	return 1;
+
+		mask2 = (int)( (LirIconst)reg2.kid(1)).value;
+		reg2 = reg2.kid(0);
+	}
+	
+	switch(iSecond.opCode){
+	case Op.LSHS:
+		mask2 <<= sh2;
+		break;
+		
+	case Op.RSHU:
+		mask2 >>>= sh2;
+		sh2 = 32 - sh2;
+		break;
+	}
+	
+	if(!IsRotateMask(mask2))	return 1;
+
+	//create 3rd mask
+	mask3 = -1;
+	sh3 = (int)( (LirIconst)iThird.kid(1)).value;
+
+	//similar to 2nd mask
+	if(reg3.opCode == Op.BAND){
+		if(!(reg3.kid(1) instanceof LirIconst))	return 0;
+
+		mask3 = (int)( (LirIconst)reg3.kid(1)).value;
+		reg3 = reg3.kid(0);
+	}
+	
+	switch(iThird.opCode){
+	case Op.LSHS:
+		mask3 <<= sh3;
+		break;
+		
+	case Op.RSHU:
+		mask3 >>>= sh3;
+		sh3 = 32 - sh3;
+		break;
+	}
+	
+	if(!IsRotateMask(mask3))	return 0;
+	
+	//test whether we can convert the node to rotate shift, mask and insertion.
+	mask1 = (int)( (LirIconst)iFirst.kid(1)).value;
+	
+	//failure if mask was not continued or register was not the same
+	if(~mask1 != (mask2 | mask3) || sh2 != sh3 ||  !IsRotateMask(mask2 | mask3) || !reg2.equals(reg3)){
+		if(mask1 == ~mask2)	return 0;
+		if(mask1 == ~mask3)	return 1;
+	}
+	
+	return 2;
+}
+
+
+static long ObtainValue(LirNode iNode)
+{
+	return ( (LirIconst)iNode).signedValue();
+}
+
+
+//=====Other Utilities=====//
+/////make symbol access operation/////
+LirNode rewriteSTATIC_Low(LirSymRef iSym, BiList pre)
+{
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+	LirNode output;
+
+	//(for 32bit mode)
+	//upper 16bit
+	if(attr.mGlobalTemp == null){
+		attr.mGlobalTemp = func.newTemp(ADDR_TYPE);
+		attr.mAddressLabel = func.newLabel();
+	}
+	
+	output = ToRegister(lir.node(Op.ADD, ADDR_TYPE, attr.mGlobalTemp,
+				lir.node(Op.BAND, ADDR_TYPE, iSym, lir.iconst(ADDR_TYPE, -65536))), pre);
+	
+	output = lir.node(Op.ADD, ADDR_TYPE, output,
+		//lower 16bit
+		lir.node(Op.BAND, ADDR_TYPE, iSym, lir.iconst(ADDR_TYPE, 0xffff)));
+	
+	//external symbol needs to load address
+	if(PowerPCAttr.CheckSymbolType(iSym.symbol.name,
+			EXTERNAL_VALIABLE | EXTERNAL_FUNCTION |
+				INTERNAL_FUNCTION | EXTERNAL_CONSTANCE)){
+		output = lir.node(Op.MEM, ADDR_TYPE, output);
+		
+		if(!gAccessor.contains(iSym.symbol))	gAccessor.add(iSym.symbol);
+	}
+	
+	return output;
+}
+
+
+/////whether iValue needs 32bit/////
+boolean CheckMust32bit(long iValue, boolean iIsSigned)
+{
+	long upper, lower;
+	
+	upper = iValue & 0xffff0000;
+	lower = iValue & 0xffff;
+	
+	//signed value has sign bit
+	if(iIsSigned){
+		if(upper == 0xffff0000)	return (lower & 0x8000) == 0;
+		if(upper == 0)	return (lower & 0x8000) != 0;
+	}
+
+	//unsigned value is simple
+	return upper != 0 && lower != 0;
+}
+
+
+/////returns the number converted to mask/////
+//in	iValue	converted number
+//
+//return	lowest 5bit	4th argument of rotate and mask instruction(s)
+//		next higher 5bit	3rd argument of rotate and mask instruction(s)
+int ObtainMask(int iValue)
+{
+	boolean outsider;
+	int first, second;
+
+	//true if the mask had highest and lowest bit mask
+	outsider = ( (iValue & 0x1) != 0) && ( (iValue & (1 << 31)) != 0);
+	
+	//find '0' bit range if the mask was outside mask
+	//find the 1st bit
+	for(first = 0; first < 31; first++){
+		long mask;
+		
+		mask = iValue & (1 << 31 - first);
+		if(outsider){
+			if(mask == 0)	break;
+		}else if(mask != 0)	break;
+	}
+	
+	//find last bit
+	for(second = first; second < 32; second++){
+		long mask;
+		
+		mask = iValue & (1 << 31 - second);
+		if(outsider){
+			if(mask != 0)	break;
+		}else if(mask == 0)	break;
+	}
+	
+	return outsider ? (second << 5 | first - 1) : (first << 5 | second - 1);
+}
+
+
+/////returns REG node if iReg is not REG node/////
+LirNode ToRegister(LirNode iReg, BiList iOut)
+{
+	if(iReg.opCode == Op.REG)	return iReg;
+
+	LirNode temp = func.newTemp(iReg.type);
+	iOut.add(lir.node(Op.SET, iReg.type, temp, iReg));
+	
+	return temp;
+}
+
+
+/////returns address used to convert floating point and integer/////
+LirNode sConvertionFrame = null;
+LirNode sVecConvertionFrame = null;
+
+LirNode GainConvertionFrame()
+{
+	if(sConvertionFrame == null)	sConvertionFrame = NewTempInFrame(F64, 8);
+	return sConvertionFrame;
+}
+
+
+LirNode GainVecConvertionFrame()
+{
+	if(sVecConvertionFrame == null)	sVecConvertionFrame = NewTempInFrame(I32, 16);
+	return sVecConvertionFrame;
+}
+
+
+/////allocate local memory in stack frame/////
+int sTempFrameNumber = 0;
+
+LirNode NewTempInFrame(int iType, int iBoundary)
+{
+	return lir.symRef(func.addSymbol(".T" + sTempFrameNumber++ +
+		"F%", Storage.FRAME, iType, iBoundary, 0, null));
+}
+
+
+/*
+ * Code building macros.
+ */
+
+/////make instruction for loading 32bit imidiate integer/////
+%defbuild(liw dest src)
+{
+	return ComputeImidiate(dest, src);
+}
+
+
+/////make instruction for loading 64bit imidiate integer/////
+%defbuild(lidi dest_hi dest_lo src)
+{	//for 32bit mode...
+	long dw;
+	ImList low;
+
+	dw = Long.parseLong(src.toString());
+	
+	low = ComputeImidiate(dest_lo, Integer.toString( (int)dw));
+	return low.append(ComputeImidiate(dest_hi, Integer.toString( (int)(dw >> 32))));
+}
+
+
+%defbuild(alt_rlwimi dest src1 src2 mask)
+{
+	ImList list = null;
+	boolean mr = false;
+	int maskValue = Integer.parseInt(mask.toString());
+	
+	if(!dest.equals(src1)){
+		//src1 becomes input register if src2 was output register
+		if(dest.equals(src2)){
+			src2 = src1;
+			maskValue = ~maskValue;
+		}else{
+			//none of two are output register, we must copy
+			mr = true;
+		}
+	}
+	
+	maskValue = ObtainMask(maskValue);
+	list = new ImList("rlwimi", new ImList(dest, new ImList(src2, new ImList("0",
+		new ImList(Integer.toString(maskValue >> 5), new ImList(Integer.toString(maskValue & 0x1f)))))));
+
+	if(mr)	return ImList.list(ImList.list("mr", dest, src1), list);
+	return ImList.list(list);
+}
+
+
+//=====for vector=====//
+%defbuild(_gpr2vector_mem dest)
+{
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+	
+	return ComputeImidiate(dest, Integer.toString(attr.mVecConv));
+}
+
+
+/* Code emission macros.
+ *  Patterns not defined below will be converted to:
+ *   (foo bar baz) --> foo   bar,baz   or foo(bar,baz)
+ */
+%defemit(_crmove x y)
+{
+	if(x.equals(y))	return "";
+	return "crmove," + x + "," + y;
+}
+
+
+%defemit(_crtype cr type)
+{
+	int num;
+	String out = "";
+	
+	num = Integer.parseInt(cr.substring(2)) * 4;
+	
+	if(type.equals("eq"))		num += 2;	//equevalent
+	else if(type.equals("lt"))	num += 0;	//lesser than
+	else if(type.equals("gt"))	num += 1;	//greater than
+	else if(type.equals("ov"))	num += 3;	//overflow
+	return Integer.toString(num);
+}
+
+
+%defemit(_hiword reg)
+{
+	return reg.substring(reg.indexOf('r'), reg.indexOf(':'));
+}
+
+
+%defemit(_loword reg)
+{
+	return "r" + reg.substring(reg.indexOf(':') + 1);
+}
+
+
+%defemit(mem_1 reg)
+{
+	int next;
+	next = reg.indexOf(',');
+	
+	if(next >= 0){
+		//2 register access
+		reg = reg.substring(0, next);
+		
+		if(reg.equals("0"))	return "r0";
+		return reg;
+	}
+	
+	//access with register and imidiate
+	if(reg.indexOf('(') >= 0)	return reg.substring(0, reg.indexOf('(') - 1);
+	return reg;
+}
+
+
+%defemit(mem_2 reg)
+{
+	int next;
+	next = reg.indexOf(',');
+	
+	if(next >= 0){
+		//2 register access
+		reg = reg.substring(next + 1);
+		
+		if(reg.equals("0"))	return "r0";
+		return reg;
+	}
+	
+	//access with register and imidiate
+	if(reg.indexOf("(0)") >= 0)	return "r0";
+	if(reg.indexOf('(') >= 0)	return reg.substring(reg.indexOf('(') + 1, reg.indexOf(')'));
+	return reg;
+}
+
+ 
+%defemit(mem+ x y)
+{
+	if(x.equals("r0"))	x = "0";
+	return y + "(" + x + ")";
+}
+
+
+%defemit(reg_mem+ x y)
+{
+	if(x.equals("r0"))	x = "0";
+	return x + "," + y;
+}
+
+
+%defemit(addi_or_li out reg imi)
+{
+	if(reg.equals("r0") || reg.equals("0"))	return "\tli\t" + out + "," + imi;
+	return "\taddi\t" + out + "," + reg + "," + imi;
+}
+
+
+%defemit(+ x y)
+{
+	return Long.toString(Long.parseLong(x) + Long.parseLong(y));
+}
+
+
+%defemit(- x y)
+{
+	return Long.toString(Long.parseLong(x) - Long.parseLong(y));
+}
+
+
+%defemit(& x y)
+{
+	return Long.toString(Long.parseLong(x) & Long.parseLong(y));
+}
+
+
+%defemit(| x y)
+{
+	return Long.toString(Long.parseLong(x) | Long.parseLong(y));
+}
+
+
+%defemit(~ x)
+{
+	return Long.toString(~Long.parseLong(x));
+}
+
+
+%defemit(<< x y)
+{
+	return Long.toString(Long.parseLong(x) << Long.parseLong(y));
+}
+
+
+%defemit(>>> x y)
+{
+	return Long.toString(Long.parseLong(x) >>> Long.parseLong(y));
+}
+
+
+%defemit(>> x y)
+{
+	return Long.toString(Long.parseLong(x) >> Long.parseLong(y));
+}
+
+
+%defemit(power2 x)
+{
+	long num = Long.parseLong(x);
+	long k;
+
+	for(k = 0; (num & (1 << k)) == 0; k++){}
+	return Long.toString(k);
+}
+
+
+/////mask/////
+%defemit(_rlwMask x y)
+{
+	int mask = ObtainMask(Integer.parseInt(y));
+	return x + "," +  (mask >> 5) + "," + (mask & 0x1f);
+}
+
+
+%defemit(_mergeMask lm ls rm rs)
+{
+	int leftMask, leftSh, rightMask, rightSh;
+	
+	leftMask = Integer.parseInt(lm);
+	leftSh = Integer.parseInt(ls);
+	rightMask = Integer.parseInt(rm);
+	rightSh = Integer.parseInt(rs);
+	
+	if(leftMask == 0)	leftMask = ~((1 << leftSh) - 1);
+	else	leftMask <<= leftSh;
+	
+	if(rightMask == 0)	rightMask = (1 << 32 - rightSh) - 1;
+	else	rightMask >>>= rightSh;
+	
+	return Integer.toString(leftMask | rightMask);
+}
+
+
+/////put label for symbol access
+%defemit(indirect_jump_label symbol_name)
+{
+	return symbol_name + ":";
+}
+
+
+//=====overriding instruction=====//
+/////for scheduling prologue/epilogue procedure/////
+static class StructureScheduler{
+	boolean mIsConstruction;
+	int mSavePoint;
+	ArrayList mInstList;
+	ArrayList mRegList;
+	ArrayList mSPList;
+
+	static class Instruction{
+		final int mType;	//instruction type
+		final int mPlace;	//relative address from last stack frame pointer(if the number was 0, SP doesn't have relation)
+		final String mInst;	//instruction
+		
+		Instruction(int iType, String iInst, int iPlace){
+			mType = iType;
+			mPlace = iPlace;
+			mInst = iInst;
+		}
+	};
+	
+	static final int OTHER_INSTRUCTION = 0,
+		SP_MOVE_INSTRUCTION = 1,
+		INT_INSTRUCTION = 2,
+		FLOAT_INSTRUCTION = 3,
+		VECTOR_INSTRUCTION = 4,
+		LOAD_STORE_INSTRUCTION = 5;
+	
+	StructureScheduler(boolean iConst){
+		mInstList = new ArrayList();
+		mRegList = new ArrayList();
+		mSPList = new ArrayList();
+		mSavePoint = 0;
+		mIsConstruction = iConst;
+	}
+	
+	void AddRegister(String iRegName, int iRegSize){
+		//adjust alignment
+		if( (mSavePoint & (iRegSize- 1)) != 0){
+			mSavePoint = (mSavePoint + iRegSize - 1) & ~(iRegSize - 1);
+		}
+		
+		mSavePoint += iRegSize;
+		
+		int instType;
+		String instName;
+		
+		switch(iRegName.charAt(0)){
+		case 'r':
+			//general purpose register
+			if(INT_REGISTER_SIZE == 4){
+				instName = (mIsConstruction ? "\tstw\t" : "\tlwz\t");
+			}else{
+				instName = (mIsConstruction ? "\tstd\t" : "\tld\t");
+			}
+			
+			instType = INT_INSTRUCTION;
+			break;
+
+		case 'f':
+			//floating point register
+			instName = (mIsConstruction ? "\tstfd\t" : "\tlfd\t");
+			instType = FLOAT_INSTRUCTION;
+			break;
+
+		case 'v':
+			//vector register
+			instName = (mIsConstruction ? "\tstvx\t" : "\tlvx\t");
+			instType = VECTOR_INSTRUCTION;
+			break;
+		
+		default:
+			return;
+		}
+		
+		instName += iRegName + ",";
+		mRegList.add(new Instruction(instType, instName, mSavePoint));
+	}
+	
+	void AddRegisterInstruction(int iType, String iInst, int iPlace){
+		mRegList.add(new Instruction(iType, iInst, iPlace));
+	}
+	
+	void AddInstruction(int iType, String iInst, int iPlace){
+		mInstList.add(new Instruction(iType, iInst, iPlace));
+	}
+	
+	void AddSPInstruction(int iType, String iInst, int iPlace){
+		mSPList.add(new Instruction(iType, iInst, iPlace));
+	}
+	
+	String Output(String iNextSP, int iDiffSP){
+		String sp;
+		String output = "";
+		int diff;
+		int counter = 0;
+		
+		if(mIsConstruction){
+			//prologue
+			diff = 0;
+			sp = "r1";
+			
+			if(RED_ZONE_SIZE >= mSavePoint){
+				//save area would'nt excess RED ZONE. So we can move stack frame pointer last
+				mRegList.addAll(mSPList);
+				mSPList = new ArrayList();
+			}
+		}else{
+			//epilogue
+			diff = iDiffSP;
+			sp = iNextSP;
+			iDiffSP = 0;
+			iNextSP = "r1";
+			
+			//stack frame pointer moved with r11. we must compute before save
+			while(mSPList.size() > 1){
+				Instruction inst = (Instruction)mSPList.get(0);
+				mSPList.remove(0);
+				
+				output += inst.mInst + "\n";
+			}
+		}
+		
+		//put all instructions : stack pointer, special purpose registers, non-volatile registers' procesure
+		while(!mSPList.isEmpty() || !mInstList.isEmpty() || !mRegList.isEmpty()){
+			ArrayList nextList;
+			
+			if(mIsConstruction){
+				//prologue
+				if(!mSPList.isEmpty() && (counter++ & 0x1) == 0){
+					nextList = mSPList;
+				}else if(mInstList.isEmpty()){
+					nextList = mRegList;
+				}else if(mRegList.isEmpty()){
+					nextList = mInstList;
+				}else{
+					nextList = (mRegList.size() > mInstList.size()) ? mRegList : mInstList;
+				}
+			}else{
+				//epilogue
+				if(!mInstList.isEmpty()){ 
+					if(mRegList.isEmpty() || (counter++ & 0x1) == 0){
+						nextList = mInstList;
+						
+						if(mInstList.size() == 1)	counter = 0;
+					}else{
+						nextList = mRegList;
+					}
+				}else if(!mRegList.isEmpty()){
+					
+					if(mSPList.isEmpty() || mRegList.size() >= 10 || (counter++ & 0x1) == 0){
+						nextList = mRegList;
+					}else{
+						nextList = mSPList;
+					}
+				}else{
+					nextList = mSPList;
+				}
+			}
+			
+			int place;
+			
+			Instruction inst = (Instruction)nextList.get(mIsConstruction ? 0 : nextList.size() - 1);
+			nextList.remove(mIsConstruction ? 0 : nextList.size() - 1);
+			
+			place = diff - inst.mPlace;
+			
+			switch(inst.mType){
+			case SP_MOVE_INSTRUCTION:	//instruction of stack pointer
+				diff = iDiffSP;
+				sp = iNextSP;
+			case OTHER_INSTRUCTION:	//normal instruction
+				output += inst.mInst + "\n";
+				break;
+
+			case INT_INSTRUCTION:
+				if(PPC_64)	place >>= 3;
+
+			default:	//memory access
+				output += inst.mInst + place + "(" + sp + ")\n";
+				break;
+			}
+		}
+		
+		return output;
+	}
+};
+
+/////emission of prologue/////
+//r1	stack pointer
+//r2	(if it needed)last stack pointer. It is used to access last argument area
+//r11	(just only the function which has no call-function)virtual stack pointer used to access local area
+%defemit(prologue =f)
+{
+	Function func = (Function)f;
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+	StructureScheduler instList;
+	String nextSP = "r1";
+	int diff = 0;
+	int size;
+
+	attr.TraceUsedRegisters();
+	
+	instList = new StructureScheduler(true);
+	
+	//move stack pointer
+	size = attr.ComputeStackSize();
+	
+	/////store all non-volatile register used in the function
+	//first, we store floating point reigster
+	for(int k = 0; k < attr.mFloatCount; k++){
+		instList.AddRegister(attr.mFloatRegisters[k], FLOAT_REGISTER_SIZE);
+	}
+	
+	//next, general purpose register
+	for(int k = 0; k < attr.mGeneralCount; k++){
+		instList.AddRegister(attr.mGeneralRegisters[k], INT_REGISTER_SIZE);
+	}
+	
+	if(attr.mUsedVector){
+		//vector status register, if there were some vector instruction
+		instList.AddRegisterInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmfspr\tr0,VRsave", 0);
+
+		instList.mSavePoint += INT_REGISTER_SIZE;
+		instList.AddRegisterInstruction(StructureScheduler.INT_INSTRUCTION,
+			(PPC_64 ? "\tstd\tr0," : "\tstw\tr0,"), instList.mSavePoint);
+		
+		instList.AddRegisterInstruction(StructureScheduler.OTHER_INSTRUCTION, "\toris\tr0,r0,0xc000", 0);
+		instList.AddRegisterInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmtspr\tVRsave,r0", 0);
+	}
+	
+	//vector register
+	for(int k = 0; k < attr.mVectorCount; k++){
+		instList.AddRegister(attr.mVectorRegisters[k], VECTOR_REGISTER_SIZE);
+	}
+	
+	//argument area has some argument, we must save SP to r2
+	if(attr.mArgAreaRef != null || instList.mSavePoint > RED_ZONE_SIZE){
+		instList.AddInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmr\tr2,r1", 0);
+		nextSP = "r2";
+	}
+	
+	//if the function was leaf function and needed the size lesser than red zone,
+	//stack frame doesn't have to be created. Use red zone.
+	if(attr.mHasCaller == false && size - attr.mArgAreaSize - LINK_AREA_SIZE <= RED_ZONE_SIZE){
+
+		//if there were no local valiable needing any memory,
+		//there are no reason to make virtual stack pointer
+		if(attr.mLocalAreaBorder != attr.mArgAreaSize + LINK_AREA_SIZE){
+			instList.AddInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tsubi\tr11,r1," + size, 0);
+		}
+	}else{
+		if(size >= 0x7fff){
+			//stack size is greater than the number which is acceptable addi instruction,
+			//we must change stack creation procedure
+			long upper, lower;
+	
+			size = -size;
+			
+			//+++++for 32bit mode
+			instList.AddSPInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tlis\tr11," +
+				( (size >> 16) & 0xffff), 0);
+			instList.AddSPInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tori\tr11,r11," +
+				(size & 0xffff), 0);
+			instList.AddSPInstruction(StructureScheduler.SP_MOVE_INSTRUCTION,
+				(PPC_64 ? "\tstdux" : "\tstwux") + "\tr1,r1,r11", 0);
+	
+			if(attr.mHasCaller == false){
+				instList.AddSPInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmr\tr11,r1", 0);
+			}
+		}else{
+			//normal creation
+			diff = size;
+			size = -size;
+			
+			instList.AddSPInstruction(StructureScheduler.SP_MOVE_INSTRUCTION,
+				(PPC_64 ? "\tstdu\tr1," + (size >> 3) : "\tstwu\tr1," + size) + "(r1)", 0);
+		}
+		
+		//leaf function uses r11 register as stack pointer
+		if(attr.mHasCaller == false){
+			instList.AddSPInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmr\tr11,r1", 0);
+		}
+	}
+	
+	if(attr.mUsedCR){	//save condition register if needed
+		instList.AddInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmfcr\tr0", 0);
+		instList.AddInstruction(StructureScheduler.INT_INSTRUCTION,
+			"\tstw\tr0,", -CONDITION_REGISTER_STACK);
+	}
+	
+	// Save LIR if subprogram call or global variable access are included. //##64
+	//if the function called others, or had access of symbol, save LR
+	if(attr.mHasCaller || attr.mGlobalTemp != null){
+		instList.AddInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmflr\tr0", 0);
+
+		//caller must save LR
+		if(attr.mHasCaller){
+			instList.AddInstruction(StructureScheduler.INT_INSTRUCTION,
+				(PPC_64 ? "\tstd\tr0," : "\tstw\tr0,"), -LINK_REGISTER_STACK);
+		}
+	}
+	
+	return instList.Output(nextSP, diff);
+}
+
+
+/////emission of epilogue/////
+%defemit(epilogue =f rettype)
+{
+	Function func = (Function)f;
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+	StructureScheduler instList;
+	int diff = 0;
+	String nextSP = "r1";
+	
+	instList = new StructureScheduler(false);
+	
+	int size;
+	size = attr.ComputeStackSize();
+	
+	if(attr.mHasCaller){	//revert LR
+		//StructureScheduler class emits instructions reverse. so the order is reverse, too.
+		instList.AddInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmtlr\tr0", 0);
+		instList.AddInstruction(StructureScheduler.INT_INSTRUCTION,
+			(PPC_64 ? "\tld\tr0," : "\tlwz\tr0,"), -LINK_REGISTER_STACK);
+	}
+	
+	if(attr.mUsedCR){	//revert condition register
+		instList.AddInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmtcr\tr0", 0);
+		instList.AddInstruction(StructureScheduler.INT_INSTRUCTION,
+			"\tlwz\tr0,", -CONDITION_REGISTER_STACK);
+	}
+	
+	//floating point register
+	for(int k = 0; k < attr.mFloatCount; k++){
+		instList.AddRegister(attr.mFloatRegisters[k], FLOAT_REGISTER_SIZE);
+	}
+	
+	//general purpose register
+	for(int k = 0; k < attr.mGeneralCount; k++){
+		instList.AddRegister(attr.mGeneralRegisters[k], INT_REGISTER_SIZE);
+	}
+
+	if(attr.mUsedVector){	//vector status register if needed
+		instList.AddInstruction(StructureScheduler.OTHER_INSTRUCTION, "\tmtspr\tVRsave,r0", 0);
+
+		instList.mSavePoint += INT_REGISTER_SIZE;
+		instList.AddInstruction(StructureScheduler.INT_INSTRUCTION,
+			(PPC_64 ? "\tld\tr0," : "\tlwz\tr0,"), instList.mSavePoint);
+	}
+	
+	//vector register
+	for(int k = 0; k < attr.mVectorCount; k++){
+		instList.AddRegister(attr.mVectorRegisters[k], VECTOR_REGISTER_SIZE);
+	}
+
+	//revert stack pointer
+	if(attr.mHasCaller || size - attr.mArgAreaSize - LINK_AREA_SIZE > RED_ZONE_SIZE){
+
+		//stack size is greater than the number which is acceptable addi instruction,
+		//we must change stack creation procedure
+		if(size >= 0x7fff){
+			//+++++for 32bit mode
+			instList.AddSPInstruction(StructureScheduler.OTHER_INSTRUCTION, "\taddis\tr11,r1," +
+				( ( (size >> 16) & 0xffff) + ( (size >> 15) & 0x1)), 0);
+			
+			instList.AddSPInstruction(StructureScheduler.OTHER_INSTRUCTION, "\taddi\tr11,r11," +
+				( (size & 0x8000) != 0 ? (size & 0xffff) - 0x10000 : (size & 0xffff)), 0);
+			instList.AddSPInstruction(StructureScheduler.SP_MOVE_INSTRUCTION, "\tmr\tr1,r11", 0);
+
+			nextSP = "r11";
+		}else{
+			diff = size;
+			instList.AddSPInstruction(StructureScheduler.SP_MOVE_INSTRUCTION, "\taddi\tr1,r1," + size, 0);
+		}
+	}
+
+	return instList.Output(nextSP, diff) + "\tblr\n";
+}
+
+
+%defemit(deflabel x) { return x + ":"; }
+
+%defemit(line x) { return ";line " + x; }
+
+
+/////remove '%' of register name's head/////
+%defemit(_reg x)
+{
+	if(x.charAt(0) == '%')	return x.substring(1);
+	return x;
+}
+
+
+%defemit(_crmask x)
+{
+	if(x.charAt(0) == 'c' && x.charAt(1) == 'r'){
+		int target = Integer.parseInt(x.substring(2));
+		
+		return "" + (1 << target);
+	}
+	
+	return "";
+}
+
+
+%defemit(FUNCTION_CALL x)
+{
+	return "L" + x + "$stub";
+}
+
+
+//=====for symbol access=====//
+/////returns symbol name/////
+%defemit(SYMBOL_NAME x)
+{
+// 	return "_" + x;
+	return x;
+}
+
+
+/////symbol place for program/////
+%defemit(SYMBOL_ACCESS x)
+{
+	int type;
+	
+	x = x.substring(1);
+	
+	if(PowerPCAttr.CheckSymbolType(x, EXTERNAL_VALIABLE | EXTERNAL_CONSTANCE)){
+		//external valiable or constant
+		type = EXTERNAL_VALIABLE | EXTERNAL_CONSTANCE;
+	}else if(PowerPCAttr.CheckSymbolType(x, EXTERNAL_FUNCTION | INTERNAL_FUNCTION)){
+		//function is treated as external constant
+		type = EXTERNAL_CONSTANCE;
+	}else{
+		type = 0;
+	}
+	
+	return GetSymbolSourcePlace("_" + x, type);
+}
+
+
+/////obtain lower 16bit of symbol address/////
+%defemit(sym_lo16 x)	//for only 32bit mode
+{
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+	return "lo16(" + x + "-" + attr.mAddressLabel.name() + ")";
+}
+
+
+/////obtain upper 16bit of symbol address/////
+%defemit(sym_hi16 x)	//for only 32bit mode
+{
+	PowerPCAttr attr = (PowerPCAttr)getFunctionAttr(func);
+	return "hi16(" + x + "-" + attr.mAddressLabel.name() + ")";
+}
+
+
+//=====
+/////obtain upper 16bit imidiate number with shift right 16bit/////
+%defemit (HI_VALUE y)
+{
+	return Integer.toString((Integer.valueOf(y).intValue() >>> 16) & 0xffff);
+}
+
+
+void emitComment(PrintWriter out, String comment) {
+  out.println("; " + comment);
+}
+
+
+void emitBeginningOfModule(PrintWriter out)
+{
+}
+
+
+void emitEndOfModule(PrintWriter out){
+
+	out.println(";-----");
+}
+
+
+boolean sSymbolEmitted = false;
+void emitBeginningOfSegment(PrintWriter out, String segment)
+{
+	if(sSymbolEmitted == false){
+		sSymbolEmitted = true;
+		
+		ArrayList list = PowerPCAttr.FindSymbol(EXTERNAL_FUNCTION | INTERNAL_FUNCTION);
+		if(list.size() > 0){
+			//emit the procedure accessing external function(s)
+			for(Iterator k = list.iterator(); k.hasNext(); ){
+				String name = (String)(k.next());
+				
+				String lrName = "L0$" + name;
+				String lazyName = GetSymbolSourcePlace(name, EXTERNAL_FUNCTION);
+				
+				out.println("\t.text\n" +
+					".picsymbol_stub\n" +
+					"\t.align 2\n" +
+					"L" + name + "$stub:\n" +
+					"\t.indirect_symbol\t" + name + "\n" +
+				
+					//procedure for indirect jump
+					"\tmflr\tr0\n" +
+					"\tbcl\t20,31," + lrName + "\n" +
+					lrName + ":\n" +
+					"\tmflr\tr11\n" +
+					"\taddis\tr11,r11,ha16(" + lazyName + "-" + lrName + ")\n" +
+					"\tmtlr\tr0\n" +
+					"\tlwz\tr12,lo16(" + lazyName + "-" + lrName + ")(r11)\n" +
+					"\tmtctr\tr12\n" +
+					"\taddi\tr11,r11,lo16(" + lazyName + "-" + lrName + ")\n" +
+					"\tbctr\n" +
+					
+					//read-only memory of function address
+					".lazy_symbol_pointer\n" +
+					lazyName + ":\n" +
+					"\t.indirect_symbol " + name + "\n" +
+					"\t.long dyld_stub_binding_helper\n");
+			}
+		}
+		
+		//emit all external data
+		if(gAccessor.size() > 0){
+			String funcs = "";
+			String globals = "";
+			
+			out.println("\t.data\n\t.align 2\n" +
+				".non_lazy_symbol_pointer");
+	
+			for(Iterator k = gAccessor.iterator(); k.hasNext();){
+				String add;
+				SymStatic sym = (SymStatic)(k.next());
+				
+				add = "L_" + sym.name + "$non_lazy_ptr:\n";
+				if(sym.segment.equals(".text") && Type.toString(sym.type).equals("UNKNOWN")){
+					//function
+					funcs += add + ".long\t_" + sym.name + "\n";
+				}else{
+					//the others
+					globals += add + "\t.indirect_symbol\t_" + sym.name + "\n\t.long\t0\n";
+				}
+			}
+			
+			out.println(".data\n\t.align 2\n" + funcs + "\n.non_lazy_symbol_pointer\n" + globals);
+		}
+	}
+
+	if(segment.equals(".text") || segment.equals(".data")){
+		segment = "\t" + segment;
+	}else if(segment.equals(".rodata")){
+		//read-only data
+		segment = "\t.const";
+	}else{
+		segment = "\t.section \"" + segment + "\"";
+	}
+
+	out.println(segment);
+}
+
+
+void emitEndOfSegment(PrintWriter out, String segment){
+}
+
+void emitDataLabel(PrintWriter out, String label)
+{
+	out.println("\t.data");
+	out.println("\t.align 2");
+
+	out.println(label + ":");
+//	out.println("_" + label + ":");
+}
+
+void emitCodeLabel(PrintWriter out, String label)
+{
+	out.println(label + ":");
+//	out.println("_" + label + ":");
+}
+
+
+
+/** Emit data align **/
+void emitAlign(PrintWriter out, int align)
+{
+	//align shoud be 1 << n, so we must obtain n
+	int n = 2;
+	while( (1 << n) < align)	n++;
+	
+	out.println("\t.align\t" + n);
+}
+
+/** Emit data common **/
+void emitCommon(PrintWriter out, SymStatic symbol, int bytes)
+{
+	int align;
+	String symName = "_" + symbol.name;
+	for(align = 2; (1 << align) < symbol.boundary; align++){}
+
+	bytes = (bytes > 0) ? bytes : 1;
+
+	if (symbol.linkage == "LDEF"){
+		out.println("\n\t.align\t" + align + "\n\t.lcomm " + symName + "," + bytes);
+	}else{
+		out.println("\n\t.align\t" + align + "\n\t.comm " + symName + "," + bytes);
+		out.println("\t.data");
+	}
+}
+
+/** Emit linkage information of symbol */
+void emitLinkage(PrintWriter out, SymStatic symbol)
+{
+	if (symbol.linkage == "XDEF"){
+		out.println("\t.globl\t_" + symbol.name);
+		out.println("\t.text");
+	}
+}
+
+
+/** Emit data zeros **/
+void emitZeros(PrintWriter out, int bytes) {
+	out.println("\t.space\t" + (bytes > 0 ? bytes : 1));
+}
+
+
+void emitIdent(PrintWriter out, String word)
+{
+	out.println(";" + word);
+}
+
+/*
+void RecReplaceSTATIC(LirNode parent)
+{
+	int kids = parent.nKids();
+	
+	for(int k = 0; k < kids; k++){
+		LirNode kid;
+		
+		kid = parent.kid(k);
+		//add the symbol name's head "_"
+		if(kid.opCode == Op.STATIC){
+			kid.toString();
+			parent.setKid(k, 
+		}else{
+			RecReplaceSTATIC(kid);
+		}
+	}
+}
+*/
+
+/** Emit data **/
+void emitData(PrintWriter out, int type, LirNode node)
+{
+	if (type == I32) {
+		String data = lexpConv.convert(node);
+		out.println("\t.long\t" + data);
+	}else if (type == I16) {
+		out.println("\t.short\t" + ((LirIconst)node).signedValue());
+	}else if (type == I8) {
+		out.println("\t.byte\t" + ((LirIconst)node).signedValue());
+	}else if (type == F64) {
+		double value = ((LirFconst)node).value;
+		long bits = Double.doubleToLongBits(value);
+		out.println("\t.long\t0x" + Long.toString((bits >> 32) & 0xffffffffL, 16)
+			+ " ; " + value);
+		out.println("\t.long\t0x" + Long.toString(bits & 0xffffffffL, 16));
+	}else if (type == F32) {
+		double value = ((LirFconst)node).value;
+		long bits = Float.floatToIntBits((float)value);
+		out.println("\t.long\t0x" + Long.toString(bits & 0xffffffffL, 16)
+		            + " ; " + value);
+	}else {
+		throw new CantHappenException("unknown type: " + type);
+	}
+}
+
+
+/////override asm symbol output/////
+String makeAsmSymbol(String symbol)
+{
+	return "_" + symbol;
+}
+
+
+//=====sub-function for emission=====//
+/////returns the label used to access symbol/////
+String GetSymbolSourcePlace(String iBase, int iType)
+{
+	if( (iType & (EXTERNAL_VALIABLE | EXTERNAL_CONSTANCE)) != 0){
+		return "L" + iBase + "$non_lazy_ptr";
+	}else if( (iType & EXTERNAL_FUNCTION) != 0){
+		return "L" + iBase + "$lazy_ptr";
+	}
+	
+	return iBase;
+}
+
+
+static ImList ComputeImidiate(Object dest, Object src)
+{
+	int srcNum, upperNum, lowerNum;
+	
+	srcNum = Integer.parseInt(src.toString());
+	lowerNum = srcNum & 0xffff;
+	upperNum = srcNum >> 16;
+	
+	//signed 16bit imidiate number needs only 1 instruction
+	if( (upperNum & 1) == lowerNum >> 15 && (upperNum == 0 || upperNum == -1)){
+		return ImList.list(ImList.list("li", dest, Short.toString( (short)lowerNum)));
+	}
+	
+	//if lower 16bit was 0, upper 16bit only
+	if(lowerNum == 0)	return ImList.list(ImList.list("lis", dest, Integer.toString(upperNum)));
+	
+	return ImList.list(
+		ImList.list("lis", dest, Integer.toString(upperNum)),
+		ImList.list("ori", dest, dest, Integer.toString(lowerNum)));
+}

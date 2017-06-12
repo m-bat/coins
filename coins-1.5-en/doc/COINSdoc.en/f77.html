@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>How to use Fortran 77 Compiler</title>
+
+  </head>
+  <body>
+	<h1>4. How to use Fortran 77 Compiler</h1>
+    
+	<h2>Contents</h2>
+ <ul>
+<li><a href='#i-4-1'>4.1. Introduction</a></li>
+<li><a href='#i-4-2'>4.2. Installation and Setup</a></li>
+<ul>
+<li><a href='#i-4-2-1'>4.2.1. libf2c Installation</a></li>
+<li><a href='#i-4-2-2'>4.2.2. Fortran Driver Setup</a></li>
+</ul>
+<li><a href='#i-4-3'>4.3. Usage</a></li>
+<li><a href='#i-4-4'>4.4. Bugs and Limitations</a></li>
+<ul>
+<li><a href='#i-4-4-1'>4.4.1.  Language Specifications</a></li>
+<li><a href='#i-4-4-2'>4.4.2. Driver Usage</a></li>
+</ul>
+</ul>
+
+<h3 id='i-4-1'>4.1. Introduction</h3>    
+
+   This chapter describes the usage of the COINS Fortran Compiler,
+which includes COINS Compiler Fortran Frontend and its driver,
+constructed on top of the COINS Compiler Infrastructure.<p>
+   Section two describes the installation and setup of the COINS
+Fortran compiler.  Section three is a user's manual of the COINS
+Fortran compiler driver.  Section four describes bugs and limitations
+of the COINS Fortran compiler.<p>
+
+<h3 id='i-4-2'>4.2. Installation and Setup</h3>
+
+   Although the COINS Fortran Compiler is installed as a part of the
+COINS Compiler Infrastructure, a runtime library `libf2c' is required
+to link and execute the object code.  Since the COINS Compiler
+Infrastructure package does not include the libf2c, you have to
+install it independently and tell its location to the COINS Fortran
+Compiler Driver.  <p>
+Section 4.2.1 describes the installation of the libf2c
+package.  Section 4.2.2 describes settings required to tell the library
+location to the driver.<p>
+
+<h4 id='i-4-2-1'>4.2.1. libf2c Installation</h4>
+
+   To use COINS Compiler Fortran Frontend, you need the "libf2c"
+library.  If your system does not have libf2c library, you must
+install libf2c libary package in your system.<p>
+   The "libf2c" package is available at following URL:
+<pre>
+    f2c 
+        http://www.netlib.org/f2c/
+    libf2c.zip
+        http://www.netlib.org/f2c/libf2c.zip
+</pre>
+Download "libf2c.zip" and extract this archive with unzip or the like. 
+Install the package according to the instructions described in the
+README in the archive.<p>
+   For Unix Operating System or so on, copy "makefile.u" into
+"Makefile" and execute "make" command like this:
+<pre>
+    % cp makefile.u Makefile
+    % make
+</pre>
+After "make", you have "libf2c.a".  Put it anywhere you like.<p>
+
+<h4 id='i-4-2-2'>4.2.2. Fortran Driver Setup</h4>
+
+   This section describes how to tell the location of the libf2c.a to
+the linker invoked by the COINS Fortran Compiler Driver.<p>
+   The COINS Fortran Compiler Driver uses gcc as a linker.<br>
+   When you put the libf2c.a at a directory such that you can link it
+without -L option of the linker, you can skip the following settings.
+Otherwise, or not confident with it, you should follow the
+instructions below.
+<ol>
+ <li> Create a library directory</li>
+ ($HOME/coins is a standard library
+      directory location for Unix operating system.  See 
+<a href='./driver.html#i-2-4-6'>2.4.6. Library Directory</a>
+for details),
+
+<li>Create a text file with the following content, and put it in the 
+      library directory with a file name "settings":
+<pre>
+libf2cLocation	/directory/path/where/libf2c.a/exists
+</pre>
+   The word "libf2cLocation" is case sensitive.<br>
+   The delimiter should be a TAB.<br>
+   Specify a directory path where you put the libf2c.a as the
+"/directory/path/...".  This string is passed as an argument of the -L
+option of the linker.  A tilda sign (`~') and environment variables
+cannot be used.
+</ol>
+
+<h3 id='i-4-3'>4.3. Usage</h3>
+
+   Prior to compilation, follow instructions written in section
+4.2. Installation and Setup.<p>
+   A class name of the COINS Fortran Compiler Driver is
+"coins.driver.F77Driver".  Invoke it in following manner to compile
+Fortran sources.
+<pre>
+    % java -cp your/classes coins.driver.F77Driver [option ...] foo.f [bar.f ...]
+</pre>
+   Specify the `classes' directory path of the COINS compiler
+infrastructure as "your/classes".<br>
+F77Driver is a subclass of coins.driver.Driver. 
+   Therefore, any options described in 
+<a href='./driver.html'>2. How to use the Compiler Driver</a> can be
+specified as "option" as well as the following one:
+<pre>
+    -coins:printhir
+</pre>
+        prints HIR and symbol table after converting each source file
+        into HIR.<p>
+
+As libf2c.a and libm.a are linked by the COINS Fortran Compiler Driver
+automatically, you are not required to supply options to do so
+explicitly.<p>
+   More than one source file names can be specified as "foo.f bar.f ...".
+   After compilation, an executable file "a.out" is created at the
+current working directory.<p>
+
+<h3 id='i-4-4'>4.4. Bugs and Limitations</h3>
+
+<h4 id='i-4-4-1'>4.4.1.  Language Specifications</h4>
+
+   COINS Compiler Fortran Frontend retrieves Fortran 77 specification
+program.  But it has the following restrictions:
+<ul>
+<li>The variables specified in BLOCK statements can't be used with
+      EQUIVALENCE statements.</li>
+<li> The substring character type variable can't be used with
+      EQUIVALENCE statements.</li>
+<li> Incomplete ENTRY statement support.</li>
+<li> Incomplete READ statement support.</li>
+</ul>
+
+<h4 id='i-4-4-2'>4.4.2. Driver Usage</h4>
+
+   COINS Fortran Compiler Driver cannot link f2c and math library when
+their file names are not libf2c.a and libm.a.
+
+
+
+  </body>
+</html>

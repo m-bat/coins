@@ -1,0 +1,58 @@
+/* tpprime.c: Get prime numbers */
+/* Compile with print.c */
+
+#include "print.h" /* SF030609 */
+
+ int candidat, quotient, remaindr, index, nth, primenum, loopend ;
+ int primeNumbers[100] ;
+ void print(int pvar); /* SF030609 */
+ void printStr(char* p);
+
+void getPrime(int primevec[100], int count)
+{
+ primevec[0] = 2 ;
+ nth = 1 ;
+ candidat = 3 ;
+ while (nth<count) {
+   printStr("nth ");
+   print(nth);
+   remaindr = 1 ;
+   index = 0 ;
+   loopend = 0 ;
+   while(loopend==0) {
+     printStr("index ");
+     print(index);
+     primenum = primevec[index] ;
+     quotient = candidat / primenum ;
+     remaindr = candidat - quotient*primenum ;
+     printStr("remaindr ");
+     print(remaindr);
+     if (remaindr==0)
+       loopend = 1 ;
+     if (quotient*quotient<candidat)
+       loopend = 1 ;
+     index = index + 1 ;
+     if (index>=nth)
+       loopend = 1 ;
+   }
+   if (remaindr != 0) {
+     primevec[nth] = candidat ;
+     nth = nth + 1 ;
+   }
+   candidat = candidat + 2 ;
+ }
+ nth   = 0 ;
+ while (nth<count) {
+   print(primevec[nth]) ;
+   nth   = nth + 1 ;
+ }
+ return;
+}
+
+int main()
+{
+ primeNumbers[0] = 2 ;
+ getPrime(primeNumbers, 100);
+  return 0;
+}
+

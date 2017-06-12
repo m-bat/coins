@@ -1,0 +1,107 @@
+digraph "unix" {
+	graph [	fontname = "Helvetica-Oblique",
+		fontsize = 36,
+		label = "\n\n\n\nObject Oriented Graphs\nStephen North, 3/19/93",
+		size = "6,6" ];
+	node [	label = "\N",
+		shape = polygon,
+		sides = 4,
+		distortion = "0.0",
+		orientation = "0.0",
+		skew = "0.0",
+		color = white,
+		style = filled,
+		fontname = "Helvetica-Outline" ];
+	graph [lp= "594,114"];
+	graph [bb= "0,0,1189,1274"];
+	"5th Edition" [sides=9, distortion="0.936354", orientation=28, skew="-0.126818", color=salmon2, pos="709,1251", width="1.97", height="0.62"];
+	"6th Edition" [sides=5, distortion="0.238792", orientation=11, skew="0.995935", color=deepskyblue, pos="515,1169", width="2.42", height="0.62"];
+	"PWB 1.0" [sides=8, distortion="0.019636", orientation=79, skew="-0.440424", color=goldenrod2, pos="834,1169", width="1.17", height="0.51"];
+	LSX [sides=9, distortion="-0.698271", orientation=22, skew="-0.195492", color=burlywood2, pos="230,1076", width="1.14", height="0.54"];
+	"1 BSD" [sides=7, distortion="0.265084", orientation=26, skew="0.403659", color=gold1, pos="326,1076", width="1.03", height="0.57"];
+	"Mini Unix" [distortion="0.039386", orientation=2, skew="-0.461120", color=greenyellow, pos="585,1076", width="1.61", height="0.50"];
+	Wollongong [sides=5, distortion="0.228564", orientation=63, skew="-0.062846", color=darkseagreen, pos="717,1076", width="1.56", height="0.62"];
+	Interdata [distortion="0.624013", orientation=56, skew="0.101396", color=dodgerblue1, pos="445,1076", width="1.78", height="0.94"];
+	"Unix/TS 3.0" [sides=8, distortion="0.731383", orientation=43, skew="-0.824612", color=thistle2, pos="827,753", width="2.47", height="0.75"];
+	"PWB 2.0" [sides=6, distortion="0.592100", orientation=34, skew="-0.719269", color=darkolivegreen3, pos="827,968", width="1.92", height="0.61"];
+	"7th Edition" [sides=10, distortion="0.298417", orientation=65, skew="0.310367", color=chocolate, pos="343,968", width="1.22", height="0.64"];
+	"8th Edition" [distortion="-0.997093", orientation=50, skew="-0.061117", color=turquoise3, pos="584,467", width="2.61", height="1.07"];
+	"32V" [sides=7, distortion="0.878516", orientation=19, skew="0.592905", color=steelblue3, pos="343,855", width="1.25", height="0.64"];
+	V7M [sides=10, distortion="-0.960249", orientation=32, skew="0.460424", color=navy, pos="47,753", width="1.31", height="0.75"];
+	"Ultrix-11" [sides=10, distortion="-0.633186", orientation=10, skew="0.333125", color=darkseagreen4, pos="104,353", width="1.50", height="0.53"];
+	Xenix [sides=8, distortion="-0.337997", orientation=52, skew="-0.760726", color=coral, pos="238,855", width="1.17", height="0.65"];
+	"UniPlus+" [sides=7, distortion="0.788483", orientation=39, skew="-0.526284", color=darkolivegreen3, pos="481,855", width="2.08", height="0.72"];
+	"9th Edition" [sides=7, distortion="0.138690", orientation=55, skew="0.554049", color=coral3, pos="625,353", width="1.31", height="0.69"];
+	"2 BSD" [sides=7, distortion="-0.010661", orientation=84, skew="0.179249", color=blanchedalmond, pos="106,573", width="0.94", height="0.54"];
+	"2.8 BSD" [distortion="-0.239422", orientation=44, skew="0.053841", color=lightskyblue1, pos="252,467", width="1.56", height="0.75"];
+	"2.9 BSD" [distortion="-0.843381", orientation=70, skew="-0.601395", color=aquamarine2, pos="242,353", width="1.83", height="1.07"];
+	"3 BSD" [sides=10, distortion="0.251820", orientation=18, skew="-0.530618", color=lemonchiffon, pos="349,753", width="1.25", height="0.50"];
+	"4 BSD" [sides=5, distortion="-0.772300", orientation=24, skew="-0.028475", color=darkorange1, pos="364,665", width="1.39", height="0.68"];
+	"4.1 BSD" [distortion="-0.226170", orientation=38, skew="0.504053", color=lightyellow1, pos="370,573", width="1.53", height="0.85"];
+	"4.2 BSD" [sides=10, distortion="-0.807349", orientation=50, skew="-0.908842", color=darkorchid4, pos="399,467", width="1.94", height="0.81"];
+	"4.3 BSD" [sides=10, distortion="-0.030619", orientation=76, skew="0.985021", color=lemonchiffon2, pos="525,353", width="0.97", height="0.78"];
+	"Ultrix-32" [distortion="-0.644209", orientation=21, skew="0.307836", color=goldenrod3, pos="399,353", width="2.03", height="0.78"];
+	"PWB 1.2" [sides=7, distortion="0.640971", orientation=84, skew="-0.768455", color=cyan, pos="834,1076", width="1.19", height="0.92"];
+	"USG 1.0" [distortion="0.758942", orientation=42, skew="0.039886", color=blue, pos="975,1076", width="2.03", height="0.93"];
+	"CB Unix 1" [sides=9, distortion="-0.348692", orientation=42, skew="0.767058", color=firebrick, pos="1110,968", width="1.56", height="0.72"];
+	"USG 2.0" [distortion="0.748625", orientation=74, skew="-0.647656", color=chartreuse4, pos="975,968", width="1.69", height="1.04"];
+	"CB Unix 2" [sides=10, distortion="0.851818", orientation=32, skew="-0.020120", color=greenyellow, pos="1106,855", width="1.83", height="0.61"];
+	"CB Unix 3" [sides=10, distortion="0.992237", orientation=29, skew="0.256102", color=bisque4, pos="1081,753", width="2.06", height="0.68"];
+	"Unix/TS++" [sides=6, distortion="0.545461", orientation=16, skew="0.313589", color=mistyrose2, pos="985,665", width="1.78", height="0.60"];
+	"PDP-11 Sys V" [sides=9, distortion="-0.267769", orientation=40, skew="0.271226", color=cadetblue1, pos="1128,665", width="1.69", height="0.56"];
+	"USG 3.0" [distortion="-0.848455", orientation=44, skew="0.267152", color=bisque2, pos="937,855", width="2.14", height="1.07"];
+	"Unix/TS 1.0" [distortion="0.305594", orientation=75, skew="0.070516", color=orangered, pos="672,855", width="1.67", height="0.72"];
+	"TS 4.0" [sides=10, distortion="-0.641701", orientation=50, skew="-0.952502", color=crimson, pos="893,573", width="1.56", height="0.75"];
+	"System V.0" [sides=9, distortion="0.021556", orientation=26, skew="-0.729938", color=darkorange1, pos="893,467", width="1.78", height="0.50"];
+	"System V.2" [sides=6, distortion="0.985153", orientation=33, skew="-0.399752", color=darkolivegreen4, pos="893,353", width="2.33", height="0.69"];
+	"System V.3" [sides=7, distortion="-0.687574", orientation=58, skew="-0.180116", color=lightsteelblue1, pos="893,253", width="1.67", height="0.68"];
+	"5th Edition" -> "6th Edition" [pos="e,559,1188 674,1236 644,1224 600,1206 566,1191"];
+	"5th Edition" -> "PWB 1.0" [pos="e,813,1182 731,1236 752,1223 784,1202 806,1187"];
+	"6th Edition" -> LSX [pos="e,246,1090 451,1155 398,1143 323,1125 277,1110 269,1107 260,1101 251,1094"];
+	"6th Edition" -> "1 BSD" [pos="e,350,1096 458,1147 428,1136 393,1121 369,1110 365,1108 359,1104 355,1100"];
+	"6th Edition" -> "Mini Unix" [pos="e,572,1094 528,1152 539,1138 554,1116 567,1100"];
+	"6th Edition" -> Wollongong [pos="e,692,1091 548,1155 580,1142 627,1123 655,1110 663,1106 673,1101 683,1096"];
+	"6th Edition" -> Interdata [pos="e,463,1100 501,1151 491,1137 478,1120 466,1105"];
+	Interdata -> "Unix/TS 3.0" [pos="e,819,773 451,1055 490,962 661,964 744,894 773,870 801,813 816,780"];
+	Interdata -> "PWB 2.0" [pos="e,803,981 469,1062 484,1054 502,1045 515,1042 592,1024 671,1024 747,1006 761,1003 779,994 795,985"];
+	Interdata -> "7th Edition" [pos="e,362,988 427,1057 411,1040 386,1013 368,994"];
+	"7th Edition" -> "8th Edition" [pos="e,584,487 380,959 438,943 547,913 568,894 604,862 584,800 584,753 584,753 584,753 584,665 584,618 584,539 584,496"];
+	"7th Edition" -> "32V" [pos="e,343,875 343,948 343,930 343,904 343,883"];
+	"7th Edition" -> V7M [pos="e,59,773 302,956 257,943 187,920 151,894 119,871 83,814 63,780"];
+	"7th Edition" -> "Ultrix-11" [pos="e,112,371 309,953 264,938 213,930 184,894 155,857 168,800 168,753 168,753 168,753 168,573 168,517 134,425 116,380"];
+	"7th Edition" -> Xenix [pos="e,257,876 325,949 307,930 280,900 261,880"];
+	"7th Edition" -> "UniPlus+" [pos="e,462,870 363,951 388,930 431,896 457,874"];
+	V7M -> "Ultrix-11" [pos="e,99,370 48,733 49,691 53,595 60,542 67,495 87,417 97,378"];
+	"8th Edition" -> "9th Edition" [pos="e,617,374 592,444 598,426 607,401 614,382"];
+	"1 BSD" -> "2 BSD" [pos="e,109,591 306,1059 256,1014 125,895 125,855 125,855 125,855 125,753 125,710 115,637 110,599"];
+	"2 BSD" -> "2.8 BSD" [pos="e,232,482 126,558 152,539 197,507 226,486"];
+	"2.8 BSD" -> "Ultrix-11" [pos="e,125,369 230,450 204,430 159,396 131,374"];
+	"2.8 BSD" -> "2.9 BSD" [pos="e,244,377 250,442 248,426 247,403 245,385"];
+	"32V" -> "3 BSD" [pos="e,348,771 344,837 345,821 346,797 348,779"];
+	"3 BSD" -> "4 BSD" [pos="e,361,683 352,736 354,724 357,705 359,691"];
+	"4 BSD" -> "4.1 BSD" [pos="e,369,594 365,646 366,634 367,617 368,603"];
+	"4.1 BSD" -> "4.2 BSD" [pos="e,394,485 375,553 380,536 387,510 392,492"];
+	"4.1 BSD" -> "2.8 BSD" [pos="e,270,483 342,548 322,530 295,506 276,488"];
+	"4.1 BSD" -> "8th Edition" [pos="e,556,481 395,561 432,542 504,507 547,485"];
+	"4.2 BSD" -> "4.3 BSD" [pos="e,501,374 417,451 438,432 472,401 496,379"];
+	"4.2 BSD" -> "Ultrix-32" [pos="e,399,372 399,445 399,427 399,400 399,380"];
+	"PWB 1.0" -> "PWB 1.2" [pos="e,834,1105 834,1151 834,1141 834,1127 834,1114"];
+	"PWB 1.0" -> "USG 1.0" [pos="e,953,1090 854,1156 878,1139 920,1112 947,1094"];
+	"PWB 1.2" -> "PWB 2.0" [pos="e,828,989 832,1047 831,1032 830,1013 829,997"];
+	"USG 1.0" -> "CB Unix 1" [pos="e,1090,984 994,1061 1017,1042 1058,1010 1085,988"];
+	"USG 1.0" -> "USG 2.0" [pos="e,975,1001 975,1055 975,1043 975,1025 975,1010"];
+	"CB Unix 1" -> "CB Unix 2" [pos="e,1107,875 1109,945 1108,928 1107,903 1107,883"];
+	"CB Unix 2" -> "CB Unix 3" [pos="e,1086,774 1102,839 1099,823 1093,800 1088,782"];
+	"CB Unix 3" -> "Unix/TS++" [pos="e,1007,685 1061,734 1047,722 1028,705 1013,691"];
+	"CB Unix 3" -> "PDP-11 Sys V" [pos="e,1118,683 1091,735 1098,722 1107,705 1114,690"];
+	"USG 2.0" -> "USG 3.0" [pos="e,945,879 966,942 961,926 953,904 948,887"];
+	"USG 3.0" -> "Unix/TS 3.0" [pos="e,853,777 902,822 888,810 873,796 859,783"];
+	"PWB 2.0" -> "Unix/TS 3.0" [pos="e,827,774 827,950 827,914 827,828 827,783"];
+	"Unix/TS 1.0" -> "Unix/TS 3.0" [pos="e,804,769 701,836 729,818 770,791 798,773"];
+	"Unix/TS 3.0" -> "TS 4.0" [pos="e,887,590 833,736 845,703 870,634 884,597"];
+	"Unix/TS++" -> "TS 4.0" [pos="e,917,597 966,646 953,633 935,615 921,601"];
+	"CB Unix 3" -> "TS 4.0" [pos="e,891,591 1018,739 980,729 933,712 909,690 891,672 889,629 890,600"];
+	"TS 4.0" -> "System V.0" [pos="e,893,485 893,552 893,535 893,511 893,493"];
+	"System V.0" -> "System V.2" [pos="e,893,373 893,450 893,431 893,403 893,381"];
+	"System V.2" -> "System V.3" [pos="e,893,271 893,335 893,320 893,297 893,279"];
+}

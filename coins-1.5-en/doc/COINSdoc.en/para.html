@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title> Parallelization for HIR</title>
+
+  </head>
+  <body>
+	<h1>6. Parallelization for HIR</h1>
+    
+	<h2>Contents</h2>
+ <ul>
+<li><a href='#i-6-1'>6.1. Loop Parallelizer</a></li>
+<ul>
+<li><a href='#i-6-1-1'>6.1.1.  Usage</a></li>
+</ul>
+<li><a href='#i-6-2'>6.2. Coarse Grain Parallelizing Module</a></li>
+<ul>
+<li><a href='#i-6-2-1'>6.2.1.  OVERVIEW</a></li>
+<ul>
+<li><a href='#i-6-2-1-1'>6.2.1.1.  Design Concept</a></li>
+<li><a href='#i-6-2-1-2'>6.2.1.2.  Data Structures</a></li>
+<li><a href='#i-6-2-1-3'>6.2.1.3.  Scheduler</a></li>
+</ul>
+<li><a href='#i-6-2-2'>6.2.2.  CONSTRAINTS OF CURRENT IMPLEMENTATION</a></li>
+<li><a href='#i-6-2-3'>6.2.3.  HOW TO USE</a></li>
+<li><a href='#i-6-2-4'>6.2.4.  OPTIONS</a></li>
+</ul>
+</ul>
+
+<h3 id='i-6-1'>6.1. Loop Parallelizer</h3>    
+
+"coins.lparallel" package analyzes the program for parallelizable loops and outputs the C
+code with applicable OpenMP pragma directives. It does not do the
+parallelization itself, but the driver can call an external OpenMP compiler.
+
+<h4 id='i-6-1-1'>6.1.1.  Usage</h4>
+
+Use the driver coins.lparallel.LoopPara instead of coins.driver.Driver.<p>
+
+To output C file with OpenMP directives, type
+<pre>
+    java coins.lparallel.LoopPara -coins:hir2c foo.c
+</pre>
+where the C file named foo-loop.c will be output.<p>
+
+To output executable (requires an OpenMP compiler named 'omcc'), type
+<pre>
+    java coins.lparallel.LoopPara foo.c
+</pre>
+This is just the above C output passed to an OpenMP compiler.
+(There may be other configuration options, such as environment variables,
+needed to execute the resultant eode in parallel: see your OpenMP compiler
+manual.)<p>
+
+The driver LoopPara also supports HIR optimization options supported by the 
+driver coins.aflow.FlowOpt. For example,
+<pre>
+  java coins.lparallel.LoopPara -coins:hirOpt=cpf,hir2c foo.c
+</pre>
+
+This may enable some code that otherwize is not parallelizable to be 
+parallelized.<p>
+
+<h3 id='i-6-2'>6.2. Coarse Grain Parallelizing Module</h3>
+
+<h4 id='i-6-2-1'>6.2.1.  OVERVIEW</h4>
+<h5 id='i-6-2-1-1'>6.2.1.1.  Design Concept</h5>
+    The coarse-grain parallelizing module is constructed for realizing a 
+    coarse-grain parallelizing compiler named CoCo in java.  The CoCo is the
+    research product and it is still at the infant stage as a parallelizing
+    compiler.  Therefore it contains many constraints for practical usage as
+    mentioned later.  We have found a lot of important issues which should be
+    solved as practical coarse-grain parallelizing compilers by implementing
+    the CoCo as an automatic parallelizing compiler.  The coarse-grain 
+    parallelizing module is a part of the COINS infrastructure, and then the
+    module components are available as a set of parts for coarse-grain 
+    parallelization.<p>
+
+    The CoCo analyzes an input C program and transforms it into a macro 
+    (coarse-grain) task graph with data/control flow dependence.  Then, the 
+    CoCo parallelizes the macro tasks by using OpenMP directives for SMP 
+    machines. This analysis and transformation are carried out on Coins HIR
+    (High-level Intermediate Representation).  The CoCo generates a parallel
+    program in HIR containing OpenMP directives as comments.  The HIR program
+    is translated into a C program with OpenMP directives by the HIR-to-C 
+    translator.  Finally, it is compiled by the Omni-OpenMP compiler and then 
+    executed in parallel on a SMP machine.<p>
+
+    Macro tasks correspond to basic blocks, loops and/or subroutines.  After an
+    input C program is divided into macro tasks, an execution starting
+    condition of each macro task is analyzed.  The execution starting condition
+    represents whether the macro task can be executed or not at a certain time.
+    A runtime macro task scheduler evaluates an execution starting condition of
+    each macro task at execution time, and dynamically assigns executable one
+    to a light load processor of a SMP machine.<p>
+
+    The coarse-grain parallelizing module is a tool set, which consists of the
+    following functions:
+<ol>
+<li>Divides an input C program into macro tasks based on basic blocks,</li>
+<li>Analyses an execution starting condition of each macro task,</li>
+<li>Embeds OpenMP directives for parallel execution at a macro task 
+           level,</li>
+<li>Schedules dynamically each macro task to a processor of a SMP 
+           machine. </li>
+ </ol>
+
+<h5 id='i-6-2-1-2'>6.2.1.2.  Data Structures</h5>
+    The coarse-grain parallelizing module utilizes a macro flow graph model. 
+    Nodes of the graph correspond macro tasks.  As for edges between nodes, 
+    there are two types of edges representing control flow and data flow 
+    dependences.<p>
+
+    An execution starting condition is represented in a boolean expression.  
+    The operators consist of 'logical AND' and/or 'logical OR'.  The operand 
+    conditions are as follows:
+<ol>
+<li>If macro tasks with data dependence have been executed or decided
+           not to be executed,</li>
+<li> If control flow dependence to a macro task has been decided.</li>
+</ol>
+
+<h5 id='i-6-2-1-3'>6.2.1.3.  Scheduler</h5>
+    The runtime macro task scheduler is independently attached to the main part
+    of an output program.  If an input program is named 'xxx.c', the scheduler
+    written in C language is located at the file named 'xxx-sch.c' at the same
+    directory.<p>
+
+<h4 id='i-6-2-2'>6.2.2.  CONSTRAINTS OF CURRENT IMPLEMENTATION</h4>
+    The current version of the coarse-grain parallelizing module, CoCo, has the
+    following constraints:
+<ol>
+<li>The coarse-grain parallelizing module parallelizes only a main 
+           function.  When an input program has several functions, the module
+           ignores the other functions.</li>
+<li>To execute a program in parallel efficiently, the module should 
+           adjust grain granularity of tasks such as 'loop unrolling'.  Up to
+           now, the module does not do that.</li>
+<li> A loop in a program is translated into a single macro task.  The 
+           module recognizes only reserved words in HIR such as 'while' and/or
+           'for' as loops.  Other types of loop are not translated into macro
+           tasks.</li>
+<li>The module finds out an exit macro task only if the task has no 
+           successors or includes return statements.  Other macro tasks which
+           include 'exit()' functions, for example, are not recognized as exit
+           ones.</li>
+<li>When there are some macro tasks which have no dependence with each
+           other, the execution order of macro tasks may be different from the
+           order of sequential execution.</li>
+</ol>
+<h4 id='i-6-2-3'>6.2.3.  HOW TO USE</h4>
+    The CoCo inserts OpenMP directives into a HIR program as comments for 
+    coarse-grain parallelizing.  The CoCo utilizes 'hir2c' module, translator 
+    from HIR to a C program, since the back end of Coins does not support the 
+    OpenMP directives yet.  After a coarse-grain parallel C program is 
+    generated by hir2c, you must compile it by an OpenMP compiler in order to 
+    execute in parallel on a SMP machine.<p>
+
+    To obtain a coarse-grain parallel program, you should operate as follows:
+<ol>
+<li> Compile 'xxx.c' by Coins C compiler specifying the option 
+           '-coins: mdf, hir2c=opt'.</li>
+<pre>
+> java -classpath ./classes Driver -coins:mdf, hir2c=opt xxx.c
+</pre>
+<li>Compile the program with a runtime scheduler by Omni-OpenMP 'omcc'.</li>
+<pre>
+ > omcc xxx-hir-opt.c xxx-sch.c
+</pre>
+</ol>
+<h4 id='i-6-2-4'>6.2.4.  OPTIONS</h4>
+    There are several compile time options for the coarse-grain parallelizing
+    module.  For other options of the Coins Compiler Driver, see <a href='./driver.html'>2. How to use the Compiler Driver</a>
+ or 
+ <a href='./cc.html'>3. How to use C Compiler</a>.
+<dl>
+<dt> -coins:trace=MDF.xxxx</dt><dd>
+    To output trace information of this module for debugging, and specify the 
+    trace level as follows:
+<pre>
+        2000 :  Output general debug information of the module.
+</pre></dd>
+<dt> -coins:hir2c=opt</dt><dd>
+    Translate HIR into a C program after optimizing.</dd>
+
+<dt> -coins:stopafterhir2c</dt><dd>
+    Quit compilation of each compile unit just after generating a C program by 
+    'hir2c'.</dd>
+
+<dt> -coins:mdf</dt><dd>
+    Use this module.</dd>
+
+  </body>
+</html>

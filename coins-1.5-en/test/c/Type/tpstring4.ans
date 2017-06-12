@@ -1,0 +1,3 @@
+i = 0
+abc,xyz = 0,0
+lStr1,lStr2 = 'abc','i'

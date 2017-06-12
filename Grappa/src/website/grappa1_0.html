@@ -1,0 +1,78 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+
+<html>
+<head>
+<title>AT&amp;T Labs Research - Grappa 1.0 Demo Page</title>
+<meta name="description" content="AT&&T Labs Research Grappa 1.0 Demo Page">
+<meta name="keywords" content="Grappa, Java Graph Drawing Package">
+<link rev="made" href="mailto:webmaster@research.att.com"> 
+</head>
+
+<!-- user content -->
+
+<H1 ALIGN="CENTER">Demo of Grappa<BR>
+(JDK 1.0 Version)</H1>
+<P>This JDK 1.0 version of Grappa lacks many of the features of the JDK 1.1 version and in some cases existing
+features are not fully implemented.  Nonetheless, it does provide for basic graph display and manipulation.  The
+<A HREF="grappa1_0.tgz">source</A> is available for download by shift-clicking on the link in this sentence.</P>
+
+<P>To work the demonstration below, use your mouse to select, add or delete nodes and edges to the graph below
+or modify the graph description using <I>dot</I> format in the text area at the bottom of the java applet area
+below. Use the left mouse button on an item to select it. Use the shift key with the left mouse button to create
+a node. Use the shift key with the left mouse button in an existing node and drag to another existing node and
+a new edge will be created when you release the mouse button. Use the control key with the left mouse button to
+delete an item. Clicking the right mouse button over an element will bring up a display of the attributes of that
+element. In the text area, position the input cursor by clicking the mouse, then type your input. There is no need
+to include position or sizing information as the <I>dot</I> layout engine will do that for you. For example, try
+adding the following in the text area:
+
+
+<BLOCKQUOTE>
+	<P>Node0 -&gt; Node4;
+
+</BLOCKQUOTE>
+
+<P>When you are done with your input, either press the <B>submit graph</B> or the <B>submit text</B> button depending
+on where you made your changes. Your graph description will be passed to the <I>dot</I> layout engine and then
+returned to <I>Grappa</I> to be rendered in the <I>Java</I> canvas and text areas below.</P>
+<CENTER>
+<P>
+<TABLE BORDER="0" CELLPADDING="3" CELLSPACING="0" BGCOLOR="#FFFFFF">
+	<TR>
+		<TD BGCOLOR="#AAAAAA"><APPLET NAME="GraphDemo1_0" CODEBASE="/~john/Grappa" CODE="DemoApplet1_0"
+			WIDTH="450" HEIGHT="700" ALIGN="BOTTOM" archive="grappa1_0.zip">
+			<PARAM NAME="codebase" VALUE="http://www.research.att.com/~john/Grappa">
+			<PARAM NAME="cabbase" VALUE="grappa1_0.cab">
+			<PARAM NAME="graph" VALUE="
+
+digraph &quot;demo_applet&quot; {
+	node [	label = &quot;\N&quot; ];
+	graph [bb = &quot;0,0,138,248&quot;];
+	Node0 [label=&quot;The Tree\nStarts Here&quot;, shape=house, pos=&quot;69,213&quot;, width=&quot;1.53&quot;, height=&quot;0.97&quot;];
+	Node1 [shape=octagon, color=blue, fontcolor=white, style=filled, pos=&quot;69,92&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node2 [color=red, pos=&quot;30,18&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node3 [color=green, pos=&quot;108,18&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node0 -&gt; Node1 [label=&quot;This\nWay&quot;, color=blue, fontcolor=blue, pos=&quot;e,69,110 69,185 69,165 69,138 69,118&quot;, lp=&quot;89,144&quot;];
+	Node1 -&gt; Node2 [pos=&quot;e,39,35 59,74 54,64 48,53 43,43&quot;];
+	Node1 -&gt; Node3 [pos=&quot;e,99,35 79,74 84,64 90,53 95,43&quot;];
+}
+
+">
+You must enable Java to run this demo!
+
+			
+			
+			
+			</APPLET>
+		</TD>
+	</TR>
+</TABLE>
+</P>
+</CENTER>
+<P>For more information about <I>Grappa</I> contact <A HREF="http://www.post.att.com/cgi-bin/htpq?id=mocenigo">John
+Mocenigo</A></P>
+
+<!-- /user content -->
+
+</body>
+</html>

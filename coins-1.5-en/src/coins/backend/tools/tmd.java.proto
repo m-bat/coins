@@ -1,0 +1,296 @@
+/* ----------------------------------------------------------
+%   Copyright (C) 2004 The Coins Project Group               
+%       (Read COPYING for detailed information.)             
+----------------------------------------------------------- */
+package coins.backend.gen;
+
+import coins.backend.CantHappenException;
+import coins.backend.Function;
+import coins.backend.Module;
+import coins.backend.Op;
+import coins.backend.SyntaxError;
+import coins.backend.Type;
+import coins.backend.lir.LirFactory;
+import coins.backend.lir.LirFconst;
+import coins.backend.lir.LirIconst;
+import coins.backend.lir.LirNode;
+import coins.backend.lir.LirSymRef;
+import coins.backend.sym.SymAuto;
+import coins.backend.sym.SymStatic;
+import coins.backend.sym.Symbol;
+import coins.backend.util.BiLink;
+import coins.backend.util.BiList;
+import coins.backend.util.ImList;
+import coins.backend.util.Misc;
+import java.io.PrintWriter;
+
+// imports here
+$import
+
+
+
+public class CodeGenerator_$target extends CodeGenerator {
+
+  /** State vector for labeling LIR nodes. Suffix is a LirNode's id. **/
+  State[] stateVec;
+
+  /** RewrState vector **/
+  private RewrState[] rewrStates;
+
+  /** Create code generator engine. **/
+  public CodeGenerator_$target() {}
+
+
+  /** State label for rewriting engine. **/
+  class RewrState {
+    $decl-rewrite
+
+    final int[] rule = new int[NNONTERM];
+
+    boolean rewritten;
+
+    void record(int nt, int rule) {
+      if (this.rule[nt] == 0) {
+        this.rule[nt] = rule;
+        switch (nt) {
+        $chains-rewrite
+        }
+      }
+    }
+
+    LirNode labelAndRewrite(LirNode t, RewrState kids[], String phase,
+                            BiList pre, BiList post) {
+      switch (t.opCode) {
+      $rules-rewrite
+      }
+      return null;
+    }
+
+    public String toString() {
+      StringBuffer buf = new StringBuffer();
+
+      buf.append("State(");
+      boolean comma = false;
+      for (int i = 0; i < NNONTERM; i++) {
+        if (rule[i] != 0) {
+          if (comma) buf.append(",");
+          buf.append(nontermName(i));
+          comma = true;
+        }
+      }
+      buf.append(")");
+
+      return buf.toString();
+    }
+
+  }
+
+
+  void initRewriteLabeling() {
+    rewrStates = new RewrState[0];
+  }
+
+  /** set rewrStates. **/
+  private void setRewrStates(int index, RewrState v) {
+    if (index >= rewrStates.length) {
+      RewrState[] w = new RewrState[Misc.clp2(index + 1)];
+      for (int i = 0; i < rewrStates.length; i++)
+        w[i] = rewrStates[i];
+      rewrStates = w;
+    }
+    rewrStates[index] = v;
+  }
+
+  /** Return RewrState array. **/
+  private RewrState getRewrStates(int index) {
+    if (index < rewrStates.length)
+      return rewrStates[index];
+    else
+      return null;
+  }
+
+  /** Rewrite L-expression. **/
+  LirNode rewriteTree(LirNode tree, String phase, BiList pre, BiList post) {
+    RewrState s = getRewrStates(tree.id);
+    if (s != null && !s.rewritten)
+      return tree;
+
+    for (;;) {
+      int n = nActualOperands(tree);
+      RewrState[] kidst = new RewrState[n];
+      for (int i = 0; i < n; i++) {
+        LirNode r = rewriteTree(tree.kid(i), phase, pre, post);
+        if (r != tree.kid(i))
+          tree.setKid(i, r);
+        kidst[i] = getRewrStates(tree.kid(i).id);
+      }
+
+      s = new RewrState();
+      setRewrStates(tree.id, s);
+
+      // rescanning disabled?
+      if (disableRewrite.contains(tree.id))
+        return tree;
+
+      LirNode newTree = s.labelAndRewrite(tree, kidst, phase, pre, post);
+      if (newTree == null)
+        return tree;
+      tree = newTree;
+
+      if (false) {
+        debOut.println("rewrite to: "
+                       + (disableRewrite.contains(tree.id) ? "!" : "")
+                       + tree);
+      }
+    }
+  }
+
+
+
+  /** State label for instruction selection engine. **/
+  class State {
+    $decl
+
+    final int[] rule = new int[NNONTERM];
+    final int[] cost1 = new int[NNONTERM];
+    final int[] cost2 = new int[NNONTERM];
+
+    void record(int nt, int cost1, int cost2, int rule) {
+      if (this.rule[nt] == 0
+          || (optSpeed ?
+              (cost1 < this.cost1[nt]
+               || cost1 == this.cost1[nt] && cost2 < this.cost2[nt])
+              : (cost2 < this.cost2[nt]
+                 || cost2 == this.cost2[nt] && cost1 < this.cost1[nt]))) {
+        this.rule[nt] = rule;
+        this.cost1[nt] = cost1;
+        this.cost2[nt] = cost2;
+        switch (nt) {
+        $chains
+        }
+      }
+    }
+
+    void label(LirNode t, State kids[]) {
+      switch (t.opCode) {
+      $rules1
+      }
+    }
+    $rules2
+
+    public String toString() {
+      StringBuffer buf = new StringBuffer();
+
+      buf.append("State(");
+      boolean comma = false;
+      for (int i = 0; i < NNONTERM; i++) {
+        if (rule[i] != 0) {
+          if (comma) buf.append(",");
+          buf.append(nontermName(i) + ":" + rule[i] + "[" + cost1[i] + "." + cost2[i] + "]");
+          comma = true;
+        }
+      }
+      buf.append(")");
+
+      return buf.toString();
+    }
+
+    // State methods here
+    $state
+  }
+
+
+  private static final Rule[] rulev = new Rule[State.NRULES];
+
+  static {
+    $tables1
+  }
+  $tables2
+
+
+  /** Return default register set for type. **/
+  String defaultRegsetForType(int type) {
+    switch (type) {
+    $regsettype
+    default:
+      return null;
+    }
+  }
+
+
+  void initLabeling(LirFactory lir) {
+    stateVec = new State[lir.idBound()];
+  }
+
+  String showLabel(LirNode t) {
+    return stateVec[t.id].toString();
+  }
+
+
+  void labelTree(LirNode t) {
+    if (stateVec[t.id] == null) {
+      int n = nActualOperands(t);
+      State[] kid = new State[n];
+      for (int i = 0; i < n; i++) {
+        LirNode s = t.kid(i);
+        labelTree(s);
+        kid[i] = stateVec[s.id];
+      }
+
+      State st = new State();
+      stateVec[t.id] = st;
+      st.label(t, kid);
+    }
+  }
+
+  Rule getRule(LirNode t, int goal) {
+    return rulev[stateVec[t.id].rule[goal]];
+  }
+
+  int getCost1(LirNode t, int goal) {
+    return stateVec[t.id].cost1[goal];
+  }
+
+  int getCost2(LirNode t, int goal) {
+    return stateVec[t.id].cost2[goal];
+  }
+
+  int startNT() { return State.START_NT; }
+
+  /* String nameOfNT(int nt) { return nontermNamev[nt]; } */
+
+  /** Expand building-macro. **/
+  Object expandBuildMacro(ImList form) {
+    String name = (String)form.elem();
+    $buildmac
+    return null;
+  }
+
+  /** Expand building-macro, for LirNode **/
+  Object quiltLir(LirNode node) {
+    switch (node.opCode) {
+    $buildlir
+    default:
+      return quiltLirDefault(node);
+    }
+  }
+
+  /** Expand emit-macro for list form. **/
+  String emitList(ImList form, boolean topLevel) {
+    String name = (String)form.elem();
+    $emitlist
+    return emitListDefault(form, topLevel);
+  }
+
+  /** Expand emit-macro for LirNode. **/
+  String emitLir(LirNode node) {
+    switch (node.opCode) {
+    $emitlir
+    default:
+      return emitLirDefault(node);
+    }
+  }
+
+  // CodeGenerator methods here
+  $codegenerator
+}

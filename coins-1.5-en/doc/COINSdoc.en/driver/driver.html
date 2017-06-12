@@ -1,0 +1,1219 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>How to use the Compiler Driver</title>
+
+  </head>
+  <body>
+	<h1>2. How to use the Compiler Driver</h1>
+    
+<h3 id='i-2-1'>2.1. Target, Range, and Structure of this Document</h3>
+
+   This document describes the design and the usage of the COINS
+compiler driver for the COINS users.<br>
+   The COINS is a framework of compiler mainly to support users who
+are to construct their own compiler.  Thus, its driver part consists
+of Java API to create their own compiler driver and a compiler driver
+with traditionally fashioned command line interface (CLI) using the
+API.<p>
+   Section two describes about the design and the structure of the
+COINS compiler driver.  Section three is a users manual of the CLI
+driver.  Section four describes about an outline of the driver API.<p>
+
+<h3 id='i-2-2'>2.2. COINS Compiler Driver</h3>
+
+<h4 id='i-2-2-1'>2.2.1. The design</h4>
+
+   We expect that the COINS users can be categorized into following
+two categories:
+<ul>
+<li>Users to implement their own compilers</li>
+<li>Users to compile programs using a compiler implementation packed
+     in the COINS release, or built by users of another category</li>
+</ul>
+   Users of the former category may intend to:
+<ul>
+<li> build a new compiler of a newly designed programming language,</li> 
+<li>build a new compiler for a newly developed processor,</li>
+<li>integrate a newly designed optimizer into a compiler, and/or</li>
+<li> implement a new compiler interface, and so on.</li>
+</ul>
+
+The "new compilers" may require "new compiler drivers".  The COINS
+compiler driver provides a driver programming API.<p>
+   Hereafter, we call a user of the latter category "operator".
+When we write "user" without explanation, it doesn't mean the
+operators.<p>
+   Operators (and we) must not be willing to follow some ritual
+procedures to use a compiler.  Some of them will try "make
+CC=newcc", without reading documents.  To meet the requirement, a
+traditionally fashioned CLI driver is provided.  This CLI driver has
+many similarities with the gcc (GNU C compiler) in the command syntax
+and the basic compile options.<p>
+
+<h4 id='i-2-2-2'>2.2.2. Structure</h4>
+
+   Figure 2-1 illustrates the structure of the COINS compiler driver.
+<center>
+<pre>
+prepared +---------------------+ +---------------------+ +------------+
+by users |driver implementation| |driver user interface| |suffix rules|
+         +---------------------+ +---------------------+ +------------+
+         +-----------------------------+ +----------------------------+
+API      |   tracer API / warning API  | |  compile specification API |
+         +-----------------------------+ +----------------------------+
+         +------------------------------------------------------------+
+         |                           engine                           |
+         +------------------------------------------------------------+
+</pre>
+	 Figure 1-1: The structure of the COINS compile driver
+</center><p>
+
+   Users should prepare the following three parts if needed:
+<ul>
+<li> Driver User Interface:<br>
+
+      The driver user interface is to:
+
+<ul>
+<li>create a ``compile specification object,'' and</li>
+<li>pass the ``compile specification object'' to the engine.</li>
+</ul>
+      The compile specification object is a Java object to hold source
+      files names and the compile options specified by the operator
+      implicitly or explicitly by the way the driver user interface
+      provides.  It may be by CLI, may be by GUI. 
+</li>
+<li>Driver Implementation:<br>
+
+      The driver implementation is to provide following services
+      called from the engine:
+<ul>
+<li>preprocess</li>
+<li>compile</li>
+<li>assemble</li>
+<li>link</li>
+</ul>
+      The driver implementation refers the compile specification
+      object passed from the engine.
+</li>
+<li>Suffix Rules:<br>
+
+      Suffix rules describes which suffix a file should have when a
+      certain action is taken to a file with a certain suffix.<br>
+      The COINS release package provides a default suffix rule set
+      describing C, Fortran and Java suffix rules.  Users can provide
+      their own suffix rules for existing languages and their new
+      languages.</li>
+</ul>
+<p>
+   Each API and the engine have following functions:
+<ul>
+<li>Engine:<br>
+
+      Calls services provided by the driver implementation according
+      to the compile specification passed from the driver user
+      interface.  The resulting files are named according to the
+      suffix rules.
+</li>
+<li> Compile Specification API:<br>
+
+      Is to create and refer the compile specification object.  Target 
+      file names and compile options can be specified / unspecified /
+      referred.<br>
+      A special option system named ``COINS options'' is provided to
+      allow users to implement their own compile options.  The driver
+      user interface can freely define a new COINS option and set a
+      value to it.  The driver implementation can refer it.
+</li>
+<li> Tracer API:<br>
+
+      Interprets trace options specified in the compile specification
+      object and decides to, or not to write trace messages.
+</li>
+<li>Warning API:<br>
+
+      Interprets warning options specified in the compile
+      specification object and decides to, or not to write warning
+      messages.
+</li>
+</ul>
+
+<h3 id='i-2-3'>2.3. How to Use the CLI Driver</h3>
+
+ <h4 id='i-2-3-1'>2.3.1 CLI Driver</h4>
+
+   The class coins.driver.Driver provided by the release package is a
+CLI-based driver implemented by the COINS driver API, which is
+designed to have many similarities with gcc.<p>
+   The class coins.driver.Driver is the driver implementation and the
+class coins.driver.CommandLine is the driver user interface.<p>
+
+<h4 id='i-2-3-2'> 2.3.2 Command Syntax</h4>
+<pre>
+        java [<i>java-option </i>...] coins.driver.Driver [<i>option</i> | <i>filename</i>]...
+</pre>
+   The command name 'java' may be 'jre' or other command name
+according to your Java runtime.
+   'java-option's are for Java runtime environment, e.g., a -cp option
+to use COINS classes.  If you deployed the COINS classes at
+/usr/local/coins,
+<pre>
+    java -cp /usr/local/coins coins.driver.Driver [<i>option</i> | <i>filename</i>]
+</pre>
+will be enough to load COINS classes to the Java runtime.<p>
+
+<h4 id='i-2-3-3'> 2.3.3. Options</h4>
+
+   Following compile options can be specified:<p>
+<dl>
+<dt> -E </dt><dd>   only preprocessing.  As for C program, foo.i is generated by
+          processing foo.c.  The output file is produced at the
+          directory where the input file (foo.c, in the example) is
+          located.  COMPATIBILITY NOTE: gcc produces the output to the
+          stdout.</dd>
+<dt> -S </dt><dd>   stops after compilation (in the strict meaning, i.e., the 
+          assembler code generation).  As for C program, foo.s is
+          generated by processing foo.c.  The output file is produced
+          at the directory where the input file (foo.c, in the
+          example) is located.  COMPATIBILITY NOTE: gcc produces the
+          output to the current working directory.</dd>
+<dt> -c </dt><dd>   don't link.  As for C program, foo.o is generated by
+          processing foo.c.  The output file is produced at the 
+          directory where foo.c is located.  COMPATIBILITY NOTE: gcc
+          produces the output to the current working directory.</dd>
+<dt>-help </dt><dd>shows help messages.</dd>
+<dt>-o <i>file</i></dt><dd>
+          specifies a path name of the output file.  The output file
+          means a preprocessed source file when the -E option is
+          specified, an assembly code file when the -S option is
+          specified, an object code file when the -c option is
+          specified, and the executable file when none of the above
+          is specified. </dd>
+<dt>-b<i>arch</i>, or -b <i>arch</i></dt><dd>
+          specifies a target architecture, as well as specifying
+          -coins:target=arch (see -coins:target=arch).</dd>
+<dt> -pipe </dt><dd>uses pipelines instead of temporary files to communicate
+          between passes.</dd>
+<dt>-W<i>category</i></dt><dd>
+          shows warning messages whose warning category is `category.'</dd>
+<dt>-Wno-<i>category</i></dt><dd>
+          suppresses warning messages whose warning category is
+          `category.'</dd>
+<dt>-C </dt><dd>   preserve comments while preprocessing.</dd>
+<dt>-D<i>macro</i>[=<i>definition</i>]</dt><dd>
+          defines a preprocessor macro.  `definition' is set to the 
+          macro value when specified.</dd>
+<dt>-I<i>path</i></dt><dd>
+          specifies an include path.</dd>
+<dt> -P </dt><dd>   inhibits #line directives.</dd>
+<dt>-Umacro</dt><dd>
+          undefines a preprocessor macro.</dd>
+<dt> -O</dt><dd>
+          same as -O1.</dd>
+<dt>-O<i>level</i></dt><dd>
+          specifies an optimization level.  The `level' must be a
+          non-negative integer.  Optimizations done at each level are
+          following: 
+<dl>
+  <dt>   -O0 </dt><dd>   same as -coins:hirOpt=noSimplify<br>
+                         that does nothing.</dd>
+    <dt>  -O1  </dt><dd>  same as -coins:hirOpt=cf,ssa-opt=prun/cpyp/cstp/dce/ebe/srd3,loopinversion
+  <dt>  -O2  </dt><dd>  same as -coins:hirOpt=cf,ssa-opt=
+prun/divex/cse/cstp/hli/osr/hli/cstp/cpyp/preqp/cstp/rpe/dce/srd3,loopinversion<br>
+After coins-1.4.4.3, includes the following additional options:<br>
+-coins:regpromote,schedule-after
+</dd>
+  <dt>  -O3  </dt><dd>  same as -coins:hirOpt=inline/cf/pre,ssa-opt=
+prun/divex/cse/cstp/hli/osr/hli/cstp/cpyp/preqp/cstp/rpe/dce/srd3,loopinversion<br>
+After coins-1.4.5.2, includes the following additional options:<br>
+-coins:regpromote-ex,schedule,pipelining
+</dd>
+  <dt>  -O4  </dt><dd>  same as -coins:hirOpt=inline/loopexp/cf/cpf/pre,ssa-opt=
+prun/divex/cse/cstp/hli/osr/hli/cstp/cpyp/preqp/cstp/rpe/dce/srd3,loopinversion<br>
+After coins-1.4.5.2, includes the following additional options:<br>
+-coins:regpromote-ex,schedule,pipelining
+</dd>
+</dl></dd>
+
+<dt> -g </dt><dd>   preserves symbols in an executable file.</dd>
+<dt> -v </dt><dd>   prints a command line when a sub-process is invoked.</dd>
+<dt> -L<i>path</i></dt><dd>
+          specifies an archive search path.</dd>
+<dt> -dynamic</dt><dd>
+          uses dynamic linkage.</dd>
+<dt>-static</dt><dd>
+          uses static linkage.</dd>
+<dt>-l<i>archive</i></dt><dd>
+          specifies an <i>archive</i>  to link.</dd>
+<dt>-coins:<i>option</i></dt><dd>
+See the following section.</dd>
+</dl>
+
+<h4 id='i-2-3-4'>2.3.4. -coins Options</h4>
+<pre>
+    -coins:<i>option,option</i>,...
+</pre>
+  <i>option</i>   is   a COINS option.  Any string not including `,' can be
+          specified as <i>option</i>.
+          More than one COINS option can be specified by delimiting
+          them by `,'s, e.g.
+<pre>
+    -coins:debug,trace=HIR.1,suffix=/tmp/mysuffixes
+</pre>
+          is same as
+<pre>
+    -coins:debug -coins:trace=HIR.1 -coins:suffix=/tmp/mysuffixes
+</pre><p>
+          Standard COINS options (which means the options that affects
+          driver API behavior) are as follows:
+<dl>
+<dt>            -coins:target=<i>arch</i><dd>
+<dt>            -coins:target=<i>arch-convention</i><dd>
+               specifies a target architecture.  
+Equivalent to -b <i>arch</i>, or to -b <i>arch-convention</i>.<p>
+"-coins:target=<i>arch</i>" is equivalent to 
+<pre>
+-coins:target=<i>arch</i>-standard
+</pre>
+and "-coins:target=<i>arch-convention</i>"  is equivalent to 
+<pre>
+-coins:target-arch=<i>arch</i>,target-convention=<i>convention</i>
+</pre>
+<br>
+<pre>
+     -coins:target-arch=<i>arch</i>
+</pre>
+               specifies a target architecture name.  <i>arch</i>
+               must be one of:
+<ul>
+<li>sparc ...... SPARC architecture (mult/div is a subroutine)</li>
+<li>sparc-v8 ... SUN SPARC (mult/div is a machine instruction)</li>
+<li>x86 ........ Intel i386 architecture</li>
+<li>x86-cygwin .. Intel i386 architecture, cygwin</li>
+<li>x86_64 ...... Intel 64 architecture (comform to AMD64 ABI Draft 0.98) (from coins-1.4.3)</li>
+<li>x86_64-mac .. Intel-Mac architecture (comform to AMD64 ABI Draft 0.98) (from coins-1.4.3)</li>
+<li>arm ........ ARM</li>
+<li>mips ....... MIPS</li>
+<li>sh4 ........ Hitachi SH-4</li>
+<li>ppc ........ IBM PowerPC</li>
+<li>alpha ... Alpha</li>
+<li>thumb ... Thumb (16 bit ARM architecture)</li>
+<li>mb ...... Xilinx MicroBlaze</li>
+</ul>
+               <p>When this option is specified, the COINS Compiler Driver
+               specifies -D__<i>arch</i>__ as a preprocessor option, and specifies
+               the <i>arch</i> to LIR module invocation as a target architecture
+               name, which will be 'sparc' when this option is not specified.</p>
+
+<p>
+Note:<br>
+All of above target options have been tested by using test programs
+under the directory test/c and succeeded to execute correctly
+except for a few number of special cases. As for the sparc and x86,
+the compiler passed the test by comprehensive test program set
+composed of 8000 programs and successfully executed the SPEC
+CPU 2000 benchmark programs. (When -O3 option is specified,
+some programs in SPEC CPU 2000 fail yet.)
+When target=arm is specified, a few programs in SPEC CPU 2000
+can be executed successfully but others failed because of
+restrictions from test environment and remaining defects
+in code generation. As for other targets (mb, mips, ppc,
+sh4, thumb, alpha, x86_64), test by SPEC CPU2000 is not yet tried.</p>
+<p>
+The code generators for sparc and x86 support the "long long" type,
+while the others do not support it.</p>
+<pre>
+      -coins:target-convention=<i>convention</i>
+</pre>
+               specifies a target convention name.  
+               <i>convention</i> can be:
+<ul>
+<li>                 in case of <i>arch</i>=sparc:
+<ul><li>           standard ... standard SPARC convention</li>
+   <li>             v8 ... mult/div is a machine instruction</li>
+</ul></li>
+ <li>                in case of <i>arch</i>=x86:
+<ul>
+    <li>            standard ... Linux ELF</li>
+   <li>             cygwin ... cygwin</li>
+</ul></li>
+ <li>                in case of <i>arch</i>=x86_64:
+<ul>
+    <li>            standard ... Linux ELF</li>
+   <li>             mac ... Intel-Mac (fprintf is not supported)</li>
+</ul></li>
+</ul>
+               When this option is specified, the COINS Compiler Driver
+               specifies the <i>convention</i> to LIR module invocation as a target 
+               architecture convention name, which will be 'standard' when
+               this option is not specified.<p>
+  
+</dd>
+
+<dt>         -coins:preprocessor=<i>prep</i></dt>
+<dt>         -coins:assembler=<i>asm</i></dt>
+<dt>         -coins:linker=<i>link</i></dt>
+<dd>
+specify the preprocessor, assembler, and linker.
+<p>
+The default preprocessor is 'cpp', the default assembler is 'as', and the default
+linker is 'gcc'. (The default assembler has been 'gas' until coins-1.4.4.4.)
+If the specified architecture requires different names from these default names,
+the required names must be specified as shown in the following examples:</p>
+<ul>
+<li>x8_64-mac
+<pre>
+  -coins:assembler="as -arch x86_64",linker="gcc -arch x86_64"
+</pre>
+</li>
+<li>Alpha (linux machine)
+<pre>
+  -coins:preprocessor=alpha-linux-cpp
+</pre>
+</li>
+<li>arm, thumb, mb
+<pre>
+  -coins:preprocessor=<i>XXX</i>-linux-cpp,assembler=<i>XXX</i>-linux-as
+</pre>
+where <i>XXX</i> is 'arm', 'thumb', or 'mb'
+</li>
+<li>mips-linux
+<pre>
+  -coins:preprocessor=mips-linux-cpp,assembler="mips-linux-as -KPIC"
+</pre>
+</li>
+<li>MicroBlaze (with EDK8.1)
+<pre>
+  -coins:preprocessor=mb-cpp,assembler=mb-as
+</pre>
+</li>
+</ul>
+</dd>
+
+<dt> specification of header files</dt>
+<dd>
+The stdarg.h file for sparc, x86, x86_64, and arm, is in <i>COINS-directory</i>/lang/c/include/stdarg.h. The following command option
+<pre>
+  -coins:preprocessor="cpp -I../lang/c/include"
+</pre>
+ specifies to use this file.<br><br>
+For x86_64-mac, a program which contains
+<pre>
+#include &lt;stdio.h&gt;
+</pre>
+may cause a syntax error. In that case, the program can be compiled by using
+simplified header files. Examples of simplified header files are in
+<i>COINS-directory</i>/lang/c/include/samples/<br><br>
+ Cygwin users may need to specify the following option:
+<pre>
+    -coins:preprocessor="cpp-3 -I/usr/include"
+    (-coins:preprocessor="cpp -I/usr/include" 
+          -- in case of using java version older than java 1.6)
+</pre>
+</dd>
+
+<dt>       -coins:hirOpt=<i>hiroptspec</i></dt>
+<dt>      -coins:hirOpt=<i>hiroptspec</i>/<i>hiroptspec</i>/...<dt><dd>
+       Do optimizations on HIR. 
+<i>hiroptspec</i>  must be one of following:
+<ul>
+    cf &emsp;&emsp; constant folding<br>
+    cpf&emsp;&emsp; constant propagation and folding<br>
+    cse&emsp;&emsp; common subexpression elimination<br>
+    dce&emsp;&emsp; dead code elimination<br>
+    fromc&emsp;     simple optimizations done by C parser<br>
+    gt&emsp;&emsp;&emsp;global variable temporalization within basic blocks<br>
+    pre&emsp;&emsp;   partial redundancy elimination<br>
+    loopexp&emsp;    loop expansion    <br>
+    presrhir&emsp;    loop expansion linked to the scalar replacement by<br>
+&emsp;&emsp;&emsp; demend-driven partial redundancy elimination.<br>
+    loopif&emsp;&emsp;  loop invariant if-statement expansion <br>
+    inline&emsp;&emsp;  inline expansion  <br>
+<!-- ##101 BEGIN -->
+    inlinedepth&emsp;  control recursive inline expansion  <br>
+    globalReform&emsp; global pattern matching       <br>
+    complexityAllowance&emsp; control optimization for large programs<br>
+</ul>
+<!-- ##101 END -->
+See "5.1. How to Use HIR Basic Optimizer" in 
+<a href='../hiropt/hiropt-frame.html' target="_top">5. Optimization for HIR</a> for detail.</dd>
+<br>
+<dt>            -coins:ssa-opt=<i>option</i>/..</dt><dd>
+               specifies SSA optimization options.  The <i>option</i>s are defined as follows:
+<ul>
+<li>      Translation to SSA form<br>
+      (You MUST specify one of them at the beginning of this SSA option)
+<ul>
+<li>        mini  :&emsp;&emsp; Translation to Minimal SSA form</li>
+<li>        semi  :&emsp;&emsp; Translation to Semi-Pruned SSA form</li>
+<li>        prun  :&emsp;&emsp; Translation to Pruned SSA form</li>
+</ul></li>
+
+<li>      Back Translation from SSA form<br>
+      (You MUST specify one of them at the end of this SSA option)
+<ul>
+<li>        brig  :&emsp;&emsp; Back translation using Briggs's Method</li>
+ <li>       srd1  : &emsp;&emsp;Back translation using Sreedhar's Method I</li>
+  <li>      srd2  : &emsp;&emsp;Back translation using Sreedhar's Method II</li>
+ <li>       srd3  : &emsp;&emsp;Back translation using Sreedhar's Method III</li>
+</ul></li>
+<li>      Optimization for SSA form
+<ul>
+ <li>       cbb   : &emsp;&emsp;Concatinate Basic Block</li>
+<li>        cpyp  : &emsp;&emsp;Copy Propagation</li>
+<li>        cse   : &emsp;&emsp;Common Subexpression Elimination</li>
+<li>        cstp  : &emsp;&emsp;Constant Folding and Propagation with Conditional Branches</li>
+ <li>       dce   : &emsp;&emsp;Dead Code Elimination</li>
+ <li>       divex : &emsp;&emsp;Divide expression into three address code</li>
+   <li>     ebe   : &emsp;&emsp;Empty Block Elimination</li>
+  <li>      esplt :&emsp;&emsp; Split Critical Edge</li>
+ <li>       gra   : &emsp;&emsp;Global Reassociation</li>
+ <li>       hli   : &emsp;&emsp;Hoisting Loop-invariant Code</li>
+ <li>       lir2c : &emsp;&emsp;Make C program from LIR</li>
+  <li>      osr   : &emsp;&emsp;Operator Strength Reduction related to Induction Variables
+                and Linear Function Test Replacement</li>
+  <li>      preqp : &emsp;&emsp;Global Value Numbering and Partial Redundancy Elimination 
+              with Efficient Question Propagation (under development)</li>
+  <li>      rpe   : &emsp;&emsp;Redundant Phi-function Elimination</li>
+  <li>      ssag  :&emsp;&emsp; Making SSA graph</li>
+<!-- ******************** Begin 2013.7 -->
+  <li>      glia  :&emsp;&emsp; Global Load Instruction Aggregation</li>
+<!-- ******************** End -->
+</ul></li>
+</ul>
+After coins-1.4.4.2, the following optimizations for non-SSA forms can be specified:
+<ul>
+<li>Optimization for non-SSA form
+<ul>
+<li>pdeqp : &emsp;&emsp;Partial Dead Code Elimination based on Question Propagation</li>
+<li>divex2 : &emsp;&emsp;Divide expression into Three-Address Code (divex applied to normal form)</li>
+<li>esplt : &emsp;&emsp;Split Critical Edge</li>
+<!-- ******************** Begin 2013.7 -->
+<li>      expde  :&emsp;&emsp; Exhaustive Partial Dead Code Elimination</li>
+<li>      ddpde  :&emsp;&emsp; Demand-Driven Partial Dead Code Elimination</li>
+<!-- ******************** End -->
+</ul>
+</li>
+</ul>
+
+After coins-1.5, the following optimizations for non-SSA forms can be specified:
+<ul>
+<li>Scalar replacement by demand-driven partial redundancy elimination based on global value numbering<br>
+(Scalar replacement by demand-driven PRE in brief.)<br>
+<ul>
+<li>divex3 : &emsp;&emsp;Divide expression into Three-Address Code<br>
+&emsp;&emsp;&emsp;&emsp; (for Scalar replacement by demand-driven PDE).</li>
+<li>eqp : &emsp;&emsp;Demand-driven partial redundancy elimination without copy propagation<br> 
+&emsp;&emsp;&emsp;&emsp;(for decreasing required number of registers).</li>
+<li>presr : &emsp;&emsp;Scalar replacement by demand-driven PRE.</li>
+</li>
+</ul></li>
+</ul>
+See "8.2. SSA OPTIONS" in 
+<a href='../ssa/ssa-frame.html' target="_top">8. SSA Optimization for LIR</a> for detail.
+</dd>
+
+<dt>            -coins:lir-opt=<i>option</i>/..</dt><dd>
+<dt>            -coins:lirOpt=<i>option</i>/..</dt><dd>
+These can be used after coins-1.4.4.3.
+<i>Option</i>s are the same as the <i>option</i>s of <b>ssa-opt</b>.</dd>
+
+<dt>    -coins:parallelDoAll=OpenMP</dt><dd> 
+               analyze for-loops and generate OpenMP program written in C
+               to be executed in parallel. 
+See "6.1. Loop Parallelizer" in 
+<a href='../para/para-frame.html' target="_top">6. Parallelization for HIR</a> for detail.
+</dd>
+
+<dt>    -coins:parallelDoAll=n -S</dt><dd>
+               where n is an integer number indicating maximum degree of 
+               parallelization. This option specifies to
+               analyze for-loops and generate assembly language program 
+               that can be executed in parallel by linking with 
+               execution time routines prepared for parallelization. 
+See "6.1. Loop Parallelizer" in 
+<a href='../para/para-frame.html' target="_top">6. Parallelization for HIR</a> for detail.
+               </dd>
+
+<dt>    -coins:coarseGrainParallel</dt>
+<dt>    -coins:cgParallel</dt><dd>
+               specified to invoke the Coarse Grain Parallelizing
+               Module. See "6.2. Coarse Grain Parallelizing Module" in
+<a href='../para/para-frame.html' target="_top">6. Parallelization for HIR</a> for detail.
+</dd>
+
+<dt>    -coins:debug</dt><dd>
+               Tells that the compiler is under debugging.  Same as
+               -coins:preserveFiles,testHir,testSym.</dd>
+<dt>    -coins:preserveFiles</dt><dd>
+               Preserves temporary files.</dd>
+<dt>    -coins:trace=<i>tracespec</i></dt>
+<dt>    -coins:trace=<i>tracespec</i>/<i>tracespec</i>/..</dt><dd>
+               Tracer options.<br>
+               There are two types of trace messages: categorized
+               trace messages and generic trace messages.  A
+               categorized trace message have a message category,
+               and a generic trace message doesn't have message
+               category.<br>
+               A trace message may have a message level which is a
+               non-negative integer value.  Trace messages without a
+               message level are treated as level zero.<br>
+               In the above form, each <i>tracespec</i> can be in form of
+<pre>
+    <i>level</i>
+</pre>
+               or
+<pre>
+    <i> category</i>.<i>level</i>
+</pre>
+
+               where a <i>level</i> is non-negative integer which
+               represents a trace level, and the <i> category</i>  is a
+               sequence of letters and digits which represents a
+               message category.  The former form specifies the trace
+               level of a generic trace message (hereafter, a generic
+               trace level).  A generic trace message is printed only
+               if its message level is less than or equals to the
+               generic trace level.  The latter form specifies the
+               trace level of categorized messages whose message
+               category is <i> category</i>.  A trace message whose message
+               category is <i> category</i> is printed only if its message
+               level is less than or equals to the trace level.  For
+               example,
+<pre>
+    -coins:trace=2
+</pre>
+               prints generic trace messages whose message level is
+               less than or equals to 2;
+<pre>
+    -coins:trace=HIR.2
+</pre>
+               prints trace messages of category `HIR' whose
+               message level is less than or equals to 2.
+<br>
+               The available trace categories are:
+<pre>
+Control  -- What phases and (principal) modules are executed
+HIR      -- HIR (High level Intermediate Representation) information
+Sym      -- Sym and symbol table information
+Flow     -- Control flow and data flow information
+Alias    -- Alias analysis information
+Parse    -- C Parser information
+ToHir    -- C-AST (abstract syntax tree of C) to HIR transformation inf
+HIR2C    -- HIR-to-C transformation information
+Opt1     -- HIR optimizer information
+Para1    -- Loop parallelizer information
+TMD      -- Code Generation information
+LIR      -- LIR (Low level Intermediate Representation) information
+</pre>
+<br>
+When multiple categories are specified separating by / delimiter,
+then trace information for each specified category is printed.
+For example,
+<pre>
+    -coins:trace=Sym.1/HIR.1
+</pre>
+prints the symbol table and HIR that are handed from the 
+front-end to the back-end. When optimization level and 
+Flow, Opt1 categories are specified in such a way as
+<pre>
+   -O3 -coins:trace=Sym.1/HIR.2/Flow.1/Opt1.4
+</pre>
+then, information of the symbol table, HIR, control flow,
+data flow, and optimization process will be printed.
+<br>
+Trace information is useful for understanding the process of
+compilation as well as debugging the compiler itself.
+<br>
+<br>
+               When more than one generic trace levels are specified,
+               or more than one trace levels are specified for a same
+               category, the latter one overwrites the former one.
+               For example,
+<pre>
+   -coins:trace=4/8
+</pre>
+               prints generic trace messages whose message level is
+               less than or equals to 8, not 4;
+<pre>
+   -coins:trace=HIR.4/HIR.2
+</pre>
+               prints HIR trace messages whose message level is
+               less than or equals to 2, not 4.
+               A special category `default' is provided to specify a
+               trace level of all trace messages other than trace
+               messages whose trace levels are explicitly specified in
+               the other tracespecs.  For example,
+<pre>
+   -coins:trace=default.2/HIR.4
+</pre>
+               prints HIR trace messages whose message level is
+               less than or equals to 4, and all non-HIR messages
+               (and generic trace messages) whose message level is
+               less than or equals to 2.
+               Note that a large trace level (e.g. 7, 8, 9, etc.) may
+               produce huge amount of traces.
+</dd>
+<dt>      -coins:libdir=<i>path</i></dt><dd>
+               specifies a library directory path.  See <a href='#i-2-4-6'>section 2.4.6</a>
+               about the library directory.
+               When more than one -coins:libdir options are specified,
+               only the last one is valid.</dd>
+<dt>       -coins:property=<i>path</i></dt><dd>
+               specifies property file path name.  By default, a file
+               named `property' located at the library directory is
+               the property file.<br>
+               See <a href='#i-2-4-7'>section 2.4.7</a> about the property file.
+               When more than one -coins:property options are
+               specified, only the last one is valid.</dd>
+<dt>       -coins:suffix=<i>path</i></dt><dd>
+               specifies a path name of a suffix database file.  By
+               default, a file name `suffixes' located at the library
+               directory is the suffix database file.<br>
+               See <a href='#i-2-4-8'>section 2.4.8</a> about the suffix database file.
+               When more than one -coins:suffix options are
+               specified, only the last one is valid.</dd>
+<dt>      -coins:suffixoption=<i>option</i></dt><dd>
+               specifies a suffix option. 
+               See <a href='#i-2-4-8'>section 2.4.8</a> about the suffix option.
+               When more than one -coins:suffixoption options are
+               specified and are conflicting, the latter one overrides 
+               the former one.</dd>
+
+<dt>      -coins:hirAnal</dt><dd>
+               Do HIR flow analysis.</dd>
+<dt>    -coins:hir2c=<i>t1</i></dt>
+<dt>   -coins:hir2c=<i>t1</i>/<i>t2</i>/.../<i>tn</i></dt><dd>
+               translates HIR into a C program at specified timing.
+              <i>t1</i>, <i>t2</i>, ..., <i>tn</i> must be one of
+<pre>
+    new ... just after HIR creation,
+    flo ... just after data flow analysis on HIR has
+                    been done, and
+    opt ... after all optimizations on HIR.
+</pre>
+               When more than one timing specifiers are specified,
+               HIR is translated at all specified timings.
+               Generated files are named as r-hir-t.c, where `r' is
+               the file name root of original source file, and `t' is
+               the timing specifier.  For example,
+<pre>
+    java coins.driver.Driver -coins:hir2c=new foo.c
+</pre>
+               will produce foo-hir-new.c as the hir2c result.
+               Invalid timing specifiers are ignored and the
+               corresponding file is not generated.</dd>
+<dt>        -coins:lir2c=<i>t1</i></dt>
+<dt>       -coins:lir2c=<i>t1</i>/<i>t2</i>/.../<i>tn</i></dt><dd>
+               translates LIR into a C program at specified timing.
+               <i>t1</i>, <i>t2</i>, ..., <i>tn</i> must be one of
+<pre>
+    new ... just after LIR creation,
+    opt ... after all optimizations.
+</pre>
+               When more than one timing specifiers are specified,
+               LIR is translated at all specified timings.
+               Generated files are named as r-lir-t.c, where `r' is
+               the file name root of original source file, and `t' is
+               the timing specifier.  For example,
+<pre>
+    java coins.driver.Driver -coins:lir2c=new foo.c
+</pre>
+               will produce foo-lir-new.c as the lir2c result.
+               Invalid timing specifiers are ignored and the
+               corresponding file is not generated.</dd>
+<dt>        -coins:stopafterhir2c</dt>
+<dt>       -coins:stopafterlir2c</dt><dd>
+               quits compilation of each compile unit just after
+               generating C source files at all specified timings by
+               the hir2c/lir2c option.  When some invalid timing
+               specifiers are specified in hir2c/lir2c option,
+               however, the behavior of the compiler is undefined.</dd>
+<dt>      -coins:testHir</dt><dd>
+               Tests HIR integrity after HIR optimization and
+               parallelization and before converting HIR to LIR.</dd>
+<dt>        -coins:testSym</dt><dd>
+               Tests symbol table integrity after HIR optimization and
+               parallelization and before converting HIR to LIR.</dd>
+<dt>        -coins:preprocessor=<i>preprocessor-command</i></dt>
+<dt>        -coins:assembler=<i>assembler-command</i></dt>
+<dt>        -coins:linker=<i>linker-command</i></dt><dd>
+               specifies alternative commands of preprocessor,
+               assembler, and linker.<br>
+               In default, the COINS Compiler Driver uses cpp, gas,
+               and gcc as preprocessor, assembler, and linker.  You
+               can override them by specifying these options.
+               Following example sets `as' as the assembler.
+<pre>
+   -coins:assembler=as
+</pre>
+               Blanks appeared in the command name works as a word
+               delimiter: e.g., following example sets the gcc as the
+               preprocessor and an option -E is given to it.
+<pre>
+   -coins:preprocessor=gcc -E
+</pre>
+               Do not forget to escape the blanks from your command
+               interpreter, if it treats blanks as a word delimiter,
+               too.  For example, most of Unix shells can escape
+               blanks using quotations, e.g.,
+<pre>
+    -coins:preprocessor="gcc -E"
+    -coins:preprocessor='gcc -E'
+    '-coins:preprocessor=gcc -E'
+</pre>
+               Double quotations will work on Windows, too.
+               A quotation mark (' and ") and a next appearing same
+               quotation mark are removed from the string and
+               characters between them are interpreted as follows:
+<ul>
+<li> a blank is not a word delimiter, and</li>
+<li> the other kind of quotation mark is treated as
+                     itself, not a quotation mark.</li>
+</ul>
+               This rule can be used to avoid the above rule which
+               interprets a blank as a word delimiter.  For example,
+               in an environment where the file and directory names
+               can have blanks in its name, quotation marks can escape
+               the blank in the command name as follows:
+<pre>
+    -coins:preprocessor='my cc' -E
+</pre>
+               In this example, a program 'my cc' is invoked as a
+               preprocessor with an option '-E'.  Do not forget to
+               escape quotation marks and blanks from your command
+               interpreter.  For example, in Windows, double
+               quotations will be required as follows:
+<pre>
+    -coins:preprocessor="'my cc' -E"
+</pre>
+               Any character following a backslash (`\') is
+               interpreted as the character itself.  A backslash can
+               be given by a backslash following a backslash.  A
+               quotation mark can be interpreted as itself losing the
+               special effect described above by following a
+               backslash.  This escape rule can be used to escape a
+               blank from being interpreted as a word delimiter.  For
+               example, if your environment allows you to include
+               blanks in file/directory name, you can escape them by
+               backslashes: e.g.,
+<pre>
+   -coins:linker=c:\\Program\ Files\\bin_utils\\ld
+</pre>
+               will set `c:\Program Files\bin_utils\ld' as a linker.
+               Again, never forget to escape `\'s and blanks from your 
+               command interpreter, if necessary; e.g., in Windows,
+<pre>
+   -coins:linker="c:\\Program\ Files\\bin_utils\\ld"
+</pre>
+</dd>
+<dt>            -coins:max-recovered-errors=n</dt><dd>
+               When the number of recovered compile errors exceeds n
+               while executing a compile step of a compile unit, a
+               compile error is issued.  Or, if 0 is specified as n,
+               no compile error is issued only by increasing the
+               number of recovered compile errors.  A compile step
+               here is one of preprocess, compile, assemble, and link.
+
+<dt>         -coins:max-warnings=<i>n</i></dt><dd>
+               When the number of warnings exceeds n while executing a
+               compile step of a compile unit, a compile error is
+               issued.  Or, if 0 is specified as n, no compile error
+               is issued only by increasing the number of warnings.  A
+               compile step here is one of preprocess, compile,
+               assemble, and link.</dd>
+
+<dt>       -coins:compile-parallel</dt><dd>
+               Compilations of all compile units are executed
+               concurrently.  Do not specify this option while using a 
+               compiler driver which is not implemented in thread-safe 
+               way.</dd>
+
+
+ <dt>           -coins:loopinversion</dt><dd>
+               specifies to invert a loop end condition when the loop
+               ends with an unconditional jump.</dd>
+
+<dt> -coins:regpromote</dt>
+<dd>
+can be used after coins-1.4.4.3. It
+specifies register promotion (the attach option is not needed).
+See "11.2.3. Example 3: Register Promotion" in 
+<a href='../backend/backend-frame.html' target="_top">11. Structure and Extensions of the Backend Process</a> for detail. 
+</dd>
+<dt> -coins:regpromote-ex</dt>
+<dd>
+can be used after coins-1.4.5.2. It
+specifies extended register promotion (the attach option is not needed)
+that promote more variables to registers based on pointer analysis.
+</dd>
+
+<dt> -coins:schedule</dt>
+<dt> -coins:schedule-after</dt><dd>
+can be used after coins-1.4.4.3 (the attach option is not needed). <b>schedule</b>
+specifies instruction scheduline before and after the register allocation.
+<b>schedule-after</b>
+specifies instruction scheduline after the register allocation.
+See "11.2.1. Example 1: Instruction Scheduler" in 
+<a href='../backend/backend-frame.html' target="_top">11. Structure and Extensions of the Backend Process</a> for detail.
+</dd>
+
+<dt> -coins:pipelining</dt>
+<dd>
+can be used after coins-1.4.4.3 (the attach option is not needed). It
+specifies software pipelining.
+See "11.2.2. Example 2: Software Pipelining" in 
+<a href='../backend/backend-frame.html' target="_top">11. Structure and Extensions of the Backend Process</a> for detail.
+</dd>
+
+ <dt>           -coins:gprof</dt><dd>
+               specifies to generate profiling information just like gcc.  
+               This option should be accompanied with the option<br>
+               &emsp; &emsp; -coins:linker="gcc -pg"<br>
+               By executing the execution-file (a.out, a.exe, etc.),
+               gmon.out will be generated and user can get profiling
+               information by executing following command<br>
+               &emsp; &emsp;  gprof execution-file<br>
+               just like gcc.<br>
+               The test scripts test/c/testdriver_gprof, test/c/testdriverw_gprof.sh
+               are available to do automatic test and profiling for 
+               a set of test programs.<br>
+               The gprof option is effective only for sparc and x86 at present.<br>
+               See<br>
+<a href="http://sourceware.org/binutils/docs/gprof/index.html">gprof manual</a> <br>
+<a href="http://portal.acm.org/citation.cfm?id=989393.989401&coll=ACM&dl=ACM&CFID=62022503&CFTOKEN=11766028">'gprof:  A  Call Graph Execution Profiler' by S. Graham, P. Kessler, M. McKusick</a>
+</dd>
+
+</dl>
+
+<h4 id='i-2-3-5'>2.3.5. Input Files</h4>
+
+   Input files can be listed among options.  The engine determines which
+passes should be applied to an input file according to its suffix.  As for
+this suffix rule, see coins.driver.SuffixFactory.<p>
+   Each output file is generated at the directory where its source file
+exists, unless -o option is specified.<p>
+
+<h4 id='i-2-3-6'>2.3.6. Exit Status</h4>
+
+   The CLI driver returns exit status as follows:
+<ul>
+ <li>   0 ... normal termination </li>
+   <li>  1 ... abnormal termination </li>
+</ul>
+  `Abnormal termination' includes I/O error, compile error, etc.<p>
+
+ <h4 id='i-2-3-7'>2.3.7 Some Simple Examples</h4>
+
+   In all examples below, it is assumed that the CLASSPATH environment
+variable is set appropriately:
+<pre>
+    java coins.driver.Driver foo.c
+</pre>
+will compile foo.c and generate a.out.
+<pre>
+    java coins.driver.Driver -o foo foo.c
+</pre>
+will compile foo.c and generate foo as an executable binary.
+<pre>
+    java coins.driver.Driver -c foo.c
+</pre>
+will compile foo.c and generate foo.o as an object file.
+<pre>
+    java coins.driver.Driver -E foo/bar.c baz/boo.c
+</pre>
+will preprocess foo/bar.c and baz/boo.c and generate foo/bar.i and
+baz/boo.i where `.i' is a suffix meaning `preprocessed C source' in
+the default suffix rule.
+<pre>
+    java coins.driver.Driver -S foo.c bar.i
+</pre>
+will compile foo.c and bar.i and generate foo.s and bar.s.<p>
+
+Generally speaking, aliasing `java coins.driver.Driver' as `cc', you
+can use COINS C compiler like an ordinary C compiler except some
+exceptions; e.g., cc -E will not work as cpp.<p>
+
+<h3 id='i-2-4'>2.4. The Driver API</h3>
+
+   This document describes an abstract.
+   For a full description, see JavaDoc's of each API class.
+
+<h4 id='i-2-4-1'>2.4.1. Driver User Interface</h4>
+
+   The function of the driver user interface is as follows:
+<ul>
+<li>Generates a compile specification object representing the
+      operator specification, and</li>
+
+<li>Invoke the engine passing the compile specification object and a
+      driver implementation.</li>
+</ul>
+<p>
+   The compile specification object must implements an interface
+coins.driver.CompileSpecification.<br>
+   In the CLI driver, the methods main() and go() of class
+coins.driver.Driver correspond the driver user interface.  They are
+described as follows:
+<pre>
+  protected void go(String[] args) {
+    CompileSpecification spec = new CommandLine(args);
+    int status = new CompilerDriver(spec).go(this);
+    System.exit(status);
+  }
+
+  public static void main(String[] args) {
+    new Driver().go(args);
+  }
+</pre>
+The class coins.driver.CommandLine is a compile specification class
+for the CLI driver.  The class coins.driver.CompilerDriver is the
+engine.  Since the class coins.driver.Driver is a driver
+implementation class, it passes an instance of itself as a driver
+implementation.<p>
+  If you are to build a compiler driver which has a same user
+interface as the CLI driver, the above code segment will be reused
+without change.<p>
+
+<h4 id='i-2-4-2'> 2.4.2. Driver Implementation</h4>
+
+   The driver implementation provides following services called from
+the engine:
+<ul>
+<li>Preprocess</li>
+<li> Compile</li>
+<li>Assemble</li>
+<li> Link</li>
+</ul>
+
+   An interface coins.driver.CompilerImplementation is defining the
+interface to be implemented by the driver implementations.<p>
+   In case of the CLI driver, the class coins.driver.Driver is the
+driver implementation.  The CLI driver is providing the above four
+services.  Three of the four, i.e., preprocess, assemble, and link are
+just call an external program.<p>
+
+<h4 id='i-2-4-3'> 2.4.3. Compile Specification</h4>
+
+   The compile specification must implement an interface
+coins.driver.CompileSpecification.<br>
+   In case of the CLI driver, the class coins.driver.CommandLine is
+the compile specification.<p>
+
+<h4 id='i-2-4-4'>  2.4.4. Tracer API</h4>
+
+   Tracer API interprets trace options specified by an operator,
+determines whether a trace message should be printed or not, and
+prints it if it should.<p>
+   A driver implementation, and compiler modules called from it, can
+use the trace API to put a trace message, specifying a message
+category and a message level.  A message category can be an arbitrary
+string of letters and digits.  A message level must be a non-negative
+integer.<p>
+   A trace option is a set of pairs of a trace category and a trace
+level.  The tracer API prints a trace message if its message level is
+less than or equal to the trace level of the trace category which is a
+same string with the message category.<p>
+   To obtain an instance of a Tracer API, which knows trace options
+specified by an operator, use a method
+<pre>
+CompileSpecification#getTrace().
+</pre>
+
+<h4 id='i-2-4-5'> 2.4.5. Warning API</h4>
+
+   Warning API interprets warning options specified by an operator,
+determines whether a warning message should be printed or not, and
+prints it if it should.<p>
+   A driver implementation, and compile modules called from it, can
+use the warning API to put a warning message, specifying a warning
+category.  A warning category can be an arbitrary string of letters
+and digits. <p>
+   A warning option is a set of warning categories which should be
+printed and a set of warning categories which should not be printed. 
+The warning API prints warnings specified to be printed.<p>
+   To obtain an instance of Warning API which knows warning options
+specified by an operator, use a method
+<pre>
+CompileSpecification#getWarning(). 
+</pre>
+
+<h4 id='i-2-4-6'> 2.4.6. Library Directory</h4>
+
+   Compiler modules can be designed configurable and thus require
+configuration files for them.  For example, the driver API is designed 
+to allow operators preparing following configuration file:
+<ul>
+<li>Property file (see section 2.4.7)</li>
+<li> Suffix database file (see section 2.4.8)</li>
+</ul>
+A library directory is a directory at where the configuration files
+should be located.<p>
+   A compiler module can ask the COINS driver API where the library
+directory is, i.e., use a method CoinsOptions#getLibDir() to an
+instance of class.driver.CoinsOptions, which can be obtained by a
+method CompileSpecification#getCoinsOptions().  A COINS user can let
+an operator to prepare a configuration file at his/her library
+directory and let a compiler module to read the file using the API.<p>
+   If a -coins:libdir=<i>path</i> option, which is one of the COINS options,
+is specified, the driver API returns <i>path</i> as the library directory
+path name.  If not specified, the driver API searches a directory
+named `coins' at the operators home directory (`user.home' property
+value returned by the Java runtime) and returns its path name if it is
+found.  If not found, a relative path name which represents a current
+working directory is returned as the library directory path name.<p>
+
+<h4 id='i-2-4-7'>  2.4.7.  Property File</h4>
+
+   When applying COINS to develop a compiler, a relatively long COINS
+options including tracer, warning, and user own options may be
+required at each compilation.  A `property file' functionality is to
+improve such a situation by storing the options in a file and give the
+file to the compiler.<p>
+   By default, a file named `properties' in the library directory (see
+section 2.4.6) is treated as a property file.<br>
+   Since some operators may change the property file location, it is
+changeable at creating compile specification.  Interpretation of the
+property file is done at that time by class coins.driver.CoinsOptions.<p>
+   The property file may be written in arbitrary format which can be
+read by a method java.utils.Properties#load().  An example follows:
+<pre>
+        debug:
+        trace:        HIR.4
+        suffix:       /tmp/mysuffixes
+</pre>
+This example is exactly same as giving a following COINS option to the 
+CLI driver.
+<pre>
+        -coins:debug,trace=HIR.4,suffix=/tmp/mysuffixes
+</pre>
+<h4 id='i-2-4-8'> 2.4.8. Suffix Rules</h4>
+
+   A suffix rule is a rule to determine which pass should be applied
+to an input file and which suffix should be given to the output file.
+The COINS release package has a default suffix database file which
+contains suffix rules for C, Fortran, and Java.<p>
+   By default, a file named `suffixes' under library directory (see
+section 4.6) is treated as a suffix database file.  If not found,
+following default is used:
+<pre>
+#SRD, 2, Suffix rule DB file, format version 2
+c,		C,		C source,				i,s,o
+c(out-newlir),	C,		C source,				i,lir,-
+i,		C,		preprocessed C source,			-,s,o
+cc/cpp/cxx/C,	C++,		C++ source,				ii,s,o
+ii,		C++,		preprocessed C++ source,		-,s,o
+java,		Java,		Java source,				-,class,-
+java(native),	Java,		Java source (native compile),		-,s,o
+f,		FORTRAN,	FORTRAN source,				-,s,o
+f(out-newlir),	FORTRAN,	FORTRAN source,				-,lir,o
+lir,		LIR,		new LIR,				-,s,o
+S,		Assembler,	assembly source (need preprocess),	s,-,o
+s,		Assembler,	assembly source,			-,-,o
+</pre>
+   Detail of this file format is described in a JavaDoc document of
+class coins.driver.SuffixFactory.java.  Roughly speaking, it is a
+sequence of records each of which is in structure of:
+<pre>
+suffix, language name, meaning, suffixes after preprocess, compile, and assemble.
+</pre>
+   Since some operators may change the suffix database file location,
+it is changeable at creating compile specification.  Interpretation of
+the property file is done at that time by class
+coins.driver.SuffixFactory.
+
+<h4 id='i-2-4-9'> 2.4.9 .`settings' File</h4>
+
+   While compilation, various information is required because
+compilation is an essentially complicated process.  There can be some
+information which differs site by site, e.g., a special library path,
+an OS name, and so on.  Thus, there needs a way to read site-local
+settings.  `Settings' file is designed to keep such site-local
+settings<p>
+   coins.driver.Driver reads settings file by a method
+java.utils.Process#load() from a library directory if it exists, and
+stores the contents to a member variable named `defaultSettings'.
+   For coins.driver.Driver, valid properties are:
+<ul>
+<li>    defaultLinkerOptions<br>
+        Always specified linker Options.  Can be used for the
+        situation such that some -L and -B options are always
+        required.<br>
+</li>
+<li>    systemIncludePath<br>
+        Include path options (-Ipath) always specified.  The COINS
+        stdarg.h can be used by this property.<br>
+</li>
+</ul>
+<p>
+The following is an example of the settings file 
+(as for libf2cLocation, see &quot; 4.2.2 Fortran Driver Setup &quot; of
+<a href='../f77/f77-frame.html' target="_top">How to use Fortran 77 Compiler</a>).<br>
+(This example is applicable after coins-1.4.5.)
+</p>
+<pre>
+systemIncludePath    ./lang/c/include ./lang/c/include/samples
+defaultLinkerOptions /usr/lib
+libf2cLocation       ./lnag/fortran
+</pre>
+<p>
+
+   Compiler modules of COINS and drivers other than
+coins.driver.Driver can use this mechanism to read their site-local
+settings.<p>
+
+<h3 id='i-2-5'>2.5. Known Bugs and Restrictions</h3>
+
+   Known bugs and restrictions of release 1.0 is as follows.
+
+<h4 id='i-2-5-1'> 2.5.1. Known bugs</h4>
+<ul>
+<li>Compilation may not terminate:<br>
+      A long period of continuous compilation may leave an assembler
+      process unterminated.</li>
+</ul>
+
+<h4 id='i-2-5-2'>  2.5.2. Restrictions</h4>
+<ul>
+<li> An option -b arch is not given to a linker command.<br>
+      Although a naming convention of target architecture of the COINS
+      compiler infrastructure differs from the one of the GNU CC, used
+      as a linker in the COINS compiler infrastructure, no conversion
+      method between them is implemented currently.  Thus, specifying
+      target architectures differing from the default architecture of
+      the GNU CC cause linker errors.  This problem can be avoided by
+      several ways; e.g., specifying -coins:linker=linker-command to
+      invoke the GNU CC with appropriate options.
+</li>
+<li> -coins:lir2c has following restrictions:
+<ul>
+<li> function pointers<br>
+          lir2c cannot convert function pointer declarations into
+          proper C codes.
+</li>
+<li>pointer variables<br>
+          lir2c converts pointer variable declarations into int
+          variable declarations.
+</li>
+<li> signed and unsigned<br>
+          lir2c converts unsigned variable declarations into signed
+          variable declarations.
+</li>
+<li>global variable initializations<br>
+          lir2c removes definitions and initializations of variables
+          outside of functions.
+</li>
+<li>Phi functions<br>
+          lir2c cannot convert Phi functions, created in SSA
+          optimizations invoked by -coins:ssa-opt options.
+</li>
+</ul>
+</ul>
+
+  </body>
+</html>

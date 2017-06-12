@@ -1,0 +1,78 @@
+#!/bin/ksh
+set -x
+
+dir=${0%/*}
+if [ -z "$dir" ]
+then
+	dir=.
+fi
+
+cd $dir
+SRCROOT=$PWD
+OUTROOT="${OUTROOT:-${HOME}/java}"
+
+testit=false
+files=
+options='-source 1.5 -target 1.5 -g -nowarn'
+while [ -n "$1" ]
+do
+	case "$1" in
+	-t)
+		testit=true
+		;;
+	-*)
+		options="$options $1" 
+		;;
+	*.java)
+		files="$files $1"
+		;;
+	*)
+		files="$files $1.java"
+		;;
+	esac
+	shift
+done
+
+if $testit
+then
+	cwd=$PWD
+	cd ${SRCROOT}/${JDK}/att/grappa
+	for file in *.java
+	do
+		if [ $file -nt ${OUTROOT}/${JDK}/att/grappa/${file%.java}.class ]
+		then
+			files="$files $file"
+		fi
+	done
+	if [ -z "$files" ]
+	then
+		exit 0
+	fi
+	cd $cwd
+fi
+
+if [ -z "$files" ]
+then
+	/bin/rm -f  ${OUTROOT}/${JDK}/att/grappa/*.class
+	cwd=$PWD
+	cd ${SRCROOT}/${JDK}/att/grappa
+	set -- *.java
+	files="$*"
+	cd $cwd
+fi
+# need the following wierdness due to jdk1.3.1 compilation problems under
+# redhat linux 7.1
+cd ${SRCROOT}
+cd $JDK/java_cup/runtime
+/bin/rm -f *.class
+javac $options *.java
+cd ../../att/grappa
+/bin/rm -f *.class
+print -u2 "Current directory is: $PWD"
+print -u2 "javac -classpath ../.. $options $files"
+javac  -source 1.2 -target 1.5 -classpath ../.. $options $files
+ret=$?
+/bin/mv -f *.class ${OUTROOT}/$JDK/att/grappa/
+cd ../../java_cup/runtime
+/bin/rm -f *.class
+exit $ret

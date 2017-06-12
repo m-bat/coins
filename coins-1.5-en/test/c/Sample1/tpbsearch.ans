@@ -1,0 +1,5 @@
+bSearch key 10 tbl 0 10 inx 1 key 10 elem 100 
+bSearch key 450 tbl 0 10 inx 45 key 450 elem 4500 
+bSearch key 605 tbl 0 10 key 605 not found 10 450 
+bSearch key 100 tbl 0 10 inx 10 key 100 elem 1000 
+bSearchAndInsertIfNotFound key 65 data 650 tbl 0 Insert if not found 65 at 7 

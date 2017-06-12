@@ -1,0 +1,129 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+
+<html>
+<head>
+<title>AT&amp;T Labs Research - Grappa 1.2 Demo Page</title>
+<meta name="description" content="AT&&T Labs Research Grappa 1.2 Demo Page">
+<meta name="keywords" content="Grappa, Java Graph Drawing Package">
+<link rev="made" href="mailto:webmaster@research.att.com"> 
+</head>
+
+<!-- user content -->
+
+
+<H1 ALIGN="CENTER">Demo of Grappa<BR>
+(JDK 1.5+ Version)</H1>
+<P>To operate the demo, use your mouse to select, add or delete nodes and edges to the graph below or modify the
+graph description using <I>dot</I> format in the text area at the bottom of the java applet area below. Use the
+left mouse button on an item to select it. Use the shift key with the left mouse button to create a node. Use the
+shift key with the left mouse button in an existing node and drag to another existing node and a new edge will
+be created when you release the mouse button.
+Use the left mouse button and drag the mouse to select a group of elements.
+The right mouse button provides a menu of possible actions.
+Note that allowing the cursor to pause over an element for a few
+seconds brings up some additional information about the element.
+<P>
+In the text area, position the input cursor by
+clicking the mouse, then type your input in the <I>dot</I> format. There is no need to include position or sizing
+information as the <I>dot</I> layout engine will do that for you. For example, try adding the following in the
+text area:
+
+
+<BLOCKQUOTE>
+	<P>Node0 -&gt; Node4;
+
+</BLOCKQUOTE>
+
+<P>When you are done with your input, either press the <B>submit graph</B> or the <B>submit text</B> button depending
+on where you made your changes. Your graph description will be passed to the <I>dot</I> layout engine and then
+returned to <I>Grappa</I> to be rendered in the <I>Java</I> canvas and text areas below.</P>
+<CENTER>
+<P>
+<TABLE BORDER="0" CELLPADDING="3" CELLSPACING="0" BGCOLOR="#FFFFFF">
+	<TR>
+		<TD BGCOLOR="#AAAAAA">
+<div id="mainimg">
+			<!--[if !IE]> -->
+				<object classid="java:DemoApplet1_2.class" 
+            			type="application/x-java-applet"
+            			archive="grappa1_2.jar"
+            			width="450" height="700" >
+            			
+					<param name="archive" value="grappa1_2.jar" />
+					<param name="mayscript" value="false" />
+					<param name="scriptable" value="false" />
+					<param name="name" value="GraphDemo1_2" />
+					<param name="codebase" value="/~john/Grappa/" />
+					<param name="graph" value="
+
+digraph &quot;demo_applet&quot; {
+	node [	label = &quot;\N&quot;, tip=&quot;Here is a default llama.&quot; ];
+	edge [	tip=&quot;Special Llama effects by Ralph, the Wonder Llama.&quot; ];
+	graph [bb = &quot;0,0,138,248&quot;];
+	Node0 [label=&quot;The Tree\nStarts Here&quot;, tip=&quot;Don't just sit there, do something!&quot; shape=house, pos=&quot;69,213&quot;, width=&quot;1.53&quot;, height=&quot;0.97&quot;];
+	Node1 [shape=octagon, tip=&quot;This element has an octagon shape.&quot;, fontcolor=turquoise, image=&quot;http://www2.research.att.com/~john/Grappa/bap.jpg&quot;, pos=&quot;69,92&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node2 [color=red, pos=&quot;30,18&quot;, tip=&quot;Norway has many lovely lakes.&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node3 [color=green, pos=&quot;108,18&quot;, tip=&quot;Mind you, a moose bite can be nasty.&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node0 -&gt; Node1 [label=&quot;This\nWay&quot;, tip=&quot;What's all this then?&quot;, color=blue, fontcolor=blue, pos=&quot;e,69,110 69,185 69,165 69,138 69,118&quot;, lp=&quot;89,144&quot;];
+	Node1 -&gt; Node2 [pos=&quot;e,39,35 59,74 54,64 48,53 43,43&quot;, tip=&quot;Edges can have these tips, too.&quot;];
+	Node1 -&gt; Node3 [pos=&quot;e,99,35 79,74 84,64 90,53 95,43&quot;, tip=&quot;Those in charge of the tips have been sacked.&quot;];
+}
+
+  " />
+			<!--<![endif]-->
+				
+				<object classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93" 
+						codebase="http://java.sun.com/update/1.5.0/jinstall-1_5_0_15-windows-i586.cab"
+						width="450" height="700" >
+						
+					<param name="code" value="DemoApplet1_2" />
+					<param name="archive" value="grappa1_2.jar" />
+					<param name="mayscript" value="false" />
+					<param name="scriptable" value="false" />
+					<param name="graph" value="
+
+digraph &quot;demo_applet&quot; {
+	node [	label = &quot;\N&quot;, tip=&quot;Here is a default llama.&quot; ];
+	edge [	tip=&quot;Special Llama effects by Ralph, the Wonder Llama.&quot; ];
+	graph [bb = &quot;0,0,138,248&quot;];
+	Node0 [label=&quot;The Tree\nStarts Here&quot;, tip=&quot;Don't just sit there, do something!&quot; shape=house, pos=&quot;69,213&quot;, width=&quot;1.53&quot;, height=&quot;0.97&quot;];
+	Node1 [shape=octagon, tip=&quot;This element has an octagon shape.&quot;, fontcolor=turquoise, image=&quot;http://www2.research.att.com/~john/Grappa/bap.jpg&quot;, pos=&quot;69,92&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node2 [color=red, pos=&quot;30,18&quot;, tip=&quot;Norway has many lovely lakes.&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node3 [color=green, pos=&quot;108,18&quot;, tip=&quot;Mind you, a moose bite can be nasty.&quot;, width=&quot;0.83&quot;, height=&quot;0.50&quot;];
+	Node0 -&gt; Node1 [label=&quot;This\nWay&quot;, tip=&quot;What's all this then?&quot;, color=blue, fontcolor=blue, pos=&quot;e,69,110 69,185 69,165 69,138 69,118&quot;, lp=&quot;89,144&quot;];
+	Node1 -&gt; Node2 [pos=&quot;e,39,35 59,74 54,64 48,53 43,43&quot;, tip=&quot;Edges can have these tips, too.&quot;];
+	Node1 -&gt; Node3 [pos=&quot;e,99,35 79,74 84,64 90,53 95,43&quot;, tip=&quot;Those in charge of the tips have been sacked.&quot;];
+}
+
+" />
+					
+					<p>
+						<strong>
+							This browser does not have a Java Plug-in.
+							<br />
+							<a href="http://java.sun.com/products/plugin/downloads/index.html" title="Download Java Plug-in">
+								Get the latest Java Plug-in here.
+							</a>
+						</strong>
+					</p>
+				
+				</object>
+				
+			<!--[if !IE]> -->
+				</object>
+			<!--<![endif]-->
+
+</div>
+
+		</TD>
+	</TR>
+</TABLE>
+</P>
+</CENTER>
+<P>For more information about <I>Grappa</I> contact <A HREF="http://webphone.att.com/cgi-bin/webphones.pl?id=jm8675">John
+Mocenigo</A></P>
+
+<!-- /user content -->
+
+</body>
+</html>

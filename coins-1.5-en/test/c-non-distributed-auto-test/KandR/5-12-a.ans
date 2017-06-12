@@ -1,0 +1,4 @@
+f:  function returning int
+c:  function returning pointer to char
+pf:  pointer to function returning int
+x:  function returning pointer to array[] of pointer to function returning char

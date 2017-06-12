@@ -1,0 +1,752 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>Retargetable Code Generator</title>
+
+  </head>
+  <body>
+	<h1>10. Retargetable Code Generator</h1>
+    
+	<h2>Contents</h2>
+ <ul>
+<li><a href='#i-10-1'>10.1. Backend Process</a></li>
+<li><a href='#i-10-2'>10.2. TMD: Target Machine Description</a></li>
+<ul>
+<li><a href='#i-10-2-1'>10.2.1. Machine Parameters</a></li>
+<ul>
+<li><a href='#i-10-2-1-1'>10.2.1.1. Data Types</a></li>
+<li><a href='#i-10-2-1-2'>10.2.1.2. List of Real Registers</a></li>
+<li><a href='#i-10-2-1-3'>10.2.1.3. Set of Registers</a></li>
+<li><a href='#i-10-2-1-4'>10.2.1.4. Nonterminals for Registers</a></li>
+<li><a href='#i-10-2-1-5'>10.2.1.5. Default Register set for Register Variables</a></li>
+</ul>
+<li><a href='#i-10-2-2'>10.2.2. Instruction Definitions</a></li>
+<ul>
+<li><a href='#i-10-2-2-1'>10.2.2.1. Start Symbol</a></li>
+<li><a href='#i-10-2-2-2'>10.2.2.2. Example of <tt>defrule</tt>-construct and Code Generation</a></li>
+<li><a href='#i-10-2-2-3'>10.2.2.3. "<tt>foreach</tt>" Macro Feature</a></li>
+<li><a href='#i-10-2-2-4'>10.2.2.4. <tt>defrule</tt> Form</a></li>
+<li><a href='#i-10-2-2-5'>10.2.2.5. <tt>defrewrite</tt> Form</a></li>
+</ul>
+<li><a href='#i-10-2-3'>10.2.3. Java Code</a></li>
+<ul>
+<li><a href='#i-10-2-3-1'>10.2.3.1. CodeGenerator Methods</a></li>
+<li><a href='#i-10-2-3-2'>10.2.3.2. %defbuild/%defemit Macro</a></li>
+<li><a href='#i-10-2-3-3'>10.2.3.3. LIR node in Java</a></li>
+
+</ul>
+<li><a href='#i-10-2-4'>10.2.4. Representation of Assembly Programs</a></li>
+</ul>
+</ul>
+
+<h3 id='i-10-1'>10.1. Backend Process</h3>
+The backend process of COINS consists of the following steps:
+<ol>
+<li>Transformation from the external S-expression to the internal L-expression (by class <tt>coins.backend.Function</tt>)</li>
+<li>Transformation from the L-sequence to the CFG (Control Flow Graph) (by classes
+<tt>coins.backend.Function</tt> and <tt>coins.backend.cfg.FlowGraph</tt>)</li>
+<li>Various analysis (by classes  <tt>coins.backend.ana.*</tt>)</li>
+<li>Simple optimization and program transformation  (by classes  <tt>coins.backend.opt.*</tt>) </li>
+<li>Transformation to the sequence of machine instructions represented in the form of L-expressions (by class <tt>coins.backend.TargetMachine</tt>)</li>
+<li>Register allocation (by classes <tt>coins.backend.regalo.*</tt>)</li>
+<li>Transformation to the assembly program (by class <tt>coins.backend.TargetMachine</tt>)</li>
+</ol>
+The process of transformation to the sequence of machine instructions is based on 
+the DP matching method. The templates for the matching are generated from the
+target machine description (TMD) file. 
+<p>
+There are 6 TMD files in the package <tt>coins.backend.gen</tt> as shown in 
+the following Table10-1.
+
+<center>
+<font size=3>Table10-1  Number of lines of 6 TMD files</font><p>
+<table border>
+  <tr>
+    <th rowspan="2" align="center">Architecture</th>
+    <th rowspan="1" align="center" colspan="2">Number of lines</th>
+   <th rowspan="2" align="center">Man months</th>
+    <th rowspan="2" align="center">File name</th>
+  </tr>
+ <tr>
+   <th>Total</th>
+   <th>in Java</th>
+  <tr>
+    <td  align="left">SPARC</td>
+    <td align="right">1,949</td>
+    <td align="right">802</td>
+    <td align="right">unavailable</td>
+    <td align="left">sparc.tmd</td>
+  </tr>
+ <tr>
+    <td  align="left">X86</td>
+    <td align="right">2,391</td>
+    <td align="right">985</td>
+    <td align="right">unavailable</td>
+    <td align="left">x86.tmd</td>
+  </tr>
+ <tr>
+    <td  align="left">ARM</td>
+    <td align="right">3,052</td>
+    <td align="right">2,176</td>
+    <td align="right">6</td>
+    <td align="left">arm.tmd</td>
+  </tr>
+ <tr>
+    <td  align="left">MIPS</td>
+    <td align="right">2,081</td>
+    <td align="right">1,379</td>
+    <td align="right">3</td>
+    <td align="left">mips.tmd</td>
+  </tr>
+ <tr>
+    <td  align="left">SH4</td>
+    <td align="right">3,568</td>
+    <td align="right">2,467</td>
+    <td align="right">6</td>
+    <td align="left">sh4.tmd</td>
+  </tr>
+ <tr>
+    <td  align="left"> PowerPC</td>
+    <td align="right">5,016</td>
+    <td align="right">2,913</td>
+    <td align="right">6</td>
+    <td align="left">ppc.tmd</td>
+  </tr>
+</table>
+</center>
+<p>
+
+<h3 id='i-10-2'>10.2. TMD: Target Machine Description</h3>
+
+A machine description for a target machine consists of the following parts:
+<ol>
+<li>Machine parameters</li>
+<li>Instruction definitions</li>
+<li>Java programs</li>
+</ol>
+
+The various properties of a machine, such as the organization of its registers, are defined in 
+variables called machine parameters. Machine instructions to be used in code generation are 
+defined in the instruction definitions. <p>
+
+<h4 id='i-10-2-1'>10.2.1. Machine Parameters</h4>
+
+<h5 id='i-10-2-1-1'>10.2.1.1. Data Types</h5>
+In the following example, 
+<pre>
+<tt>(def *type-address* I32)
+(def *type-bool* I32)</tt>
+</pre>
+the type of address is defined as <tt>I32</tt>, and also the type of
+bool (the result type of <tt>TST<i>xx</i></tt> instruction) is defined as <tt>I32</tt>.
+
+<h5 id='i-10-2-1-2'>10.2.1.2. List of Real Registers</h5>
+The symbol <tt>*real-reg-symtab*</tt> represents the list of all registers of the target
+machine. For example, the <tt>*real-reg-symtab*</tt> of SPARC is defined as follows:
+<pre>
+<tt>(def *real-reg-symtab*
+     (SYMTAB
+	(&quot;%g0&quot; REG I32 4 0)
+		:
+	(&quot;%g7&quot; REG I32 4 0)
+	(&quot;%l0&quot; REG I32 4 0)
+		:
+	(&quot;%l7&quot; REG I32 4 0)
+	(&quot;%o0&quot; REG I32 4 0)
+		:
+	(&quot;%o6&quot; REG I32 4 0)
+	(&quot;%i0&quot; REG I32 4 0)
+		:
+	(&quot;%i6&quot; REG I32 4 0)
+	(&quot;%f0&quot; REG F64 8 0)
+		:
+	(&quot;%sp&quot; REG I32 4 0)
+	(&quot;%fp&quot; REG I32 4 0)))</tt>
+</pre>
+The defined information is inserted in the global symbol table of the L-module.
+<p>
+In sparc.tmd, this is defined by using the "<tt>foreach</tt>" macro as follows:
+<tt><pre>(def *real-reg-symtab*
+     (SYMTAB
+      (foreach @n (01 23 45 67)
+	("%l@n" REG I64 4 0))
+      (foreach @p (i o)
+        (foreach @n (01 23 45)
+	  ("%@p@n" REG I64 4 0)))
+      (foreach @gl (g l)
+	(foreach @n (0 1 2 3 4 5 6 7)
+	  ("%@gl@n" REG I32 4 0)))
+      (foreach @oi (o i)
+	(foreach @n (0 1 2 3 4 5)
+	  ("%@oi@n" REG I32 4 0)))
+      (foreach @n (0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30)
+	("%f@n" REG F64 8 0))
+      ("%sp" REG I32 4 0)
+      ("%fp" REG I32 4 0)))</pre></tt>
+The name of each register must begin with the character "<tt>%</tt>".
+
+<h5 id='i-10-2-1-3'>10.2.1.3. Set of Registers</h5>
+The name of a set of registers must begin with "<tt>*reg-</tt>".
+The following example defines a register set named "<tt>*reg-I32</tt>".
+<pre>
+<tt>(def *reg-I32* (
+     (REG I32 &quot;%i0&quot;)
+     (REG I32 &quot;%i1&quot;)
+     (REG I32 &quot;%i2&quot;)
+           :
+     (REG I32 &quot;%i6&quot;)
+     (REG I32 &quot;%o0&quot;)
+           :
+     (REG I32 &quot;%o6&quot;)
+     (REG I32 &quot;%l0&quot;)
+           :
+     (REG I32 &quot;%l7&quot;)))</tt>
+</pre>
+
+<h5 id='i-10-2-1-4'>10.2.1.4. Nonterminals for Registers</h5>
+Machine instructions are defined in the form of context-free grammar.
+A nonterminal symbol which represents a register is defined as follows:
+<pre>
+<tt>(defregset regl *reg-I32*)
+(defregset regh *reg-I16*)
+(defregset regb *reg-I8*)</tt>
+</pre>
+The first argument of the <tt>defregset</tt>-construct is a nonterminal symbol
+and the second argument is a set of registers for the nonterminal.
+For example, when the reduction to the nonterminal <tt>regl</tt> occurs, a register 
+in <tt>*reg-I32*</tt> is assigned to it.
+
+<h5 id='i-10-2-1-5'>10.2.1.5. Default Register set for Register Variables</h5>
+<pre>
+<tt>(defregsetvar (<i>type registers-set</i>))</tt>
+</pre>
+defines that a register of <i><tt>registers-set</tt></i> is assigned to a register
+variable of type <i><tt>type</tt></i> by default.
+The following is an example.
+<pre>
+<tt>(defregsetvar
+  (I32 *reg-I32*) (I16 *reg-I16*) (I8 *reg-I8*)
+  (F64 *reg-F64*) (F32 *reg-F32*))</tt>
+</pre>
+
+
+<h4 id='i-10-2-2'>10.2.2. Instruction Definitions</h4>
+
+The instructions of a target machine are defined mainly using the form
+of a contex-free grammar.
+
+<h5 id='i-10-2-2-1'>10.2.2.1. Start Symbol</h5>
+The start symbol of a context-free grammar is defind as follows:
+<pre>
+<tt>(defstart void)</tt>
+</pre>
+In this example, <tt>void</tt> is the start symbol.
+
+<h5 id='i-10-2-2-2'>10.2.2.2. Example of <tt>defrule</tt>-construct and Code Generation</h5>
+A <tt>defrule</tt>-construct is a production rule of a context-free grammar
+and defines the correspondence of an L-expression to machine instructions.
+The class <tt>CodeGenerator</tt> finds the matching rule (<tt>defrule</tt>-construct) for L-expressions and generates the machine codes.
+<p>
+For example, sparc.tmd includes the following set of rules:
+<pre>
+<tt> 1: (defregset regl *reg-I32*)  ;; Default register set for each nonterminals.
+ 2: (defrule xregl (REG I32))   ;; nonterminal for registers of the form (REG I32 ..)
+ 3: (defrule regl xregl)    ;;  nonterminal for registers
+ 4: (defrule addr regl)    ;;  nonterminal for addressing mode
+ 5: (defrule rc regl)     ;; register or small integer constant
+ 6: (defrule sta (STATIC I32))  ;; nonterminal for address of static variable
+ 7: (defrule asmcon sta)    ;; nonterminal for integer constant
+ 8: (defrule regl asmcon
+      (code (_set $1 $0))
+      (cost 2))
+ 9: (defrule regl (ADD I32 regl rc)
+      (code (add $1 $2 $0))
+      (cost 1)))
+10: (defrule regl (MEM I32 addr)
+      (code (ld (mem $1) $0))
+      (cost 1)))</tt>
+</pre>
+where the leftmost digits are the number inserted for the following explanation.
+The first argument of a <tt>defrule</tt>-construct is the left-hand nonterminal 
+of a production rule. The second argument is a L-expression, and is the right-hand side of the rule.
+<p>
+When the input L-expression matches to the right-hand side of a rule, 
+the target code in the associated code-attribute is generated.
+<p>
+The L-expression generated from the expression "<tt>x+y</tt>" of the following
+source program:
+<tt><pre>int x;
+int func(int y){
+  return x+y;
+}</pre></tt>
+is
+<tt><pre>
+(SET I32 (REG I32 "returnvalue.2%0")
+         (ADD I32 (MEM I32 (STATIC I32 "x")) (REG I32 "y.1%0")))</pre></tt>
+The result of the matching to this input L-expression is:
+<pre>
+<tt>*195: regl -> (ADD I32 regl rc) [dest=(REG I32 "returnvalue.2%0")] SU=1  ;; 9
+  *60: regl -> (MEM I32 addr) [dest=(REG I32 ".T1%")] SU=1  ;; 10
+    19: addr -> regl SU=0  ;; 4
+      *44: regl -> asmcon [dest=(REG I32 ".T2%")] SU=1  ;; 8
+        29: asmcon -> sta SU=0  ;; 7
+          27: sta -> (STATIC I32) SU=0  ;; 6
+  35: rc -> regl SU=0  ;; 5
+    *15: regl -> xregl [dest=(REG I32 "y.1%0")] SU=0  ;; 3
+      5: xregl -> (REG I32) SU=0  ;; 2</tt>
+</pre>
+The leftmost digits are the rule number in the 
+<tt>CodeGenerator_sparc.java</tt> generated from <tt>sparc.tmd</tt>.
+The rules with "<tt>*</tt>" in the figure are used for generating target code.
+The rightmost digits are the rule number in the previous figure.
+"<tt>SU</tt>" is the Sethi-Ullman number.
+<p>
+The result of this matching is expressed still in L-expression as follows:
+<tt><pre>    (SET I32 (REG I32 ".T2%") (STATIC I32 "x"))
+    (SET I32 (REG I32 ".T1%") (MEM I32 (REG I32 ".T2%")))
+    (SET I32 (REG I32 "returnvalue.2%0") (ADD I32 (REG I32 ".T1%") (REG I32 "y.1%0")))</pre></tt>
+After the register allocation phase these are transformed to:
+<tt><pre>    (SET I32 (REG I32 "%i1") (STATIC I32 "x"))
+    (SET I32 (REG I32 "%i1") (MEM I32 (REG I32 "%i1")))
+    (SET I32 (REG I32 "%i0") (ADD I32 (REG I32 "%i1") (REG I32 "%i0")))</pre></tt>
+Final code generation is done again by tree matching. The result is:
+<tt><pre>    (sethi (%hi x) %i1)
+    (or %i1 (%lo x) %i1)
+    (ld (mem %i1) %i1)
+    (add %i1 %i0 %i0)</pre></tt>
+where the first two instructions are generated by 
+<tt><pre>  (code (_set $1 $0))</pre></tt>
+<tt>_set</tt> is the name of the macro-instruction defined as follows:
+<tt><pre>%defbuild(_set x y) {
+  return ImList.list
+    (ImList.list("sethi", ImList.list("%hi", x), y),
+     ImList.list("or", y, ImList.list("%lo", x), y));
+}</pre></tt>
+The final assembly code is:
+<tt><pre>	sethi	%hi(x),%i1
+	or	%i1,%lo(x),%i1
+	ld	[%i1],%i1
+	add	%i1,%i0,%i0</pre></tt>
+
+<h5 id='i-10-2-2-3'>10.2.2.3. "<tt>foreach</tt>" Macro Feature</h5>
+
+TMD provides the following simple macro feature. This example shows two 
+macro forms and their expanded forms.
+<tt><pre>  (foreach @x (a b)
+    (foo @x))
+  => (foo a) (foo b)
+
+  (foreach (@x @y) ((a 1) (b 2))
+    (foo @x @y))
+  => (foo a 1) (foo b 2)
+</pre></tt>
+The previous rule 9:
+<tt><pre> 9: (defrule regl (ADD I32 regl rc)
+      (code (add $1 $2 $0))
+      (cost 1)))</pre></tt>
+is a part of the expanded rules from the following macro expression:
+<tt><pre>(foreach (@op @code) ((ADD add) (SUB sub) (BAND and) (BOR or) (BXOR xor))
+  (defrule regl (@op I32 regl rc)
+    (code (@code $1 $2 $0))
+    (cost 1)))</pre></tt>
+
+And the previous rule 10
+<tt><pre>10: (defrule regl (MEM I32 addr)
+      (code (ld (mem $1) $0))
+      (cost 1)))</pre></tt>
+is a part of the expanded rules from the following macro expression:
+<tt><pre>(foreach (@t @code @s) ((I32 ld l) (I16 ldsh h) (I8 ldsb b) (F32 ld f))
+  (defrule reg@s (MEM @t addr)
+    (code (@code (mem $1) $0))
+    (cost 1)))</pre></tt>
+
+<h5 id='i-10-2-2-4'>10.2.2.4. <tt>defrule</tt> Form</h5>
+
+The syntax of a <tt>defrule</tt> form is as follows:
+<pre>
+<tt>(defrule <i>production-rule</i>
+  <i>cond-attr</i>
+  <i>code-attr</i>
+  <i>value-attr</i>
+  <i>regset-attr</i>
+  <i>eqreg-attr</i>
+  <i>cost-attr</i>
+  <i>clobber-attr</i> )</tt>
+</pre>
+Each item is explained in the following:
+
+<dl>
+<dt>production rule</dt><dd>
+
+<p>The form of <i>production rule</i> is:</p>
+<blockquote>
+
+<pre>
+<i>production-rule</i> ::= <i>lhs</i> <i>pattern</i>
+<i>lhs</i> ::= <i>nonterm</i>
+<i>pattern</i> ::= <i>S-expression</i>
+</pre>
+
+</blockquote>
+<p>where <i>lhs</i> is a nonterminal symbol to which the right-hand <i>pattern</i>
+is reduced.</p>
+<p><i>pattern</i> is a nonterminal symbol or an L-expression, where  
+some parts of the L-expression are possibly replaced by nonterminals.</p>
+</dd>
+
+<dt>cond-attribute</dt><dd>
+
+<p><tt><i>cond-attr</i></tt> specifies the condition whether the 
+production rule is applicable or not.</p>
+<blockquote>
+
+<pre>
+<i>cond-attr</i> ::= (cond <i>condition</i>)
+<i>condition</i> ::= <i>quoted-string</i>
+</pre>
+
+</blockquote>
+<p><i>condition</i> is a boolean expression in Java.
+$0 symbol in the expression is replaced by the target L-expression.</p>
+<p>For example, the rule</p>
+
+<pre>
+(defrule smallnumber (INTCONST I32))
+  (cond &quot;((LirIconst)$0).value &gt;= 0 &amp;&amp; ((LirIconst)$0).value &lt; 256&quot;))
+</pre>
+
+<p>matches to the integer constant between 0 and 255.</p>
+The class <tt>LirIconst</tt> is in the package <tt>coins.backend.lir</tt>
+and is used to represent a <tt>(INTCONST I32 ..)</tt> object.
+</dd>
+
+<dt>code-attribute</dt><dd>
+
+<p><tt><i>code-attr</i></tt> is the sequence of the instructions of the target CPU.</p>
+<blockquote>
+
+<pre>
+<tt><i>code-attr</i> ::= (code <i>code-sequence</i>...)
+<i>code-sequence</i> ::= <i>S-expression</i></tt>
+</pre>
+
+</blockquote>
+<p><i><tt>codesequence</tt></i> is a sequence of assembly instructions
+in the form of S-expression.</p>
+</dd>
+
+<dt>value-attribute</dt><dd>
+
+<p><tt><i>value-attr</i></tt> specifies the value assigned to the left-hand nonterminal.</p>
+<blockquote>
+
+<pre>
+<tt><i>value-attr</i> ::= (value <i>value-sequence</i>...)
+<i>value-sequence</i> ::= <i>S-expression</i></tt>
+</pre>
+
+</blockquote>
+
+<p>For example, if the target CPU has the addressing mode of the form [%r0+%r1],
+the rules:</p>
+
+<pre>
+(defrule address (ADD I32 reg reg) (value (plus $1 $2)))
+(defrule mem (MEM I32 address) (value (ind $1)))
+(defrule reg mem (code (load $1 $0)))
+</pre>
+
+<p>will generate from the input L-expression:</p>
+
+<pre>
+(MEM I32 (ADD I32 (REG I32 &quot;x&quot;) (REG I32 &quot;y&quot;)))
+</pre>
+
+<p>the following instruction:</p>
+
+<pre>
+(load (ind (plus %r0 %r1)) %r2)
+</pre>
+
+<p>This instruction will be transformed to the following final assembly code,
+if the <tt>ind</tt> macro and the <tt>plus</tt> macro are defined appropriately.</p>
+
+<pre>
+	load	[%r0+%r1],%r2
+</pre>
+
+<p>If <tt><i>value-attr</i></tt> is omitted, the value of left-hand nonterminal is:</p>
+
+<ul>
+<li>the register assigned to the left-hand nonterminal, if the nonterminal is defined by
+<tt>defregset</tt>-construct.
+<li>otherwize
+<ul>
+<li>the value of $1, if the right-hand includes nonterminals.
+<li>the value of the L-expression (INTCONST, REG, FRAME, or STATIC), otherwize.</ul></ul>
+</dd>
+
+<dt>cost-attribute</dt><dd>
+
+<p><tt><i>cost-attr</i></tt> specifies the cost of the target instruction.</p>
+<blockquote>
+
+<pre>
+<tt><i>cost-attr</i> ::= (cost <i>number</i>)</tt>
+</pre>
+
+</blockquote>
+<p><tt><i>number</i></tt> is the cost of the target instruction.
+If the cost is the size (number of bytes) of the instruction, space-efficient code will be
+generated. 
+If the cost is the latency of the instruction, time-efficient code will be
+generated.</p>
+</dd>
+
+<dt>regset-attribute</dt><dd>
+
+<p><tt><i>regset-attr</i></tt> specifies the set of registers to which the nonterminal belongs.
+<blockquote>
+
+<pre>
+<tt><i>regset-attr</i> ::= (regset (<i>$n</i> <i>regset-name</i>) ...)</tt>
+</pre>
+
+</blockquote>
+<p>The following example indicates that 
+the register assigned to <tt>$1</tt> (dividend) is <tt>%eax</tt> and the register assigned to <tt>$2</tt> (divisor) is one of
+<tt>%eax</tt>, <tt>%ebx</tt>, <tt>%ecx</tt>, <tt>%esi</tt>, <tt>%edi</tt>.</p>
+
+<pre>
+<tt>(def *reg-mod$2-I32* ( (REG I32 &quot;%eax&quot;)
+		       (REG I32 &quot;%ecx&quot;)
+		       (REG I32 &quot;%ebx&quot;)
+		       (REG I32 &quot;%esi&quot;)
+		       (REG I32 &quot;%edi&quot;) ))
+
+(defrule regl (DIVS I32 regl regl)
+  (eqreg $1 $0)
+  (regset ($0 *reg-eax-I32*)
+	  ($2 *reg-mod$2-I32*) ...)</tt>
+</pre>
+</dd>
+
+<dt>eqreg-attribute</dt><dd>
+
+<p><tt><i>eqreg-attr</i></tt> indicates that the two nontermnals must be assigned the same register.</p>
+<blockquote>
+
+<pre>
+<tt><i>eqreg-attr</i> ::= (eqreg ($<i>n</i> $0) ...)</tt>
+</pre>
+
+</blockquote>
+<p><tt>$<i>n</i></tt> means the <tt><i>n</i></tt>-th nonterminal in the right-hand side. The <tt><i>n</i></tt>-th nonterminal must be defined by <tt>defregset</tt>-construct.</p>
+</dd>
+
+<dt>clobber-attribute</dt><dd>
+
+<p><tt><i>clobber-attr</i></tt> indicates the set of registers destroyed by this instruction.</p>
+<blockquote>
+
+<pre>
+<tt><i>clobber-attr</i> ::= (clobber <i>realregister</i>...)
+<i>realregister</i> ::= (REG <i>type</i> <i>quoted-string</i>)</tt>
+</pre>
+
+</blockquote>
+<p>The registers indicated by <i>clobber-attr</i> are inserted into the resultant
+L-expression in the form of CLOBBER-expression.</p>
+</dd>
+</dl>
+
+<h5 id='i-10-2-2-5'>10.2.2.5. <tt>defrewrite</tt> Form</h5>
+<tt>defrewrite</tt> rule specifies the restructuring from the rather abstract
+L-expression such as PROLOGUE, EPILOGUE, CALL to the concrete L-expression. 
+<p>
+For example, the first L-expressions generated from  the previous example source program:
+<tt><pre>int x;
+int func(int y){
+  return x+y;
+}</pre></tt>
+are
+<tt><pre>    (PROLOGUE (0 0) (MEM I32 (FRAME I32 "y.1")))
+   (DEFLABEL "_lab1")
+    (SET I32 (MEM I32 (FRAME I32 "returnvalue.2"))
+            (ADD I32 (MEM I32 (STATIC I32 "x")) (MEM I32 (FRAME I32 "y.1"))))
+    (JUMP (LABEL I32 "_epilogue"))
+   (DEFLABEL "_epilogue")
+    (EPILOGUE (0 0) (MEM I32 (FRAME I32 "returnvalue.2")))</pre></tt>
+If the target CPU is SPARC, the PROLOGUE-expression must be
+transformed to the following L-expressions according to the calling convention of SPARC.
+<tt><pre>    (PROLOGUE (0 0) (REG I32 "%i0"))
+    (SET I32 (REG I32 "y.1%0") (REG I32 "%i0"))</pre></tt>
+This transformation, or rewriting, is specified in sparc.tmd as follows:
+<tt><pre>(defrewrite (PROLOGUE)
+  (to (norescan (eval "rewritePrologue($0, post)")))
+  (phase late))</pre></tt>
+The form:
+<tt><pre>(defrewrite <i>pattern</i> (to <i>new-pattern</i>))</pre></tt>
+specifies that <tt><i>pattern</i></tt> is replaced by <tt><i>new-pattern</i></tt>.
+The above example specifies that the <tt>PROLOGUE</tt>-expression is replaced by the
+result of the execution of the Java code <tt>rewritePrologue($0, post)</tt>
+(see next section for Java code).
+<p>
+The resultant L-expression again becomes the target of the matching by default.
+"<tt>norescan</tt>" stops the default rescanning.
+<p>
+"<tt>(phase late)</tt>" means that this rewriting is applied in the phase "LateRewriting"
+of the backend process and "<tt>(phase early)</tt>" means the phase "EarlyRewriting".
+See <a href='./backend.html'>11. Structure and Extensions of the Backend Process</a> for these phase names.<p>
+<tt>pre</tt>/<tt>post</tt> means the instruction sequence immediately before/after this expression.
+The above example shows that
+<tt><pre>(PROLOGUE (0 0) (MEM I32 (FRAME I32 "y.1")))</pre></tt>
+is replaced by
+<tt><pre>(PROLOGUE (0 0) (REG I32 "%i0"))</pre></tt>
+and 
+<tt><pre>(SET I32 (REG I32 "y.1%0") (REG I32 "%i0"))</pre></tt>
+is added to the post sequence.
+<p>
+Also, 
+<tt><pre> (EPILOGUE (0 0) (MEM I32 (FRAME I32 "returnvalue.2")))</pre></tt>
+is transformed by
+<tt><pre>(defrewrite (EPILOGUE)
+  (to (norescan (eval "rewriteEpilogue($0, pre)")))
+  (phase late))</pre></tt>
+to
+<tt><pre> (SET I32 (REG I32 "%i0") (REG I32 "returnvalue.2%0"))
+ (EPILOGUE (0 0) (REG I32 "%i0"))</pre></tt>
+ 
+<h4 id='i-10-2-3'>10.2.3. Java Code</h4>
+The structure of a TMD file is:
+<blockquote>
+
+<pre>
+<i>grammar definitions</i>
+%%
+<i>imports</i>
+%State methods
+<i>Method of class State</i>
+%CodeGenerator methods
+<i>Method of class CodeGenerator</i>
+</pre>
+
+</blockquote>
+
+<p><i>grammar definition</i> consists of the list of defrewrite-, def-, defregset-, defregsetvar-, defstart-, defrule-construct.</p>
+<p>
+Remaining parts are written in Java.
+<i>imports</i> are the list of import statements.</p>
+<p><i>Methods of class State</i> are the list of methods mainly
+referred in <tt><i>cond-attr</i></tt>.</p>
+<p><i>Methods of class CodeGenerator</i> are the list of methods in the class <tt>CodeGenerator_<i>target</i></tt>.
+<tt>defbuild</tt>/<tt>defemit</tt> macro definitions are also placed here.</p>
+
+<h5 id='i-10-2-3-1'>10.2.3.1. CodeGenerator Methods</h5>
+The methods explained in this section must be placed in the CodeGenerator Methods.
+See examples in sparc.tmd and x86.tmd for more details.
+
+<dl>
+<dt><tt>LirNode rewriteFrame(LirNode node)</tt></dt><dd>
+The method <tt>rewriteFrame</tt> translates the <tt>node</tt> of FRAME-expression
+to the expression of the address of the frame variable of the target CPU.
+The parameter <tt>node</tt> is a instance of the class LirSymRef.
+<p>
+For example, this method is defined in sparc.tmd as follows:
+<tt><pre>LirNode rewriteFrame(LirNode node) {
+  Symbol fp = func.module.globalSymtab.get("%fp");
+  int off = ((SymAuto)((LirSymRef)node).symbol).offset();
+  return lir.node
+    (Op.ADD, node.type, lir.symRef(fp), lir.iconst(I32, (long)off));
+}</pre></tt>
+The <tt>func</tt> field of the super class <tt>CodeGenerator</tt> indicates the currently
+prosecced L-function (instance of the class <tt>coins.backend.Function</tt>).
+<tt>func.module</tt> is the currently processed L-module and has the global symbol table.
+<tt>"%fp"</tt> is the frame-pointer register.
+<p>
+The <tt>lir</tt> field of <tt>CodeGenerator</tt> has a instance of the class <tt>LirFactory</tt>.
+Various LIR nodes (<tt>LirNode</tt>) are generated by calling appropriate methods of <tt>lir</tt>.
+</dd>
+
+<tt><dt>LirNode rewritePrologue(LirNode node, BiList post)</dt></tt><dd>
+</dd>
+<tt><dt>LirNode rewriteEpilogue(LirNode node, BiList pre)</dt></tt><dd>
+</dd>
+<dt><tt>LirNode rewriteCall(LirNode node, BiList pre, BiList post) </tt></dt><dd>
+</dd>
+</dl>
+
+<h5 id='i-10-2-3-2'>10.2.3.2. %defbuild/%defemit Macro</h5>
+
+%defbuild/%defemit Macros are used in the <i>code-attr</i>.
+A %defemit Macro is expanded immediately before the final assembly code emition.
+The following is an example of the %defbuild macro in sparc.tmd.
+<pre>
+<tt>%defbuild(_set x y) {
+  return ImList.list
+    (ImList.list(&quot;sethi&quot;, ImList.list(&quot;%hi&quot;, x), y),
+     ImList.list(&quot;or&quot;, y, ImList.list(&quot;%lo&quot;, x), y));
+}</tt>
+</pre>
+The class <tt>ImList</tt> is in the package <tt>coins.backend.util</tt>.
+ImList.list is a class method of <tt>ImList</tt>.
+The result of this macro expansion is the list of assembly instructions in the list form.
+<p>
+The followings are two example of the %defemit macro in sparc.tmd.
+
+<pre>
+%defemit(+ x y) {
+  if (y.charAt(0) == '-')
+    return x + y;
+  else
+    return x + &quot;+&quot; + y;
+}
+
+%defemit(mem x) { return &quot;[&quot; + x + &quot;]&quot;; }
+</pre>
+The result of %defemit macro expansion is an instance of the class <tt>String</tt>. 
+
+<h5 id='i-10-2-3-3'>10.2.3.3. LIR node in Java</h5>
+The classes for LIR nodes are in the package <tt>coins.backend.lir</tt>.
+These classes are subclasses of the abstract class <tt>LirNode</tt>.
+Each L-expression corresponds to a class as follows:
+<tt><pre>INTCONST -> LirIconst
+FLOATCONST -> LirFconst
+STATIC, FRAME, REG, LABEL -> LirSymRef
+unary op. -> LirUnaOp
+binary op. -> LirBinOp
+other -> LirNaryOp</pre></tt>
+
+<h4 id='i-10-2-3-4'>10.2.4. Representation of Assembly Programs</h4>
+The internal form of assembly programs is the list form as follows:
+<tt><pre>
+  (mov (mem x) %r1)
+  (mov (mem y) %r0)
+  (add %r0 %r1 %r0)
+  (mov %r0 (mem x))
+</pre></tt>
+The list form assembly code is finally transtated to the target assembly code as follows:
+<tt><pre>
+  mov [x],%r1
+  mov [y],%r0
+  add %r0,%r1,%r0
+  mov %r0,[x]
+</pre></tt>
+
+
+  </body>
+</html>

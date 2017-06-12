@@ -1,0 +1,75 @@
+2003/5/8
+
+使い方
+  testprepare.sh filename ...
+
+  filename は gcc でコンパイル可能な .c ファイルであること。
+
+
+
+testprepare.sh は コンパイラテストスクリプト testcoins.sh のための
+データファイル .ans .err を作成する。
+
+testprepare.sh は与えられた .c ファイルごとに以下の処理を行う。
+
+1. .c をコンパイルする。作成された実行ファイルを $OUT とする。
+2. .c ファイルと同じ場所に .cmd ファイルがあるかを調べ、
+   あれば .cmd をシェルスクリプトとして実行（第一引数は $OUT）し、
+   なければ $OUT を実行する。
+3. どちらの場合も標準出力を .ans に、標準エラー出力を .err に保存する。
+4. .err は内容が空なら削除される。.ans が空となるテストはないものとする。
+5. コンパイルエラーの場合、.ans の１行目は
+   'testprepare.sh: THIS TEST WILL CAUSE COMPILE ERROR' となる。
+   これによってすべてのテストプログラムは .ans を持つことが保証される。
+
+
+
+テストプログラムの作成方針
+
+・標準出力に必ず何か出力する。
+  出力したい情報がなければ 'Syntax/Semantics analysis test' など
+  何のテストなのかを出力する。
+
+・コンパイルエラーや実行時エラーを期待するテストも作ることができる。
+  この場合も、もしコンパイル・実行できてしまったなら、標準出力に必ず何か
+  出力するようにする。
+
+・テストプログラムの終了ステータスは 0 でなくてもよい。
+  したがって、終了ステータスが 0 以外であることによってエラーの発生を報告
+  することはできない。
+
+
+
+例：grep.c というテストプログラムを使って何通りかのスイッチでテストする。
+
+1. grep.c を準備する。
+2. grep.cmd を準備する。
+  ---- 例：grep.cmd ----
+  $1 -n abc <<STDIN
+  123abc
+  123ABC
+  abc123
+  ABC123
+  STDIN
+  $1 -i abc <<STDIN
+  123abc
+  123ABC
+  abc123
+  ABC123
+  STDIN
+  $1 abc FileNotExist
+  --------
+3. 以下を実行する。
+  ./testprepare.sh grep.c
+4. .ans と .err が期待通りに作成されたかを確かめる。
+  ---- 例：grep.ans ----
+  1:123abc
+  3:abc123
+  123abc
+  123ABC
+  abc123
+  ABC123
+  --------
+  ---- 例：grep.err ----
+  grep: can't open NotExistFile
+  --------

@@ -1,0 +1,2 @@
+a[0][2]=2 b=2 
+return != 0 -> 'pointer to integer w/o cast'

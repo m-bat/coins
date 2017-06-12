@@ -1,0 +1,122 @@
+;; -----------------------------------------------------------------------
+;;%   Copyright (C) 2007 Association for the COINS Compiler Infrastructure 
+;;%       (Read COPYING for detailed information.)             
+;;------------------------------------------------------------------------ 
+;;-*-Lisp-*-
+;; Sample TMD for nonexistent machine.
+
+(def *type-address* I32)
+(def *type-bool* I32)
+
+(def *real-reg-symtab*
+     (SYMTAB
+      (foreach @g (0 1 2 3 4 5 6 7)
+	("%r@g" REG I32 4 0))
+      (foreach @g (0 1 2 3 4 5 6 7)
+	("%f@g" REG F64 8 0)) ))
+
+(def *reg-I32* ((foreach @g (0 1 2 3 4 5 6 7)
+			(REG I32 "%r@g"))))
+
+(def *reg-F64* ((foreach @g (0 1 2 3 4 5 6 7)
+			(REG F64 "%f@g"))))
+
+(defregset reg *reg-I32*)
+(defregset freg *reg-F64*)
+
+(defregsetvar (I32 *reg-I32*) (F64 *reg-F64*))
+
+; Rewrite rules
+
+(defrewrite (FLOATCONST F64)
+  (phase late)
+  (to (MEM F64 (STATIC I32 (eval "module.constToData($0)")))))
+
+(defpattern const (INTCONST))
+(defrewrite (ADD I32 (ADD I32 _ const) const)
+  (to (ADD I32 $1 (ADD I32 $2 $3))))
+
+;; JUMPN
+(defrewrite (JUMPN)
+  (to (eval "rewriteJumpn($0, pre)"))
+  (phase late) )
+
+;; Aggregate copy
+(defrewrite (SET)
+  (cond "Type.tag($0.type) == Type.AGGREGATE")
+  (to (eval "rewriteAggregateCopy($0, pre)"))
+  (phase late))
+
+
+; Instuction Selection rules
+
+(defrule xreg (REG I32))
+(defrule reg xreg)
+(defrule xfreg (REG F64))
+(defrule freg xfreg)
+
+(defrule const (INTCONST))
+
+(defrule void (SET I32 xreg reg)
+  (code (mov $2 $1))
+  (cost 1))
+
+(defrule void (SET F64 xfreg freg)
+  (code (movf $2 $1))
+  (cost 1))
+
+(defrule reg (ADD I32 reg regconst)
+  (code (add $2 $1 $0))
+  (cost 1))
+
+(defrule regconst reg)
+(defrule regconst const)
+
+(defrule freg (ADD F64 freg freg)
+  (code (addf $2 $1 $0))
+  (cost 1))
+
+(defrule mem (MEM I32 addr)
+  (value (mem $1)))
+
+(defrule memf (MEM F64 addr)
+  (value (mem $1)))
+
+(defrule addr (STATIC I32))
+
+(defrule addr reg)
+
+(defrule reg mem
+  (code (mov $1 $0))
+  (cost 1))
+
+(defrule freg memf
+  (code (movf $1 $0))
+  (cost 1))
+
+(defrule reg const
+  (code (mov $1 $0))
+  (cost 1))
+
+(defrule void (SET I32 mem reg)
+  (code (mov $2 $1))
+  (cost 1))
+
+(defrule void (SET F64 memf freg)
+  (code (mov $2 $1))
+  (cost 1))
+
+(defrule label (LABEL _))
+
+(defrule void (JUMP label)
+  (code (jump $1))
+  (cost 1))
+
+%%
+
+%CodeGenerator methods
+
+%defemit(mem x) { return "[" + x + "]"; }
+
+// String makeAsmSymbol(String symbol) { return "_" + symbol; }
+

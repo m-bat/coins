@@ -1,0 +1,3 @@
+$1 <<STDIN
+100
+STDIN

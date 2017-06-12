@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>	
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>Design Concepts of the Intermediate Representations in COINS</title>
+
+  </head>
+  <body>
+	<h1>1. Design Concepts of the Intermediate Representations in COINS</h1>
+
+<h3 id='i-1-1'>1.1. Preface</h3>    
+
+  There are two intermediate representations in COINS, namely, High level
+intermediate representation HIR and low level intermediate representation LIR. 
+Following documents give the general view of them:
+
+<ul>
+<li><a href='../hir/HirOutlineE-frame.html' target="_top">Outline of the High level Intermediate Representation HIR</a></li>
+<li><a href='../hir/HirSemanticsE-frame.html' target="_top">Semantics of the High level Intermediate Representation HIR</a></li>
+<li><a href='../sym/SymOutlineE-frame.html' target="_top">Outline of the symbol table</a></li>
+<li><a href='../../COINSdoc.en/lir/lir-frame.html' target="_top">Design and structure of the Lower level Intermediate Representation LIR</a></li>
+<!--
+<li><a href='../lir/LirSpecE.pdf' target="_top">LIR specifications (pdf)</a></li>
+-->
+</ul>
+
+The IR is intended to be the super class of HIR and LIR. The interface of
+symbol table information supplements them. All compiler modules are 
+linked with each other via these intermediate representations.
+<br>
+  Above outline documents describe the design policies and intentions, but 
+do not give the specifications of individual methods. Readers are asked to 
+refer to the interface specifications for that purpose as explained later.
+
+<h3 id='i-1-2'>1.2. Design policy of the intermediate representations</h3> 
+
+<h4 id='i-1-2-1'>1.2.1. Overall policy </h4>
+
+<h5 id='i-1-2-1-1'>1.2.1.1. The role of intermediate representations</h5>
+  In general, a compiler transforms a source program to an object program. 
+The transformation is done in several phases such as syntax analysis, code 
+optimization, code generation, etc. In this process, the source program is 
+transformed to some intermediate representation that is easier to handle 
+by compiler modules than source program.  Ad hoc representations corresponding 
+to combinations of neighboring modules will make the compiler complicated and 
+difficult to be expanded.  If we can settle an intermediate representation 
+as an interface common between all modules of the compiler, then the compiler 
+can be simplified and made easy to be expanded.<br>
+  COINS is the compiler infrastructure that is intended to be expanded to build 
+various compilers by adding or modifying compiler modules. It is intended to 
+build compilers for many languages and also compilers for many machines. 
+It is also intended to build compilers generating good object code and 
+compilers having distinguished characteristics such as parallelization, etc.<br>
+  How to define an intermediate representation that fits to such requirements 
+is the problem.
+
+<h5 id='i-1-2-1-2'>1.2.1.2. Requirements for intermediate representations</h5>
+  In compiling a source program into object code, there is a sequence of 
+transformations which are carried out by compiler modules such as syntax 
+analyzer, flow analyzer, optimizer, parallelizer, register allocator, code 
+generator, and so on. By adding or replacing some of them we can construct 
+various compilers. If we can define an intermediate representation that 
+has the role of common interface between compiler modules, then it will become 
+easy to add, delete, or replace compiler modules to construct a new compiler.
+To realize such interface, requirements for the intermediate representation 
+are as follows:
+<ul>
+<li>Capable of representing the structure and meaning of given program 
+    in detail.</li>
+<li>Suitable for processing of analysis and transformation.</li>
+<li>Suitable for generating efficient object code.</li>
+<li>Highly extensible.</li>
+<li>Suitable for high speed processing in short memory space.</li>
+</ul>
+
+As for COINS, more specifically speaking, 
+<ul>
+<li>Extensible to many imperative languages.</li>
+<li>Extensible to many machines.</li>
+<li>Afford to be extended for future needs in long period.</li>
+<li>Information for optimization, parallelization etc. can be easily attached.</li>
+</ul>
+are required.
+
+<h4 id='i-1-2-2'>1.2.2. The Levels of the Intermediate Representations</h4>
+  
+  There might be several levels in defining intermediate representation, from 
+high level near to source language to low level near to machine language.<br>
+
+  In the course of program transformation, there are several processings
+that are suitable to be designed in a level near source language, and also 
+there are several other processings that are suitable to be designed in a level 
+near machine language.<br>
+  Processings suitable for the level near source language are
+<ul>
+<li>dependency analysis for optimization and parallelization</li>
+<li>loop transformation</li>
+<li>inline expansion</li>
+</ul>
+and so on.<br>
+  Processings suitable for the level near machine language are
+<ul>
+<li>register allocation</li>
+<li>instruction scheduling</li>
+<li>memory access optimization</li>
+</ul>
+and so on.<br>
+
+  If we define an intermediate representation at only one level, then some 
+processings are suitable for it but there will be some of other processings 
+that are not suitable for it. It is better to define high level intermediate 
+representation and low level intermediate representation. There might be an 
+opinion that defining two levels of intermediate representation causes to 
+increase the number of transformations in the course of compilation and 
+makes it impossible to build one-pass compiler. It is true but one-pass 
+compilers can not generate good code and it will be permissible to exclude
+such compilers from the covering range of COINS. Practical compilers have
+many passes to produce good code, and so, it will be permissible to insert 
+a pass to convert intermediate representation from high level to low level.<br>
+
+There might be another opinion that two levels of intermediate representation 
+requires two set of modules to manage intermediate representations and causes 
+to increase the amount of development. The size of modules to manage intermediate
+representations will not be so large and its development is done only once 
+by implementers of the infrastructure and if the complexity of some compiler 
+modules decreases, then the total amount of development will be decreased 
+since such decrease will be seen in many compilers developed by using the 
+infrastructure, and it means that many users of the infrastructure will 
+have benefit.<br>
+
+  There will be another choice to define more than two levels of intermediate
+representations. Intermediate representation may have many attributes that
+are filled or deleted in the process of compilation and some fields may be
+replaced with different kind of items. For example, an operand of an expression
+may be changed from source program variable to abstract register and then 
+changed to physical register without changing basic structure of the expression.
+This means that one intermediate representation can cover many phases of 
+compiling process and requests for more than two levels of intermediate 
+representation will not be so strong.<br>
+
+  It may be necessary to define more than two levels of intermediate 
+representations for some complicated languages. For example, C language 
+has many complicated operators and assignment statement embedded in expressions,
+therefore it may be better to have another intermediate representation near
+C language. For another example, object oriented languages require complicated
+treatment of objects and methods, therefore it may be better to have another 
+intermediate representation suitable to object oriented languages.<br>
+
+  In designing intermediate representations of COINS, we decided to have
+two levels of intermediate representations, that is,
+    high level intermediate representation HIR and <br>
+    low level intermediate representation LIR <br>
+as ones applicable to all cases. HIR is an intermediate representation 
+that can cover analysis and transformation on the level of many imperative 
+languages. LIR is an intermediate representation that can cover analysis and
+transformation on the level of many target machines.<br>
+  As for other levels of intermediate representation, it will be decided to be
+introduced only when its necessity become quite obvious for some language 
+groups or for some architecture groups.<br>
+
+<h4 id='i-1-2-3'>1.2.3. Treatment of dependencies</h4>
+
+  It is desirable that intermediate representations are independent of
+languages and machines. If it is possible, then many compiler modules can be 
+shared between many compilers corresponding to various combinations of source 
+languages and target machines, except for language analyzers corresponding to 
+specific language and last phases of code generation corresponding to specific 
+target machine. In rigorous meaning, it will be very difficult.<br>
+  Some language dependencies will remain in intermediate representations. 
+For example, a string constant may contain language specific mark or size 
+information to delimit the sequence of characters contained in the string.
+Some machine dependencies will remain in intermediate representations. 
+For example, the size of integer number may be 32 bits or 64 bits depending 
+on target machine even for the same source program.<br>
+  It can be noticed that such differences are one of variations for each
+kind of language items. We can define the grammar of an intermediate 
+representation as one independent of languages and machines leaving possibility
+of language/machine dependencies for some symbols used in the representation.
+In terms of programming languages, the interface specifications are 
+completely independent of source languages and target machines but their field
+values may have some dependencies on languages and machines, that is, 
+the specifications of the intermediate representation is independent of 
+languages and machines but its instance may have dependencies.<br>
+  In this approach, most compiler modules can be implemented almost independent
+of languages and machines because the interface specifications of the 
+intermediate representation are independent of languages and machines. Some
+small portions of compiler modules may have dependencies on languages or machines
+to handle the contents of fields having dependency. In this approach, 
+the intermediate representation generated for some specific machine can not be 
+applied to generate machine code of other architecture having different 
+characteristics because the instance of the intermediate representation may 
+have dependency on the target machine. It is the point that differs from the 
+bytecode of Java. <br>
+  We take above approach and do not take the approach of Java bytecode
+because above approach will be suitable for generating highly efficient
+object code compared to the approach of the bytecode.
+
+<h4 id='i-1-2-4'>1.2.4. IR, HIR, LIR</h4>
+    
+<h5 id='i-1-2-4-1'>1.2.4.1. IR</h5>
+
+  In the first stage of COINS development, HIR and LIR are designed to be
+a subclass of an intermediate representation named IR in order to make some
+modules common between HIR and LIR. 
+<pre>
+    IR _____ HIR
+        |
+        |___ LIR
+</pre>
+Actually, the first version of LIR was implemented as the subclass of IR 
+and a flow analyzer has been built to be able to analyze both HIR and LIR. 
+The second version of code generator has been implemented based on new 
+implementation of LIR, although its basic design is the same to that of LIR 
+version 1. <br>
+  At present, the new LIR is not yet made a subset of IR, and so, the hierarchy
+of IR is
+<pre>
+    IR _____ HIR
+
+             LIR
+</pre>
+It is a future work to make it possible to build modules that are applicable
+both to HIR and LIR.
+
+<h5 id='i-1-2-4-2'>1.2.4.2. HIR</h5>
+
+  If we pursuit what is essential in programming languages, we can get the 
+image of an elementary programming language that is common to many imperative
+languages. HIR is based on such elementary language which contains most of 
+high level language concepts common between imperative languages. The document<br>
+    Outline of High level Intermediate Representation HIR<br>
+describes about the elementary language.<br>
+  Too much decomposition of high level language concepts will make the 
+intermediate representation not suitable for program analyses based on
+high level language concepts. Considering it, in HIR, array element expressions
+are not decomposed to pointer expressions.  Compound expressions such as 
+compound assignment in C are decomposed into elementary expressions because
+such expressions requires special treatment for C language in data flow analysis, 
+etc. that is desirable to be language independent.<br>
+  It will be necessary to expand current specifications of HIR when we want 
+to apply COINS to languages based on different concepts. For example, 
+object oriented languages may require special considerations in compilation.
+How to treat them in HIR is left as a future problem.
+
+<h5 id='i-1-2-4-3'>1.2.4.3. LIR</h5>
+
+  LIR is designed to make many compiler components common between various 
+machines. Code optimizer is one of major components in practical compilers. For 
+the code optimization, efficient use of registers is very important. Considering 
+it, registers should be explicitly represented in LIR. In the bytecode of Java, 
+portability of object code is a major concern and does not represent registers 
+explicitly. In COINS, importance is attached to the code optimization and
+applicability to many machines is pursuit by increasing retargetability.<br>
+  LIR is, there for, based on a model of abstract register machine. In this
+model, computation is carried on by evaluating expressions and setting results 
+to variables. A variable has its value in memory or register. Expressions 
+may stand for a constant, a variable, or an operation of arbitrary complexity
+using expressions as their operands. There are control operations such as
+jump, conditional branch, and call. Most computers have such elementary 
+operations as add, subtract, multiply, divide, shift, compare, and so on.
+Operators in LIR represent such operations.<br>
+  While elementary operations are similar between machines, the mechanism of 
+call/return and procedures of entry/exit for subprograms differ greatly machine 
+by machine. To deal with such variety, call, return, prolog, epilog operators
+are provided in LIR and their expansion to machine instruction sequence is
+left as the work of retargeting.<br>
+  In currently prevailing architectures, data are represented as binary integer 
+or floating point number. Character code and boolean value can be represented as 
+a binary integer of small size. LIR representation of data values takes these
+forms. The length of data is represented by the number of bits required to 
+represent it. The address of memory is represented in byte of 8 bit length. 
+Data may be a scalar or an aggregate. For example, 64 bits data may represent
+64 bit integer or 4 element array of 16 bit integer. In LIR, aggregate data is
+distinguished from scalar data.<br>
+  LIR is defined as a complete low level programming language. It can be 
+expressed in textual form as well as in internal representation suitable for 
+processing by compiler modules. Usually, a program in LIR is constructed by 
+the HIR-to-LIR translator but it can be input to or output from  the compiler 
+in textual form. 
+
+<h4 id='i-1-2-5'>1.2.5. Retargeting</h4>
+
+  There will appear various kind of computer architectures. COINS has retargeting
+feature so that it can be applied to new computer architecture easily. COINS
+generates code generator for a new machine based on specifications named 
+Target Machine Description (TMD). The code generator looks for the best fit 
+combination of LIR subtree pattern and corresponding target machine code 
+sequence to generate machine code.<br>
+  There are many passes of LIR transformations such as optimizers and register
+allocator. In this process of transformation, the fields of LIR will change 
+according to the target machine but the grammar of LIR is the same during
+these transformations. For example, an operand may be changed from variable to
+abstract register and then real register of the target machine keeping the
+structure defined by the LIR grammar. LIR subtrees representing an assignment 
+statement will be decomposed into a sequence of small subtrees each of which
+corresponds to actual instruction of the target machine keeping the structure
+defined by the LIR grammar. This means that most of backend modules can be constructed
+machine independently except for the last phase that generates assembly language
+program of the target machine. Thus, control flow graph constructor, SSA 
+optimizer, register allocator, instruction scheduler, etc. are made to be 
+common between all target machines.<br>
+  In many cases, code generators for new machines generating fairly good code 
+have been developed in 3 to 6 months. 
+
+
+<h3 id='i-1-3'>1.3. Symbol table</h3>
+
+  There are such symbols as variables, subprograms, and others in a program. 
+Since symbols in character strings are not easy to handle, they are registered 
+in the symbol table and are handled as symbol table entries in intermediate 
+representations. Attributes of a symbol are attached to its entry in the symbol 
+table. Many of these attributes are decided by declarative statements and the 
+structure of the program, or set at the time of syntax analysis and semantic 
+analysis. <br>
+  In LIR, attributes of symbols are rather simple and their declarations are
+contained in LIR. In HIR, attributes of symbols are complex reflecting the 
+complexity of declaration statements.<br>
+  HIR does not hold declaration statements of symbols but attributes of symbols
+are retained in the symbol table. The symbol table of HIR retains information 
+not only of variables and subprogram but also of constants, types, and all 
+other symbols, including compiler generated temporary variables and labels, and 
+these symbols are referred to during compilation. It may be thought that 
+constants need not be included in the symbol table. A constant is, however, not 
+always represented in one word, and the precision and the range a constant 
+represents vary among different compiling environments and target machines. 
+Complexity of compiler development will be a little lightened by including 
+constants in the symbol table.<br>
+  Symbols may have attributes that depend on source language or target machine.
+Large portions of compiler modules, however,  do not distinguish such dependencies. <br>
+By hiding such dependencies to the symbol table, greater commonality of the 
+compiler modules could be realized.<br>
+
+<h3 id='i-1-4'>1.4. Links to detailed specifications</h3>
+
+  There are several other documents that explain internal representations as
+it is mentioned in Preface. The outline documents listed up in Preface do
+not explain details necessary for coding modules to be integrated in COINS.
+For that purpose, it is necessary to read interfaces of HIR, etc.
+The recommended order of reading documents is as follows.<br>
+<br>
+ (1) This document<br>
+ (2) Other outline documents<br>
+ (3) The Java interfaces for HIR<br>
+ (4) The Java interfaces which are the subclasses of above Java interfaces <br>
+<br>
+  Interfaces that describes detailed specifications of HIR:
+<pre>
+    HIR.java     interface specifications for HIR
+    Sym.java     interface specifications for the symbol table
+    Type.java    interface specifications for the types 
+    Flow.java    interface specifications for the flow information
+    BBlock.java  interface specifications for the basic blocks
+                 to be used in flow analysis
+    MachineParam.java    class for machine dependent information 
+    SourceLanguage.java  class for source language dependent information
+</pre>
+
+  In developing modules using HIR, users need only to consult the interface 
+specifications to understand, and need not to go down to the implementation 
+details. In consulting the interface specifications, it is suggested to first 
+consult the specifications in the uppermost classes listed above. Only when 
+further specifics are required, user may look for appropriate lower classes. 
+In other words, it is strongly recommended to try first and make most use of 
+the applicable methods in the uppermost classes, and not to start from a subclass. If one start reading from lower subclasses, he/she may be misguided to
+wrong applications of methods due to the lack of the knowledge 
+of underlying conventions.<br>
+  The classes listed below are prepared for overall control of the compiler. 
+They may be referred to in the intermediate representation specifications.
+<pre>
+      Driver      compiler path control
+      IoRoot      links to input/output related information
+      SymRoot     links to symbol table related matters
+      HirRoot     links to HIR information 
+      LirRoot     links to LIR information
+      FlowRoot    links to flow information
+      Message     message output control
+      Debug       debug output control
+</pre>
+
+
+<h3 id='i-1-5'>1.5. Example</h3>
+
+  In this chapter, intermediate representations for a small program are shown 
+to give a concrete image for them. Explanation of each item in them will be
+given in further documents listed above and in interface modules.
+
+<h4 id='i-1-5-1'>1.5.1. Source program</h4>
+
+<pre>
+/* tpsum1.c -- Summation */
+
+  int  printf(char*, ...);
+  void getData(int x[100]);
+  int a[100];
+  int sum, i;
+
+int main()
+{
+  getData(a);
+  sum = 0;
+  for (i = 0; i < 100; i++) {
+    sum = sum + a[i];
+  }
+  printf("sum = %d\n", sum);
+  return 0;
+}
+</pre>
+
+<h4 id='i-1-5-2'>1.5.2. HIR</h4>
+
+<pre>
+ (prog     1
+  &lt;null 0 void>
+  &lt;nullNode 2>
+  (subpDef  3 void
+   &lt;subp     4 &lt;SUBP &lt; )> false false int> main>
+  &lt;null 0 void>
+   (labeldSt 5 void
+    (list 6
+     &lt;labelDef 7 _lab1>)
+    (block    8 void line 8
+     (expStmt  9 void line 10
+      (call     10 void
+       (addr     11 &lt;PTR &lt;SUBP &lt; &lt;PTR int> )> false false void>>
+        &lt;subp     12 &lt;SUBP &lt; &lt;PTR int> )> false false void> getData>)
+       (list 13
+        (decay    14 &lt;PTR int>
+         &lt;var      15 &lt;VECT 100 0 int> a>))))
+     (assign   16 int line 11
+      &lt;var      17 int sum>
+      &lt;const    18 int 0>)
+     (for      19 void line 12
+      (block    20 void
+       (assign   21 int
+        &lt;var      22 int i>
+        &lt;const    23 int 0>))
+     &lt;null 0 void>
+      (labeldSt 24 bool
+       (list 25
+        &lt;labelDef 26 _lab5>)
+       (expStmt  27 bool
+        (cmpLt    28 bool
+         &lt;var      29 int i>
+         &lt;const    30 int 100>)))
+      (labeldSt 31 void
+       (list 32
+        &lt;labelDef 33 _lab6>)
+       (block    34 void
+        (assign   35 int line 13
+         &lt;var      36 int sum>
+         (add      37 int
+          &lt;var      38 int sum>
+          (subs     39 int
+           &lt;var      40 &lt;VECT 100 0 int> a>
+           &lt;var      41 int i>)))
+        (labeldSt 42 void
+         (list 43
+          &lt;labelDef 44 _lab3>)
+        &lt;null 0 void>)))
+      (expStmt  45 int
+      &lt;null 0 void>)
+      (block    46 void
+       (assign   47 int
+        &lt;var      48 int i>
+        (add      49 int
+         &lt;var      50 int i>
+         &lt;const    51 int 1>)))
+      (labeldSt 52 void
+       (list 53
+        &lt;labelDef 54 _lab4>)
+      &lt;null 0 void>))
+     (expStmt  55 int line 15
+      (call     56 int
+       (addr     57 &lt;PTR &lt;SUBP &lt; &lt;PTR char> )> true false int>>
+        &lt;subp     58 &lt;SUBP &lt; &lt;PTR char> )> true false int> printf>)
+       (list 59
+        (decay    60 &lt;PTR char>
+         &lt;const    61 &lt;VECT 10 0 char> "sum = %d\n">)
+        &lt;var      62 int sum>)))
+     (return   63 int line 16
+      &lt;const    64 int 0>))))
+ )
+</pre>
+
+<h4 id='i-1-5-3'>1.5.3. LIR</h4>
+
+<pre>
+(MODULE "tpsum1.c"
+  (SYMTAB
+    ("main" STATIC UNKNOWN 4 ".text" XDEF &amp;syminfo "main" "tpsum1.c" 8 0)
+    ("i" STATIC I32 4 ".bss" XDEF &amp;syminfo "i" "tpsum1.c" 6 0)
+    ("sum" STATIC I32 4 ".bss" XDEF &amp;syminfo "sum" "tpsum1.c" 6 0)
+    ("a" STATIC A3200 4 ".bss" XDEF &amp;syminfo "a" "tpsum1.c" 5 0)
+    ("getData" STATIC UNKNOWN 4 ".text" XDEF &amp;syminfo "getData" "tpsum1.c" 19 0)
+    ("printf" STATIC UNKNOWN 4 ".text" XREF &amp;syminfo "printf" "tpsum1.c" 3 0)
+    ("string.5" STATIC UNKNOWN 1 ".text" LDEF &amp;syminfo "const_13" "" 0 0))
+  (DATA "string.5" (I8 115 117 109 32 61 32 37 100 10 0))
+  (FUNCTION "main"
+    (SYMTAB
+      ("returnvalue.3" FRAME I32 4 0)
+      ("functionvalue.4" FRAME I32 4 0))
+    (PROLOGUE (0 0))
+   (DEFLABEL "_lab1")
+    (CALL (STATIC I32 "getData") ((STATIC I32 "a")) () &amp;id ("getData" 0))
+    (SET I32 (MEM I32 (STATIC I32 "sum") &amp;id ("sum" 1)) (INTCONST I32 0))
+    (SET I32 (MEM I32 (STATIC I32 "i") &amp;id ("i" 2)) (INTCONST I32 0))
+   (DEFLABEL "_lab5")
+   (DEFLABEL "_lab6")
+    (SET I32 (MEM I32 (STATIC I32 "sum") &amp;id ("sum" 7))
+     (ADD I32 (MEM I32 (STATIC I32 "sum") &amp;id ("sum" 4)) 
+              (MEM I32 (ADD I32 (STATIC I32 "a") 
+               (MUL I32 (MEM I32 (STATIC I32 "i") &amp;id ("i" 5)) (INTCONST I32 4))) &amp;id 6)))
+   (DEFLABEL "_lab3")
+    (SET I32 (MEM I32 (STATIC I32 "i") &amp;id ("i" 9))
+     (ADD I32 (MEM I32 (STATIC I32 "i") &amp;id ("i" 8)) (INTCONST I32 1)))
+    (JUMP (LABEL I32 "_lab5"))
+   (DEFLABEL "_lab4")
+    (CALL (STATIC I32 "printf") 
+     ((STATIC I32 "string.5") (MEM I32 (STATIC I32 "sum") &amp;id ("sum" 10))) 
+     ((MEM I32 (FRAME I32 "functionvalue.4") &amp;id ("functionvalue.4" 11))) &amp;id ("printf" 12))
+    (SET I32 (MEM I32 (FRAME I32 "returnvalue.3") &amp;id ("returnvalue.3" 13))
+             (INTCONST I32 0))
+    (JUMP (LABEL I32 "_epilogue"))
+   (DEFLABEL "_epilogue")
+    (EPILOGUE (0 0) (MEM I32 (FRAME I32 "returnvalue.3") 
+      &amp;id ("returnvalue.3" 14))))
+  (DATA "sum" (SPACE 4))
+  (DATA "i" (SPACE 4))
+  (DATA "a" (SPACE 400)))
+</pre>
+
+<h4 id='i-1-5-4'>1.5.4. Symbol table</h4>
+
+<pre>
+SymTable Root
+
+  subp    printf &lt;SUBP &lt; &lt;PTR char> )> true false int> File tpsum1.c line 3 (flags 6) extern
+  subp    getData &lt;SUBP &lt; &lt;PTR int> )> false false void> File tpsum1.c line 19 (flags 6) public
+  type    &lt;VECT 100 0 int> (flags 12) size 400 elemCount 100 lowerBound 0
+  var     a 0 &lt;VECT 100 0 int> File tpsum1.c line 5 (flags 6) public  static
+  var     sum 0 int File tpsum1.c line 6 (flags 9) public  static
+  var     i 0 int File tpsum1.c line 6 (flags 9) public  static
+  subp    main &lt;SUBP &lt; )> false false int> File tpsum1.c line 8 callList list 0 public
+  type    &lt;VECT 10 0 char> (flags 12) size 10 elemCount 10 lowerBound 0
+  type    &lt;PTR 100 0 int> size 4
+
+SymTable main parent SymTable Root subp main
+
+  label   _lab1 kind 1 unq:main__lab1 (flags 2)
+  label   _lab2 kind 15 unq:main__lab2 (flags 2)
+  label   _lab3 kind 8 unq:main__lab3 in main (flags 2)
+  label   _lab4 kind 21 unq:main__lab4 in main (flags 2)
+  label   _lab5 kind 6 unq:main__lab5 (flags 2)
+  label   _lab6 kind 7 unq:main__lab6 (flags 2)
+
+SymTable Constant
+
+  intC    4 int unq:const_1
+  intC    1 int unq:const_2
+  intC    0 int unq:const_5
+  intC    100 int unq:const_11
+  intC    400 int unq:const_12
+  stringC "sum = %d\n" &lt;VECT 10 0 char> unq:const_13 (flags 6) length 10
+  intC    10 int unq:const_14
+</pre>
+
+</body>
+</html>

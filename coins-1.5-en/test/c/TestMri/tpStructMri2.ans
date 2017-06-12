@@ -1,0 +1,6 @@
+i,j = 3,2
+av.bb[i] = 3
+av.x.b[i] = 4
+pp->bb[i] = 3
+pp->x.b[i] = 4
+aa[i].bb[j] = 0

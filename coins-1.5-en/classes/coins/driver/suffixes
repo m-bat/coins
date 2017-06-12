@@ -1,0 +1,13 @@
+#SRD, 2, Suffix rule DB file, format version 2
+c,		C,		C source,				i,s,o
+c(out-newlir),	C,		C source,				i,lir,-
+i,		C,		preprocessed C source,			-,s,o
+cc/cpp/cxx/C,	C++,		C++ source,				ii,s,o
+ii,		C++,		preprocessed C++ source,		-,s,o
+java,		Java,		Java source,				-,class,-
+java(native),	Java,		Java source (native compile),		-,s,o
+f,		FORTRAN,	FORTRAN source,				-,s,o
+f(out-newlir),	FORTRAN,	FORTRAN source,				-,lir,o
+lir,		LIR,		new LIR,				-,s,o
+S,		Assembler,	assembly source (need preprocess),	s,-,o
+s,		Assembler,	assembly source,			-,-,o

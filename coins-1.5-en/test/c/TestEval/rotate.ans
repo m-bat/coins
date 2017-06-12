@@ -1,0 +1,8 @@
+rotate1: No optimization angle 1.962500e-01 cos 9.808047e-01 sin 1.949927e-01
+    qx[0] 1.175797e+00  qy[0] 7.858120e-01 
+rotate2: Change cos/sin to constant 
+    qx[1] 2.546587e+00  qy[1] 2.552429e+00 
+rotate3: Embed cos/sin and count as constants 
+    qx[2] 3.917378e+00  qy[2] 4.319045e+00 
+rotate4: Expand loop 4 times and embed constants 
+    qx[3] 5.288168e+00  qy[3] 6.085662e+00 

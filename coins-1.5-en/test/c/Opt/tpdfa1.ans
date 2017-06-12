@@ -1,0 +1,7 @@
+i=-1 j=0 a=0 k=0 
+check
+i=0 j=-1 a=0 k=1 
+check
+i=0 j=-2 a=0 k=2 
+check
+i=0 j=-3 a=0 k=3 

@@ -1,0 +1,928 @@
+/* ----------------------------------------------------------
+%   Copyright (C) 2005 The Coins Project Group               
+%       (Read COPYING for detailed information.)             
+----------------------------------------------------------- */
+package covis;
+
+import java.awt.BorderLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
+import java.awt.geom.Point2D;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.Enumeration;
+import java.util.Vector;
+
+import javax.swing.JComboBox;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+
+import att.grappa.Edge;
+import att.grappa.Element;
+import att.grappa.Graph;
+import att.grappa.Grappa;
+import att.grappa.GrappaBox;
+import att.grappa.GrappaConstants;
+import att.grappa.GrappaListener;
+import att.grappa.GrappaPanel;
+import att.grappa.GrappaPoint;
+import att.grappa.GrappaSupport;
+import att.grappa.Node;
+import att.grappa.Parser;
+import att.grappa.Subgraph;
+
+/**
+ * A class that shows Graph
+ */
+public class VisGraph
+  implements GrappaListener, GrappaConstants,
+             ActionListener, ChangeListener, ItemListener {
+  /**
+   * 
+   */
+  private VisFunc visFunc;
+
+  /** CoVis Environment */
+  private VisEnvironment visEnv;
+
+  /** Graph type */
+  private String[] graphTypes;
+
+  /** Data for 1 tag "program" */
+  private UnitData unitData;
+
+  /** Data for 1 tag "function"  */
+  private FuncData funcData;
+
+  /** Data for 1 tag "graph"  */
+  private SubFuncData subFuncData;
+	
+  /** the Panel that contains Graph */
+  private GrappaPanel gp;
+
+  /** the Panel that contains gp */
+  JScrollPane jspane = null;
+
+  /** Entry Block label list */
+  ViList entryList;
+  /** Exit Block label list */
+  ViList exitList;
+
+  /**
+   * Popup Menu Label title
+   */
+  private static final String TOOL_CHIP = "Tool Chip";
+  private static final String ON = "ON";
+  private static final String OFF = "OFF";
+  private static final String CANCEL_SELECTION = "Cancel";
+  private static final String ZOOM_IN = "Zoom In";
+  private static final String ZOOM_OUT = "Zoom Out";
+  private static final String NORMAL_SZ = "Normal Size";
+  private static final String WINDOW_SZ = "Window Size";
+
+  /**
+   * Graph Selection Button
+   */
+  private JComboBox cb = null;
+
+  /**
+   * URL for dot
+   */
+  public static final String dotURL
+  = "http://www.research.att.com/~john/cgi-bin/format-graph";
+
+  /**
+   * request property 0
+   */
+  public static final String reqProperty0 = "Content-Type";
+	
+  /**
+   * request property 1
+   */
+  public static final String reqProperty1 
+  = "application/x-www-form-urlencoded";
+	
+  /**
+   * constructor
+   * make graph from DOT program.
+   * 
+   * @param vis     :VisFunc
+   * @param env     :VisEnvironment
+   * @param GPanel     :JPanel
+   */
+  public VisGraph(VisFunc vis, VisEnvironment env, JPanel GPanel ) {
+    this.visFunc = vis;
+    this.unitData = vis.unitData;
+    visEnv = env;
+    this.funcData = vis.funcData;
+
+    if (GPanel == null)
+      System.err.println("GPanel is null");
+
+    /*
+     * create Function Selection button
+     */
+
+    if (funcData == null) {
+      System.err.println("NO function in this Unit !!");
+      return;
+    } else {
+      GPanel.setLayout(new BorderLayout());
+      jspane = new JScrollPane();
+
+      subFuncData = funcData.firstSubFuncData();
+
+      /*
+       * create Graph Selection Button
+       */
+      //JPanel graphSelectPane = GraphButton();
+      //GPanel.add(graphSelectPane,BorderLayout.PAGE_START);
+      GPanel.add(jspane);
+    }
+  }
+
+
+  /**
+   * Paint graphs for 1 function
+   * @param func    : function data
+   */
+  public void showGraph(FuncData func) {
+    funcData = func;
+    remakeGraphButton();
+    showGraph(0);
+  }
+
+  /**
+   * Paint graphs for 1 graph
+   * @param selected    : selected no. for graph data
+   */
+  public void showGraph(int selected) {
+    ViList list = funcData.subFuncDataList;
+    SubFuncData sub = (SubFuncData)list.getElem(selected);
+    if (sub != null) {
+      if (sub.blockList != null) {
+        if (!sub.blockList.isEmpty()) {
+         subFuncData = sub;
+         showGraph();
+        }
+      }
+    }
+  }
+
+  /**
+   * Paint graphs for 1 current graph
+   */
+  public void showGraph() {
+    if (jspane == null) {
+      System.err.println("No jspane");
+    }
+    if (funcData == null) {
+      System.err.println("showGraph : NO function included in this Unit !!");
+      return;
+    } else {
+      //System.out.println("func = " + funcData.funcName());
+      gp = makeGraph();
+      //System.out.println("subFunc = " + subFuncData.title+"-->"+selectedGraph);
+      //if (cb != null)
+        //cb.setSelectedIndex(selectedGraph);
+      jspane.setViewportView(gp);
+    }
+  }
+
+
+  /**
+   * Makes a graph of Function (private)
+   */
+  private GrappaPanel makeGraph() {
+    File middleFile;
+
+    // Makes a DOT file.
+
+    String functionName = funcData.funcName();
+
+    File sourceFile = unitData.getSourceFile();
+    String sourcePath = sourceFile.getName();
+    String sourceName = sourcePath.substring(0, sourcePath.lastIndexOf('.'));
+    String fileName = sourceName.concat("-");
+    fileName += functionName;
+    fileName += ".dot";
+    middleFile = new File(fileName);
+
+    //System.out.println("sourceFile : "+sourceFile.getName()+" fileName : "+sourceFile.getParent()+"/"+fileName);
+    try {
+      middleFile.createNewFile();
+    } catch (IOException e) {
+      //System.err.println("excption:" + e.getMessage());
+      System.exit(1);
+    }
+
+    //System.out.println("makeGraph func = " + functionName);
+    try {
+      FileWriter fwriter = new FileWriter(middleFile);
+      BufferedWriter bwriter = new BufferedWriter(fwriter);
+			
+      getDot(subFuncData, bwriter);
+
+      bwriter.close();
+      fwriter.close();
+    } catch (IOException e) {
+      System.err.println(e.getMessage());
+    }
+		
+    // makes a parser for graph file
+    Parser parser = null;
+    try {
+      FileInputStream input = new FileInputStream(middleFile);
+      parser = new Parser(input, System.err);
+      parser.parse();
+    }	catch (Exception e) {
+      System.err.println(e.getMessage());
+    }
+
+    // makes a graph
+    Graph g = parser.getGraph();
+    g.setEditable(false);
+    gp = new GrappaPanel(g);
+    gp.addGrappaListener(this);
+
+    gp.setScaleToFit(true);
+    gp.setVisible(true);
+		
+    // executes the shell script
+    Object connector = null;
+    try {
+      connector = Runtime.getRuntime().exec("dot");
+    }	catch (Exception e) {
+      System.err.print("Failed to execute Shell Script ");
+      System.err.println("(" + e.getMessage() + ")");
+      connector = null;
+    }
+    // connect to the net if execution of shell script failed.
+    if (connector == null) {
+      System.err.println("connect to the network.");
+      try {
+        connector = new URL(dotURL).openConnection();
+        URLConnection urlConn = (URLConnection)connector;
+        urlConn.setDoInput(true);
+        urlConn.setDoOutput(true);
+        urlConn.setUseCaches(false);
+        urlConn.setRequestProperty(reqProperty0, reqProperty1);
+      }	catch (Exception ex) {
+        System.err.println("failed to connect the network.");
+        System.err.println("(" + ex.getMessage() + ")");
+        connector = null;
+      }
+    }
+
+    // format the graph
+    if(connector != null) {
+      if(!GrappaSupport.filterGraph(g,connector)) {  // <--- not returned here
+        System.err.println("Failed to create Graph");
+      }
+
+      // kill subprocess(es)
+      if(connector instanceof Process) {
+        ((Process)connector).destroy();
+      }
+    }
+
+    // re-draw the graph.
+    connector = null;
+    g.repaint();
+    clearNodes();
+
+    try {
+      middleFile.delete();
+    } catch (Exception e) {
+      System.err.println("exception:" + e.getMessage());
+      System.exit(1);
+    }
+
+    return gp;
+  }
+
+  /**
+   * Create the source file for Dot graph (private)
+   * @param func Graph data
+   * @param bwriter BufferWriter
+   */
+  private void getDot(SubFuncData func, BufferedWriter bwriter)
+    throws IOException {
+    ViList bbl = func.blockList;
+    BlockData blk, blk2;
+
+    ViList p, q, r;
+
+    // writes header.
+    bwriter.write("digraph g {");
+    bwriter.newLine();
+    bwriter.write("node [shape=box,width=\"1.2\",height=\"0.5\"];");
+    bwriter.newLine();
+
+    //System.out.println("getDot func = " + funcData.funcName());
+
+    entryList = new ViList();
+    exitList = new ViList();
+
+    // writes the node information.
+
+    for (q = func.blockList.first(); !q.atEnd(); q=q.next()) {
+      blk = (BlockData)q.elem();
+      String label = blk.getBlockLabel();
+
+      bwriter.write("" + label.replace('.','_')
+                    + "[" + "label=\"" + label + "\"];");
+
+      //System.out.println("getDot label = " + label);
+      bwriter.newLine();
+
+    }
+
+    // writes the control flow.
+    for (q = func.blockList.first();!q.atEnd();q=q.next()) {
+      blk = (BlockData)q.elem();
+
+      //System.out.println("blk = "+blk.label.replace('.','_'));
+      
+      ViList prevList = blk.prev.getList();
+      ViList nextList = blk.next.getList();
+
+      if (prevList != null) {
+        if (prevList.isEmpty()) {
+          System.out.println("Prev is not found");
+        } else {
+          for (r = prevList.first();!r.atEnd();r=r.next()) {
+            String label = (String)r.elem();
+    
+            bwriter.write(label.replace('.','_'));
+            bwriter.write(" -> ");
+            bwriter.write(blk.label.replace('.','_'));
+            bwriter.write(";");
+            bwriter.newLine();
+          }
+        }
+      } else {
+        entryList.add(blk.label.replace('.','_'));
+        //System.out.println("blk : "+blk.label.replace('.','_')+" is entry block");
+      }
+      if (nextList == null) {
+        exitList.add(blk.label.replace('.','_'));
+        //System.out.println("blk : "+blk.label.replace('.','_')+" is exit block");
+        }
+    }
+
+    // writes the right parenthesis.
+    bwriter.write("}\r");
+    bwriter.newLine();
+    //System.out.println("getCFGDot done");
+  }
+
+
+  /*
+   *  (non-Javadoc)
+   * @see att.grappa.GrappaListener
+   * #grappaClicked(att.grappa.Subgraph, att.grappa.Element, 
+   * att.grappa.GrappaPoint, int, int, att.grappa.GrappaPanel)
+   */
+  public void grappaClicked(Subgraph subg, Element elem, GrappaPoint pt, 
+                            int modifiers, int clickCount, GrappaPanel panel) 
+    {
+
+      if ((modifiers & InputEvent.BUTTON1_MASK) == InputEvent.BUTTON1_MASK) {
+        if (clickCount == 1) {
+          if (modifiers == InputEvent.BUTTON1_MASK) {
+            if (elem == null) {
+              if (subg.currentSelection != null) {
+                if (subg.currentSelection instanceof Element) {
+                  Element tmp = (Element) (subg.currentSelection);
+                  tmp.highlight &= ~HIGHLIGHT_MASK;
+                } else {
+                  Vector vec = ((Vector) (subg.currentSelection));
+                  for (int i = 0; i < vec.size(); i++) {
+                    Element tmp = (Element)(vec.elementAt(i));
+                    tmp.highlight &= ~HIGHLIGHT_MASK;
+                  }
+                }
+                subg.currentSelection = null;
+                subg.getGraph().repaint();
+              }
+            } else {
+              if (subg.currentSelection != null) {
+                if (subg.currentSelection == elem) return;
+                if (subg.currentSelection instanceof Element) {
+                  Element tmp = (Element) (subg.currentSelection);
+                  tmp.highlight &= ~HIGHLIGHT_MASK;
+                } else {
+                  Vector vec = (Vector) (subg.currentSelection);
+                  for (int i = 0; i < vec.size(); i++) {
+                    Element tmp = (Element)(vec.elementAt(i));
+                    tmp.highlight &= ~HIGHLIGHT_MASK;
+                  }
+                }
+                subg.currentSelection = null;
+              }
+						
+              // executes follow instructions 
+              int elemType = elem.getType();
+              switch (elemType) {
+                case Element.NODE:
+                  // hilights the selection node.
+                  elem.highlight |= SELECTION_MASK;
+                  subg.currentSelection = elem;
+                  subg.getGraph().repaint();
+
+                  Node nod = (Node)elem;
+
+                  BlockData lblock = null;
+                   String label = (String)nod.getAttributeValue("label");
+                  lblock = (BlockData)visFunc.getBlock(label);
+                  //System.out.println("label = "+ label);
+
+                  if (lblock != null) {
+                    // System.err.println(" (f,t) = ("+ lblock.line_from + "," + lblock.line_to + ")");
+                    visFunc.showUpperCodePanel(label);
+                    visFunc.showLowerCodePanel(label);
+                    clearNodes();
+                    visFunc.showBlockTree(lblock);
+                  } else {
+                    System.out.println("can't find ");
+                  }
+                  break;
+							
+                  // if the edge is selected
+                case Element.EDGE:
+                  break;
+							
+                  // if the subgraph is selected.
+                case Element.SUBGRAPH:
+                  break;
+							
+                default:
+              }
+            }
+          }
+        } else {
+          // TODO here comes the double-click instructions.
+          // not use it
+        }
+      }
+    }
+
+  /*
+   *  (non-Javadoc)
+   * @see att.grappa.GrappaListener
+   * #grappaPressed(att.grappa.Subgraph, att.grappa.Element, 
+   * att.grappa.GrappaPoint, int, att.grappa.GrappaPanel)
+   */
+  public void grappaPressed(Subgraph subg, Element elem, GrappaPoint pt, 
+                            int modifiers, GrappaPanel panel) 
+    {
+
+      if ((modifiers & (InputEvent.BUTTON2_MASK | InputEvent.BUTTON3_MASK)) != 0){
+        if ((modifiers & (InputEvent.BUTTON2_MASK | InputEvent.BUTTON3_MASK)) 
+            == modifiers) {
+				
+          // makes a pop up menu.
+          JPopupMenu popup = new JPopupMenu();
+          JMenuItem item = null;
+				
+          if (panel.getToolTipText() == null) {
+            popup.add(item = new JMenuItem(TOOL_CHIP + ON));
+          }else {
+            popup.add(item = new JMenuItem(TOOL_CHIP + OFF));
+          }
+          item.addActionListener(this);
+          popup.addSeparator();
+				
+          if (subg.currentSelection != null) {
+
+            popup.add(item = new JMenuItem(CANCEL_SELECTION));
+            item.addActionListener(this);
+            popup.addSeparator();
+          }
+
+
+          popup.add(item = new JMenuItem(ZOOM_IN));
+          item.addActionListener(this);
+
+          popup.add(item = new JMenuItem(ZOOM_OUT));
+          item.addActionListener(this);
+
+          popup.add(item = new JMenuItem(NORMAL_SZ));
+          item.addActionListener(this);
+
+          popup.add(item = new JMenuItem(WINDOW_SZ));
+          item.addActionListener(this);
+				
+          // displays pop up menu.
+          Point2D mpt = panel.getTransform().transform(pt, null);
+          popup.show(panel, (int)mpt.getX(), (int)mpt.getY());
+        }
+      }
+    }
+	
+  /*
+   *  (non-Javadoc)
+   * @see att.grappa.GrappaListener
+   * #grappaTip(att.grappa.Subgraph, att.grappa.Element, 
+   * att.grappa.GrappaPoint, int, att.grappa.GrappaPanel)
+   */
+  public String grappaTip(Subgraph subg, Element elem, GrappaPoint pt,
+                          int modifiers, GrappaPanel panel)
+    {
+      String tip = null;
+
+      if (elem == null) {
+        if ((tip = panel.getToolTipText()) == null) {
+          if ((tip = subg.getGraph().getToolTipText()) == null) {
+            tip = Grappa.getToolTipText();
+          }
+        }
+      } else {
+        switch (elem.getType()) {
+          // if the subgraph is selected
+          case SUBGRAPH :
+            Subgraph sg = (Subgraph)elem;
+            if ((tip = (String)sg.getAttributeValue(TIP_ATTR)) == null) {
+              if (subg.getShowSubgraphLabels()) {
+                tip = sg.getName();
+              } else {
+                if ((tip = (String)sg.getAttributeValue(LABEL_ATTR)) == null) {
+                  tip = sg.getName();
+                }
+              }
+              tip = "Subgraph: " + tip;
+            }
+            break;
+				
+            // if the edge is selected
+          case EDGE :
+            Edge edge = (Edge)elem;
+            if ((tip = (String)edge.getAttributeValue(TIP_ATTR)) == null) {
+              if (subg.getShowEdgeLabels()) {
+                tip = edge.toString();
+              } else {
+                if ((tip = (String)edge.getAttributeValue(LABEL_ATTR)) == null) {
+                  tip = edge.toString();
+                }
+              }
+              tip = "Edge: " + tip;
+            }
+            break;
+				
+            // if the node is selected
+          case NODE :
+            Node node = (Node)elem;
+            if ((tip = (String)node.getAttributeValue(TIP_ATTR)) == null) {
+              if (subg.getShowNodeLabels()) {
+                tip = node.getName();
+              } else {
+                if ((tip = (String)node.getAttributeValue(LABEL_ATTR))
+                    == null || tip.equals("\\N")) {
+                  tip = node.getName();
+                }
+              }
+              tip = "Node: " + tip;
+            }
+            break;
+						
+          default :
+            throw new RuntimeException("unexpected type ("+elem.getType()+")");
+        }
+      }
+      return (tip);
+    }
+
+  /*
+   *  (non-Javadoc)
+   * @see java.awt.event.ActionListener
+   * #actionPerformed(java.awt.event.ActionEvent)
+   */
+  public void actionPerformed(ActionEvent ae) {
+
+    Object obj = ae.getSource();
+    String text = null;
+
+    if (obj instanceof JMenuItem) {	
+      Object parent = ((JMenuItem) obj).getParent();
+			
+      if (parent instanceof JPopupMenu) {
+        Object invoker = ((JPopupMenu) parent).getInvoker();
+				
+        if (invoker instanceof GrappaPanel) {
+          GrappaPanel gp = (GrappaPanel)invoker;
+          Subgraph subg = gp.getSubgraph();
+
+          text = ((JMenuItem)obj).getText();
+						
+          if (text.startsWith(TOOL_CHIP)) {
+            if (text.indexOf(OFF) > 0) {
+              gp.setToolTipText(null);
+            } else {
+              String tip = subg.getGraph().getToolTipText();
+              if (tip == null) {
+                tip = Grappa.getToolTipText();
+              }
+              gp.setToolTipText(tip);
+            }
+          } else if (text.startsWith(CANCEL_SELECTION)) {
+            if (subg.currentSelection == null) return;
+						
+            if (subg.currentSelection instanceof Element) {
+              GrappaSupport.setHighlight
+                ((Element) (subg.currentSelection), 0, HIGHLIGHT_OFF);
+            } else {
+              Vector vec = (Vector) (subg.currentSelection);
+							
+              for (int i = 0; i < vec.size(); i++) {
+                GrappaSupport.setHighlight
+                  ((Element) (vec.elementAt(i)), 0, HIGHLIGHT_OFF);
+              }
+            }
+            subg.currentSelection = null;
+            subg.getGraph().repaint();
+          } else if (text.startsWith(ZOOM_IN)) {
+            gp.setScaleToFit(false);
+            gp.setScaleToSize(null);
+            gp.multiplyScaleFactor(1.25);
+            gp.clearOutline();
+          } else if (text.startsWith(ZOOM_OUT)) {
+            gp.setScaleToFit(false);
+            gp.setScaleToSize(null);
+            gp.multiplyScaleFactor(0.8);
+            gp.clearOutline();
+          } else if (text.startsWith(NORMAL_SZ)) {
+            gp.setScaleToFit(false);
+            gp.setScaleToSize(null);
+            gp.resetZoom();
+            gp.clearOutline();
+          } else if (text.startsWith(WINDOW_SZ)) {
+            gp.setScaleToFit(true);
+          }
+        }
+      }
+    }
+  }
+	
+  /*
+   *  (non-Javadoc)
+   * @see att.grappa.GrappaListener
+   * #grappaReleased(att.grappa.Subgraph, att.grappa.Element, 
+   * att.grappa.GrappaPoint, int, att.grappa.Element, att.grappa.GrappaPoint, 
+   * int, att.grappa.GrappaBox, att.grappa.GrappaPanel)
+   */
+  public void grappaReleased(Subgraph subg, Element elem, GrappaPoint pt, 
+                             int modifiers, Element pressedElem,
+                             GrappaPoint pressedPt, 
+                             int pressedModifiers, GrappaBox outline,
+                             GrappaPanel panel) {
+    return;
+  }
+	
+  /*
+   *  (non-Javadoc)
+   * @see att.grappa.GrappaListener
+   * #grappaDragged(att.grappa.Subgraph, att.grappa.GrappaPoint, 
+   * int, att.grappa.Element, att.grappa.GrappaPoint, int, 
+   * att.grappa.GrappaBox, att.grappa.GrappaPanel)
+   */	 
+  public void grappaDragged(Subgraph subg, GrappaPoint currentPt, 
+                            int currentModifiers, Element pressedElem,
+                            GrappaPoint pressedPt, 
+                            int pressedModifiers, GrappaBox outline,
+                            GrappaPanel panel) {
+    return;
+  }
+
+  public void setScaleToFit(boolean b) {
+    gp.getSubgraph().getGraph().repaint();
+
+    if (b) {
+      gp.setScaleToFit(true);
+    } else {
+      gp.setScaleToFit(false);
+      gp.setScaleToSize(null);
+      gp.resetZoom();
+    }
+    gp.clearOutline();
+
+  }
+
+  public void stateChanged (ChangeEvent e) {
+    JTabbedPane jtab = (JTabbedPane)e.getSource();
+    int index = jtab.getSelectedIndex();
+    System.err.println("VisGraph stateChanged index = " + index);
+    if (index == -1) return;
+
+    Subgraph subg = gp.getSubgraph();
+    
+
+    if (subg.currentSelection != null) {
+      if (subg.currentSelection instanceof Element) {
+        GrappaSupport.setHighlight
+          ((Element) (subg.currentSelection), 0, HIGHLIGHT_OFF);
+      } else {
+        Vector vec = (Vector) (subg.currentSelection);
+							
+        for (int i = 0; i < vec.size(); i++) {
+          GrappaSupport.setHighlight
+            ((Element) (vec.elementAt(i)), 0, HIGHLIGHT_OFF);
+        }
+      }
+    }
+
+    clearNodes();
+
+    subg.currentSelection = null;
+    subg.getGraph().repaint();
+
+    visFunc.clearBlockTree();
+
+    // System.err.println("func = " + jtab.getTitleAt(index));
+    //FuncData func = unitData.getFuncByName(jtab.getTitleAt(index));
+    if (funcData != null) {
+      visFunc.showUpperCodePanel();
+      visFunc.showLowerCodePanel();
+    } else {
+      System.err.println("getFuncByName returns null.");
+    }
+
+    return;
+  }
+
+
+  public void itemStateChanged(ItemEvent evt) {
+    if (evt.getStateChange() == ItemEvent.SELECTED) {
+      String selstr = (String)cb.getSelectedItem();
+      //System.err.println("VisGraph sitemStateChanged index = " + selstr);
+
+      SubFuncData graph = funcData.getGraphByName(selstr);
+      if (graph == null) {
+        System.err.println("getGraphByName returns null.");
+      } else if (! graph.title.equals(funcData.currentSubFuncData.title)) {
+        subFuncData = graph;
+        showGraph(cb.getSelectedIndex());
+        funcData.setSubFuncData(graph);
+        visFunc.showUpperCodePanel(graph);
+        visFunc.showLowerCodePanel(graph);
+        visFunc.clearBlockTree();
+      }
+    }
+  }
+
+
+  /**
+   * fills the nodes
+   * @param labels     target labels
+   */
+  public void fillNodes(String[] labels) {
+    Subgraph subg = gp.getSubgraph();
+
+    for (int i = 0; i < labels.length; ++i) {
+      //String findnodestr = blk.label.replace('.','_');
+      String findnodestr = labels[i].replace('.','_');
+      //String findnodestr = labels[i];
+      //System.out.println("fillNodes : label = "+ findnodestr);
+
+      Node findnode = subg.findNodeByName(findnodestr);
+
+      if (findnode != null) {
+        findnode.setAttribute("color","green");
+        findnode.setAttribute("style","filled");
+      }
+    }
+  }
+
+  /**
+   * clear the nodes (put back into normal color)
+   */
+  public void clearNodes() {
+    Subgraph subg = gp.getSubgraph();
+
+    //System.out.print("clearNodes :");
+    String label;
+
+    //for (Enumeration en = subg.nodeElements(); en.hasMoreElements() ; ) {
+    for (Iterator en = subg.nodeElements(); en.hasNext() ; ) {
+      Element el = (Element)en.next();
+      int eltype = el.getType();
+      if (eltype == Element.NODE) {
+        ((Node)el).setAttribute("style","solid");
+        label = (String)((Node)el).getName();
+        if (isEntryNode(label)) {
+          //((Node)el).setAttribute("shape","circle");
+          ((Node)el).setAttribute("color","black");
+        } else if (isExitNode(label)) {
+          ((Node)el).setAttribute("color","black");
+        } else {
+        ((Node)el).setAttribute("color","black");
+        }
+      }
+    }
+
+    subg.getGraph().repaint();
+    //System.out.println(" ");
+  }
+
+  /**
+   * check If the node is entry node
+   * @param label  the label of this node
+   * @return boolean true : if the node is entry node
+   */
+  private boolean isEntryNode(String label) {
+    for (ViList q = entryList.first() ; !q.atEnd() ; q=q.next()) {
+      String entryLabel = (String)q.elem();
+      if (label.matches(entryLabel)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * check If the node is exit node
+   * @param label  the label of this node
+   * @return boolean true : if the node is exit node
+   */
+  private boolean isExitNode(String label) {
+    for (ViList q = exitList.first() ; !q.atEnd() ; q=q.next()) {
+      String exitLabel = (String)q.elem();
+      if (label.matches(exitLabel)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * create Graph Selection Button
+   */
+  public JComboBox GraphButton() {
+    String[] graphTypes = graphButtonItem();
+    if (graphTypes.length > 0) {
+      cb = new JComboBox(graphTypes);
+      cb.setSelectedIndex(0);
+
+      cb.setEditable(false);
+      cb.addItemListener(this);
+      
+      return cb;
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * re-create Graph Selection Button for another function
+   */
+  public void remakeGraphButton() {
+    cb.removeAllItems();
+    String[] graphTypes = graphButtonItem();
+    for (int i = 0 ; i< graphTypes.length; ++i) {
+      cb.addItem(graphTypes[i]);
+    }
+    cb.setSelectedIndex(0);
+  }
+
+  /**
+   * make Graph Selection Button items
+   */
+  private String[] graphButtonItem() {
+    ViList list = funcData.subFuncDataList;
+
+    if (list.length() > 0) {
+      String[] graphTypes = new String[list.length()];
+      //System.out.println("GraphButton : length="+list.length());
+
+      int i = 0;
+      for (ViList q = list.first(); !q.atEnd(); q=q.next()) {
+        SubFuncData s = (SubFuncData)q.elem();
+        if (s.title == null) {
+          graphTypes[i] = new String(" ");
+        } else {
+          //System.out.println(" "+i+"th = "+s.title);
+          graphTypes[i] = new String(s.title);
+        }
+        ++i;
+      }
+      return graphTypes;
+
+    } else {
+      return null;
+    }
+  }
+
+}

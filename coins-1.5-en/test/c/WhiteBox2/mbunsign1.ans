@@ -1,0 +1,3 @@
+uc1 57 uc2 40 uc3 40 uc4 20 uc1+c1 114 uc3*c2 400
+us1 9 us2 192 us3 192 us4 96 us1+s1 18 us3*s2 192
+ui1 9 ui2 192 ui3 192 ui4 96 ui1+i1 18 ui3*i2 192

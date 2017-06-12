@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+  <head>
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css">
+<style type="text/css">
+ul {list-style: none;}
+#infra, #driver, #cc, #f77, #hiropt, #para, #lir,
+#ssa, #simd, #retarget, #backend {display: none;}
+ul ul li {color: black;}
+ul ul ul li {color: purple;}
+ul ul ul ul li {color: navy;}
+ul ul ul ul ul li {color: black;}
+</style>
+
+
+    <title>How to use COINS</title>
+
+  </head>
+
+<script language="JavaScript" type="text/javascript"><!--
+function expandFold(zap) {
+  if (document.getElementById) {
+    var abra = document.getElementById(zap).style;
+    if (abra.display == "block") {
+      abra.display = "none";
+    } else {
+      abra.display = "block";
+    }
+    return false;
+  } else {
+    return true;
+  }
+}
+// --></script>
+
+  <body>
+	<h1>How to use COINS</h1>
+    
+	<h2>Contents</h2>
+    
+<ul>
+<li><a href="#" onclick="return expandFold('infra');">+/-</a>
+<a href="./infra/infra-frame.html" target="_top">1. How to use COINS Infrastructure</a>
+<ul id="infra">
+<li>1.1. Getting Overview of the Compiler Infrastructure</li>
+<li>1.2. Structure of COINS Compiler Infrastructure
+<ul>
+<li>1.2.1. Overall Structure</li>
+<li>1.2.2. Classes and Interfaces</li>
+</ul></li>
+<li>1.3. Construction of a Compiler based on the COINS infrastructure
+<ul>
+<li>1.3.1. Compiler Control</li>
+<li>1.3.2. Getting Triggers of Intermediate Representation</li>
+<li>1.3.3. Symbol Handling
+<ul>
+<li>1.3.3.1. Factory Methods</li>
+<li>1.3.3.2. Subprograms, Variables, Constants</li>
+<li>1.3.3.3. Symbol Table</li>
+<li>1.3.3.4. Scope of Symbols</li>
+<li>1.3.3.5. SymRoot</li>
+<li>1.3.3.6. Type</li>
+<li>1.3.3.7. Generation of Temporal Variables and Labels</li>
+<li>1.3.3.8. Representation of Symbol in Text Form</li>
+</ul></li>
+<li>1.3.4. HIR Handling
+<ul>
+<li>1.3.4.1. Getting Information of HIR</li>
+<li>1.3.4.2. Representation of HIR in Text Form</li>
+<li>1.3.4.3. Normal Construction of HIR</li>
+<li>1.3.4.4. Top down Construction of HIR</li>
+<li>1.3.4.5. Construction by Sequence of Statements</li>
+<li>1.3.4.6. Note on HIR Construction and Transformation</li>
+<li>1.3.4.7. Indispensable Items and Optional Items</li>
+</ul></li>
+</ul></li>
+
+<li>1.4. Test Program Suite
+<ul>
+<li>1.4.1. Overview</li>
+<li>1.4.2. Automatic test
+<ul>
+<li>1.4.2.1. Sparc</li>
+<li>1.4.2.2. Intel x86 and others</li>
+</ul></li>
+<li>1.4.3. Prepare expected results
+<ul>
+<li>1.4.3.1. Sparc</li>
+<li>1.4.3.2. Intel x86 and others</li>
+</ul></li>
+</ul></li>
+
+<li>1.5. Visualization Tools
+<ul>
+<li>1.5.1. CoVis: Visualiztion tools for HIR/LIR</li>
+<li>1.5.2. Trace of the code generation process</li>
+</ul></li>
+
+</ul>
+
+<li><a href="#" onclick="return expandFold('driver');">+/-</a>
+<a href='./driver/driver-frame.html' target="_top">2. How to use the Compiler Driver</a>
+<ul id="driver">
+<li>2.1. Target, Range, and Structure of this Document</li>
+<li>2.2. COINS Compiler Driver
+<ul>
+<li>2.2.1. The design</li>
+<li>2.2.2. Structure</li>
+</ul></li>
+<li>2.3. How to Use the CLI Driver
+<ul>
+<li>2.3.1. CLI Driver</li>
+<li>2.3.2. Command Syntax</li>
+<li>2.3.3. Options</li>
+<li>2.3.4. -coins Options</li>
+<li>2.3.5. Input Files</li>
+<li>2.3.6. Exit Status</li>
+<li>2.3.7. Some Simple Examples</li>
+</ul></li>
+<li>2.4. The Driver API
+<ul>
+<li>2.4.1. Driver User Interface</li>
+<li>2.4.2. Driver Implementation</li>
+<li>2.4.3. Compile Specification</li>
+<li>2.4.4. Tracer API</li>
+<li>2.4.5. Warning API</li>
+<li>2.4.6. Library Directory</li>
+<li>2.4.7. Property File</li>
+<li>2.4.8. Suffix Rules</li>
+<li>2.4.9. `settings' File</li>
+</ul></li>
+<li>2.5. Known Bugs and Restrictions
+<ul>
+<li>2.5.1. Known bugs</li>
+<li>2.5.2. Restrictions</li>
+</ul></li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('cc');">+/-</a>
+<a href='./cc/cc-frame.html' target="_top">3. How to use C Compiler</a>
+<ul id="cc">
+<li>3.1. How to Compile this Compiler</li>
+<li>3.2. How to Execute the Compiler
+<ul>
+<li>3.2.1. Short Descriptions</li>
+<li>3.2.2. Required Software</li>
+</ul></li>
+<li>3.3. Source language
+<ul>
+<li>3.3.1. C language</li>
+<li>3.3.2. "asm" statement
+<ul>
+<li>3.3.2.1. HIR of "asm" statement</li>
+<li>3.3.2.2. LIR of "asm" statement</li>
+</ul></li></ul></li>
+<li>3.4. Automatic Test of the  Compiler</li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('f77');">+/-</a>
+<a href='./f77/f77-frame.html' target="_top">4. How to use Fortran 77 Compiler</a>
+<ul id="f77">
+<li>4.1. Introduction</li>
+<li>4.2. Installation and Setup
+<ul>
+<li>4.2.1. libf2c Installation</li>
+<li>4.2.2. Fortran Driver Setup</li>
+</ul></li>
+<li>4.3. Usage</li>
+<li>4.4. Bugs and Limitations
+<ul>
+<li>4.4.1.  Language Specifications</li>
+<li>4.4.2. Driver Usage</li>
+</ul></li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('hiropt');">+/-</a>
+<a href='./hiropt/hiropt-frame.html' target="_top">5. Optimization for HIR</a>
+<ul id="hiropt">
+<li>5.1. Overview of HIR Optimization</li>
+<li>5.2. HIR Basic Optimization
+<ul>
+<li>5.2.1. Overview of basic optimization</li>
+<li>5.2.2. Optimizers for basic optimization
+<ul>
+<li>5.2.2.1. Constant folding</li>
+<li>5.2.2.2. Constant propagation and folding</li>
+<li>5.2.2.3. Dead code elimination</li>
+<li>5.2.2.4. Local common subexpression elimination</li>
+<li>5.2.2.5. Global variable temporalization</li>
+</ul></li>
+<li>5.2.3. Invocation of basic optimizers from your code</li>
+</ul></li>
+<li>5.3. HIR Advanced Optimization
+<ul>
+<li>5.3.1. Overview of advanced optimization</li>
+<li>5.3.2. Optimizers for advanced optimization
+<ul>
+<li>5.3.2.1. Loop expansion</li>
+<li>5.3.2.2. Loop-if expansion</li>
+<li>5.3.2.3. Inline expansion</li>
+<li>5.3.2.4. Partial redundancy elimination</li>
+</ul></li>
+</ul></li>
+<li>5.4. Optimization in C-front</li>
+<li>5.5. HIR Flow Analysis
+<ul>
+<li>5.5.1. Overview of flow analysis</li>
+<li>5.5.2. Flow analysis by coins.flow
+<ul>
+<li>5.5.2.1. Control flow analysis</li>
+<li>5.5.2.2. Data flow analysis</li>
+<li>5.5.2.3. Basic data flow information</li>
+<li>5.5.2.4. Data structure</li>
+<li>5.5.2.5. Usage</li>
+<li>5.5.2.6. How to extend flow analysis</li>
+</ul></li>
+<li>5.5.3. Flow analysis by coins.aflow
+<ul>
+<li>5.5.3.1. Flow information</li>
+<li>5.5.3.2. How to use in your code</li>
+<li>5.5.3.3. From command line</li>
+</ul></li>
+</ul></li>
+<li>5.6. HIR Alias Analysis
+<ul>
+<li>5.6.1. Overview of alias analysis</li>
+<li>5.6.2. How to use</li>
+</ul></li>
+<li>5.7. References</li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('para');">+/-</a>
+<a href='./para/para-frame.html' target="_top">6. Parallelization for HIR</a>
+<ul id="para">
+<li>6.1. Loop Parallelizer
+<ul>
+<li>6.1.1.  Usage</li>
+</ul></li>
+<li>6.2. Coarse Grain Parallelizing Module
+<ul>
+<li>6.2.1.  OVERVIEW
+<ul>
+<li>6.2.1.1.  Design Concept</li>
+<li>6.2.1.2.  Data Structures</li>
+<li>6.2.1.3.  Scheduler</li>
+</ul></li>
+<li>6.2.2.  CONSTRAINTS OF CURRENT IMPLEMENTATION</li>
+<li>6.2.3.  HOW TO USE</li>
+<li>6.2.4.  OPTIONS</li>
+</ul></li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('lir');">+/-</a>
+<a href='./lir/lir-frame.html' target="_top">7. Design and Structure of LIR</a>
+<ul id="lir">
+<li>7.1. Design of LIR</li>
+<li>7.2. Structure of LIR</li>
+<li>7.3. Syntax and Semantics of LIR
+<ul>
+<li>7.3.1. Syntax of LIR</li>
+<li>7.3.2. Semantics of LIR</li>
+</ul></li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('ssa');">+/-</a>
+<a href='./ssa/ssa-frame.html' target="_top">8. SSA Optimization for LIR</a>
+<ul id="ssa">
+<li>8.1. OVERVIEW
+<ul>
+<li>8.1.1.  Introduction</li>
+<li>8.1.2. Translation to SSA form</li>
+<li>8.1.3. Back translation from SSA form</li>
+<li>8.1.4. Optimization</li>
+<li>8.1.5. Details</li>
+</ul></li>
+<li>8.2. SSA OPTIONS</li>
+<li>References</li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('simd');">+/-</a>
+<a href='./simd/simd-frame.html' target="_top">9. SIMD Parallelization for LIR</a>
+<ul id="simd">
+<li>9.1. Introduction</li>
+<li>9.2. Precise Description of SIMD Instructions</li>
+<li>9.3. SIMD Parallelization
+<ul>
+<li>9.3.1 Methods of SIMD Parallelization</li>
+</ul></li>
+<li>9.4. Data Size Inference
+<ul>
+<li>9.4.1. Algorithm</li>
+</ul></li>
+<li>9.5. How to Use SIMD Parallelization
+<ul>
+<li>9.5.1. Options</li>
+<li>9.5.2. Limitations and Cautions</li>
+</ul></li>
+<li>9.6. SIMD Benchmark
+<ul>
+<li>9.6.1. Mile-stoning</li>
+</ul></li>
+<li>References</li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('retarget');">+/-</a>
+<a href='./retarget/retarget-frame.html' target="_top">10. Retargetable Code Generator</a>
+<ul id="retarget">
+<li>10.1. Backend Process</li>
+<li>10.2. TMD: Target Machine Description
+<ul>
+<li>10.2.1. Machine Parameters
+<ul>
+<li>10.2.1.1. Data Types</li>
+<li>10.2.1.2. List of Real Registers</li>
+<li>10.2.1.3. Set of Registers</li>
+<li>10.2.1.4. Nonterminals for Registers</li>
+<li>10.2.1.5. Default Register set for Register Variables</li>
+</ul></li>
+<li>10.2.2. Instruction Definitions
+<ul>
+<li>10.2.2.1. Start Symbol</li>
+<li>10.2.2.2. Example of <tt>defrule</tt>-construct and Code Generation</li>
+<li>10.2.2.3. "<tt>foreach</tt>" Macro Feature</li>
+<li>10.2.2.4. <tt>defrule</tt> Form</li>
+<li>10.2.2.5. <tt>defrewrite</tt> Form</li>
+</ul></li>
+<li>10.2.3. Java Code
+<ul>
+<li>10.2.3.1. CodeGenerator Methods</li>
+<li>10.2.3.2. %defbuild/%defemit Macro</li>
+<li>10.2.3.3. LIR node in Java</li>
+</ul></li>
+<li>10.2.4. Representation of Assembly Programs</li>
+</ul></li>
+</ul>
+</li>
+<li><a href="#" onclick="return expandFold('backend');">+/-</a>
+<a href='./backend/backend-frame.html' target="_top">11. Structure and Extensions of the Backend Process</a>
+<ul id="backend">
+<li>11.1. How to Call Backend Processes</li>
+<li>11.2. How to Add New Process to Backend
+<ul>
+<li>11.2.1. Example 1: Instruction Scheduler</li>
+<li>11.2.2. Example 2: Software Pipelining</li>
+<li>11.2.3. Example 3: Register Promotion</li>
+</ul></li>
+</ul>
+</li>
+<li>-/-
+<a href='./perf/perf-frame.html' target="_top">12. Performance of COINS compilers</a>
+</li>
+</ul>
+
+
+  </body>
+</html>

@@ -1,0 +1,1456 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>How to use COINS infrastructure</title>
+
+  </head>
+  <body>
+	<h1>1. How to use COINS compiler infrastructure</h1>
+    
+	<h2>Contents</h2>
+    
+<ul>
+<li><a href='#i-1-1'>1.1. Getting Overview of the Compiler Infrastructure</a></li>
+<li><a href='#i-1-2'>1.2. Structure of COINS Compiler Infrastructure</a>
+<ul>
+<li><a href='#i-1-2-1'>1.2.1. Overall Structure</a></li>
+<li><a href='#i-1-2-2'>1.2.2. Front-end characteristics</a></li>
+<li><a href='#i-1-2-3'>1.2.3. Back-end characteristics</a></li>
+<li><a href='#i-1-2-4'>1.2.4. Classes and Interfaces</a></li>
+</ul></li>
+<li><a href='#i-1-3'>1.3. Construction of a Compiler based on the COINS infrastructure</a>
+<ul>
+<li><a href='#i-1-3-1'>1.3.1. Compiler Control</a></li>
+<li><a href='#i-1-3-2'>1.3.2. Getting Triggers of Intermediate Representation</a></li>
+<li><a href='#i-1-3-3'>1.3.3. Symbol Handling</a>
+<ul>
+<li><a href='#i-1-3-3-1'>1.3.3.1. Factory Methods</a></li>
+<li><a href='#i-1-3-3-2'>1.3.3.2. Subprograms, Variables, Constants</a></li>
+<li><a href='#i-1-3-3-3'>1.3.3.3. Symbol Table</a></li>
+<li><a href='#i-1-3-3-4'>1.3.3.4. Scope of Symbols</a></li>
+<li><a href='#i-1-3-3-5'>1.3.3.5. SymRoot</a></li>
+<li><a href='#i-1-3-3-6'>1.3.3.6. Type</a></li>
+<li><a href='#i-1-3-3-7'>1.3.3.7. Generation of Temporal Variables and Labels</a></li>
+<li><a href='#i-1-3-3-8'>1.3.3.8. Representation of Symbol in Text Form</a></li>
+</ul></li>
+<li><a href='#i-1-3-4'>1.3.4. HIR Handling</a>
+<ul>
+<li><a href='#i-1-3-4-1'>1.3.4.1. Getting Information of HIR</a></li>
+<li><a href='#i-1-3-4-2'>1.3.4.2. Representation of HIR in Text Form</a></li>
+<li><a href='#i-1-3-4-3'>1.3.4.3. Normal Construction of HIR</a></li>
+<li><a href='#i-1-3-4-4'>1.3.4.4. Top down Construction of HIR</a></li>
+<li><a href='#i-1-3-4-5'>1.3.4.5. Construction by Sequence of Statements</a></li>
+<li><a href='#i-1-3-4-6'>1.3.4.6. Note on HIR Construction and Transformation</a></li>
+<li><a href='#i-1-3-4-7'>1.3.4.7. Indispensable Items and Optional Items</a></li>
+</ul></li>
+</ul></li>
+
+
+<li><a href='#i-1-4'>1.4. Test Program Suite</a>
+<ul>
+<li><a href='#i-1-4-1'>1.4.1. Overview</a></li>
+<li><a href='#i-1-4-2'>1.4.2. Automatic test</a>
+<ul>
+<li><a href='#i-1-4-2-1'>1.4.2.1. On Sparc machine</a></li>
+<li><a href='#i-1-4-2-2'>1.4.2.2. On Intel x86 machine and others</a></li>
+</ul></li>
+<li><a href='#i-1-4-3'>1.4.3. Preparation of expected results</a>
+<ul>
+<li><a href='#i-1-4-3-1'>1.4.3.1. On Sparc machine</a></li>
+<li><a href='#i-1-4-3-2'>1.4.3.2. On Intel x86 machine and others</a></li>
+</ul></li>
+</ul></li>
+<li><a href='#i-1-5'>1.5. Visualization Tools</a>
+<ul>
+	<li><a href='#i-1-5-1'>1.5.1. CoVis: Visualiztion tools for HIR/LIR</a></li>
+	<li><a href='#i-1-5-2'>1.5.2. Trace of the code generation process</a></li>
+</ul></li>
+</ul>
+
+<h3 id='i-1-1'>1.1. Getting Overview of the Compiler Infrastructure</h3>
+<p>The COINS compiler infrastructure is composed of </p>
+<ul>
+<li>parsers to translate source language to HIR 
+        (High-level Intermediate Representation)</li>
+<li>control flow and data flow analyzers</li>
+<li>optimizers</li>
+<li>parallelizers</li>
+<li>HIR to LIR (Low-level Intermediate Representation) converter</li>
+<li>HIR manager</li>
+<li>symbol manager</li>
+<li>target machine descriptions </li>
+<li>back-end with code generator generator based on the target machine descriptions</li>
+<li>visualizer for compiling process </li>
+<li>etc.</li>
+</ul>
+<p>At present, the compiler infrastructure contains two parsers,
+for C and Fortran77, and 6 code generators, for SPARC, x86, x86_64, 
+ARM, MIPS, SH-4, PowerPC, Alpha, MicroBlaze, and Thumb. Thus, it has
+2*10 = 20 compilers. </p>
+<p>
+Compilation with debug-print (trace) option will show how the compiling 
+process proceeds and how a source program is transformed into 
+intermediate representations (HIR and LIR) and then into a 
+target machine code. It is the shortest way 
+of understanding how the compiler infrastructure works and 
+understanding HIR, LIR, and symbol table that are used as
+interfaces between compiler components. The debug-print option
+will be a great help in debugging the compiler when addition/modification
+is attempted.</p>
+<p>
+Please try to compile several short programs specifying 
+debug-print option in such a way as</p>
+<pre>
+java -classpath ./classes coins.driver.Driver -S -coins:trace=HIR.1/LIR.1/Sym.1 sample.c
+</pre>
+<p>(See <a href='../driver/driver-frame.html' target="_top">2. How to use the Compiler Driver</a>
+and 
+<a href='../cc/cc-frame.html' target="_top">3. How to use C Compiler</a>.) </p>
+
+
+<h3 id='i-1-2'>1.2. Structure of the COINS Compiler Infrastructure</h3>
+
+<h4 id='i-1-2-1'>1.2.1. Overall Structure</h4>
+<p>
+The COINS compiler infrastructure is composed of 3 major parts.
+The front-end part translates the source program into HIR (High-level 
+Intermediate Representation). The middle part converts HIR into LIR 
+(Low-level Intermediate Representation) and also does optimization and 
+parallelization transformations on HIR or LIR. The back-end part generates
+the assembler code of the target machine from LIR.</p>
+<p>
+Additional management 
+part contains miscellaneous functions such as compiler control,
+HIR management, and symbol management.</p>
+<p>The overall structure of COINS is shown in Fig.1-1.</p>
+<p><center>
+<img src="COINSstruct.en.jpg" /><br/>
+Fig.1-1 Overall Structure of COINS
+</center></p>
+<p>
+The concrete representation of HIR is a tree.
+An HIR tree is an abstract representation of a source program. It reflects 
+logical structure of the source program such as subprogram, 
+block, statement, expression, compound variable, simple variable, 
+constant, and so on. Every language constructs in HIR has a type
+such as int, float, vector, struct, union, and so on.
+HIR is designed so as to be able to represent programs of various 
+languages such as C, Fortran, Pascal.</p>
+<p>
+LIR is an abstract representation of machine language program.
+In LIR, operations are decomposed into elementary operations 
+such as SET, JUMP, CALL, etc. with simple or compound operands.
+The operands may represent memory, register, or expression.
+Data type of LIR corresponds to data type handled in machines 
+such as integer, float of some bit length.</p>
+<p> LIR is a language 
+that can represents not only operations but also the entire program 
+providing features to describe a module (a collection of functions), memory area, and data.
+Semantics of LIR is defined rigorously according to the
+denotational semantics to avoid misunderstanding.</p>
+
+<p>The compiler infrastructure is entirely written in Java. </p> 
+
+<h4 id='i-1-2-2'>1.2.2. Front-end characteristics</h4>
+<p>
+The front-end part translates source languages such as C and Fortran
+into HIR. HIR has been designed so that high level language concepts
+can be represented and optimizations and parallelizations can be 
+done on that level in (almost) language independent and machine
+independent manner. It has been designed by abstracting currently
+used procedural languages.</p>
+<p>
+Language specific parts are concentrated in the front-end part
+so that the middle part (optimizers, parallelizers, etc.) and 
+the back-end part (code generators, machine level optimizers, etc.)
+can be built language independently.</p>
+<p>
+A C language analyzer and a Fortran 77 analyzer have already been provided
+to generate HIR from C and Fortran, repectively. In order to make 
+a compiler for other language, it is sufficient to build a language
+analyzer that translates the language into HIR, except for some minor
+adjustment for a few modules.</p>
+<p>
+Examples of making new compilers are shown in
+<a href="../../advanceduse/index.html" target="_top">
+Developing new compilers with COINS</a></p>
+<p>
+In generating HIR, it is required to understand the overview of HIR.
+The HIR manager (HIR) and symbol table manager (Sym) are described in 
+interface modules such as HIR0.java (plain HIR interface), HIR.java 
+(full HIR interface), Sym0.java (plain Symbol table interface), 
+Sym.java (full Symbol table interface).<br/>
+Their implementation modules are HIR_Impl.java and SymImpl.java. <br/>
+Detailed specifications of access methods are described
+in the interface modules so that it is not necessary to see
+implementation modules except for some special cases.</p>
+<p>  
+In order to make or modify the front-end part,
+it is necessary to read the interfaces</p>
+<ul>
+<li>Driver  :&emsp;&emsp; Compiler control </li>
+<li>HIR0  :&emsp;&emsp;  Plain HIR interface</li>
+<li>Sym0  :&emsp;&emsp;   Plain Symbol table interface</li>
+</ul>
+<p>and then their sub-interfaces, if you cannot get sufficient
+information. Some important sub-interfaces to be read are</p>
+<ul>
+<li>HIR  :&emsp;&emsp;   Full HIR interface (extends HIR0)</li>
+<li>Sym   :&emsp;&emsp;    Full Symbol table interface (extends Sym0)</li>
+<li>Type  :&emsp;&emsp;    Type interface (extends Sym)</li>
+<li>Subp  :&emsp;&emsp;     Subprogram interface (extends Sym)</li>
+<li>SubpDefinition :&emsp;  Subprogram definition interface (extends HIR)</li>
+<li>Stmt   :&emsp;&emsp;   Statement interface (extends HIR)</li>
+</ul>
+<p>
+Usage of methods is usually described in upper interfaces 
+so that it is not necessary to read lower interfaces.
+Methods are interrelated and there may be restrictions
+in invoking them. In upper interfaces, many upper methods are 
+provided to make the use of access methods simple.
+You will misuse the access methods if you read lower interfaces
+or read implementation modules before reading upper interfaces.</p>
+ 
+<h4 id='i-1-2-3'>1.2.3. Back-end characteristics</h4>
+<p>
+As it is mentioned, the back-end of COINS is language independfent
+and the same back-end can generate target machine code for 
+various languages.
+In order to make a new code generator for some machine,
+it is necessary only to add a target machine description (TMD)
+and a subclass of coins.MachineParam for that machine.
+In the COINS Compiler Infrastructure, the new code generator is 
+automatically generated based on the given TMD at the time of 
+building COINS.</p>
+<p>
+The COINS generates assembly language program for the machine
+refering LIR that is translated from HIR. The LIR can represent machine 
+level operations in abstract form so that all back-end processing
+such as optimization, register allocation, and instruction
+scheduling can be written machine independently.</p>
+<p>
+All modules in the back-end do LIR-to-LIR transformation
+except for the last one that transforms LIR to the assembly
+language of the target machine. The syntax of LIR is the same 
+all through the processings so that the processings can be 
+written machine independently. Some information attached to LIR 
+may contain items specific to the target machine. Operands of
+LIR may be an LIR expression as well as a register or a memory
+location.</p>
+<p>
+In the process of instruction selection for the 
+target machine, compound LIR expressions are decomposed into
+simple LIR expressions each of which may correspond to some
+machine instruction of the target machine. The decomposed LIR
+and LIR expression allocated with physical register of the
+target machine can be treated machine independently because
+the syntax of LIR is the same in all cases.</p>
+<p>
+The target machine description TMD represents the
+correspondence of LIR patterns and target machine
+instruction sequence in the form of LIR-to-LIR
+transformation. TMD also describes the structure of register 
+set and calling sequence, etc.</p>
+
+<h4 id='i-1-2-4'>1.2.4. Classes and Interfaces</h4>
+<p>
+There are several classes that contains global information
+and methods available to all over the compiler infrastructure. 
+They are placed in "coins" package. Some of them are </p>
+<ul>
+<li>IoRoot:&emsp;&emsp;    Root of I/O file and principal internal information. </li>
+<li>SymRoot:&emsp;&emsp;  Root of symbol information.</li>
+<li>IrRoot :&emsp;&emsp;     Root of IR information.</li>
+<li>HirRoot :&emsp;&emsp;    Root of HIR information.</li>
+<li>FlowRoot:&emsp;&emsp;    Root of control flow and data flow information.</li>
+<li>CompileError:&emsp;&emsp; Compiler error handling class.</li>
+<li>FatalError:&emsp;&emsp;  Fatal error handling class.</li>
+<li>Debug:&emsp;&emsp;      Compiler debug control class.</li>
+</ul>
+<p>Machine dependent parameters and methods are concentrated in</p>
+<ul>
+<li>coins.MachineParam and its subclasses.</li>
+</ul>
+<p>Source language dependent parameters and methods are concentrated in</p>
+<ul>
+<li>coins.SourceLanguage and its subclasses.</li>
+</ul>
+<p>
+Information requiring mutual exclusion between individual compilers
+in COINS such as compiler options are concentrated in</p>
+<ul>
+<li>coins.Registry.</li>
+</ul>
+<p>
+The package structure of the infrastructure is the following, 
+where "#" means a language dependent package, and "*" means 
+a machine dependent package. </p>
+<pre>
+coins        -- Top level package of the COINS Compiler Infrastructure
+  #cfront    -- C parser converting C to AST (abstract syntax tree for C)
+  #ast       -- Classes to generate AST for C
+    #expr    -- AST expression generation
+    #stmnt   -- AST statement generation
+  #ffront    -- Fortran77 parser translating Fortran77 to HIR 
+  driver     -- Compiler driver
+  drivergen  -- Driver generator
+  #casttohir -- C AST to HIR translator
+  ir         -- Intermediate representation IR
+    hir      -- High level intermediate representation HIR
+  sym        -- Symbol table for HIR
+  hir2lir    -- HIR to LIR converter 
+  flow       -- Control flow and data flow analyzer for HIR
+  aflow      -- Obsolete version of flow (used only in mdf)
+  alias      -- Alias analyzer
+  opt        -- HIR optimizer
+  ssa        -- SSA form optimizer for LIR 
+  lparallel  -- loop parallelizer
+  mdf        -- Coarse grain parallelizing module (SMP parallelizer)
+  simd       -- SIMD parallelizer
+  snapshot   -- Make snap shot file (XML file) for the visualizer
+  backend    -- Back-end
+    ana      -- Control flow analyzer for LIR
+    cfg      -- Control flow graph builder for LIR
+    *gen     -- Code generator and target machine descriptions
+    lir      -- LIR manager
+    opt      -- Backend optimizer
+    regalo   -- Register allocator
+    sched    -- Instruction scheduler
+    sym      -- LIR symbol manager
+    *targets -- Machine parameter table interface
+    sim      -- LIR simulator
+    contrib  -- User contribution (modules invoked by attach option)
+    asmpp    -- Assembler level preprocessor
+    tools    -- Back-end tools
+    util     -- Back-end utility
+  hir2c      -- HIR to C translator
+  lir2c      -- LIR to C translator
+</pre>
+
+
+<h3 id='i-1-3'>1.3. Construction of a Compiler based on the COINS Infrastructure</h3>
+
+<h4 id='i-1-3-1'>1.3.1. Compiler Control</h4>
+<p>
+The compiler driver described in coins.driver.Driver.java controls the execution 
+of the COINS C compiler. It contains definitions of compiler options and 
+invocation statements for compiler components. 
+The procedure of component invocation is described in the method 
+compile(....) in Driver.java. 
+See <a href="../driver/driver-frame.html" target="_top">2. How to use the Compiler Driver</a> for details.</p>
+<p>To change the 
+sequence of component invocations and to add, replace, delete 
+some compiler components, Driver.java may be changed.
+It would be better to make a subclass of Driver.java and 
+override some of Driver's methods appropriately.
+See, for example, <a href="../../advanceduse/index.html" target="_top">
+Developing new compilers with COINS</a>.</p>
+<p>
+The infrastructure does not use static fields except for 
+"static final" in order to make it possible to develop a compiler where
+its components can be executed in concurrent. All methods except 
+for some ones in Root classes (classes such as IoRoot, SymRoot, 
+HirRoot, LirRoot, etc.) are non-static methods and should be 
+applied to instances.</p>
+<p>
+The compiler driver instantiates IoRoot first and supplies
+source file, object file, print file, etc. (See getSourceFile(),
+printOut, objectFile, msgOut, etc. in IoRoot.java). All compiler
+components should convey the instance of IoRoot (ioRoot) directly 
+or indirectly and make it protected or public so that it can be 
+accessed directly or indirectly from methods in the component. </p>
+<p>
+In more detail, objects of other Root classes include a reference to 
+the instance of IoRoot in order to enable input/output operations.
+All Sym objects include a reference to SymRoot object,
+all HIR objects include a reference to HirRoot,
+and so on. In this way, almost all classes has a link to
+the IoRoot directly or indirectly in order to enable
+input/output operations in their methods. 
+IoRoot has such methods as  </p>
+<pre>
+  getSourceFile(), getSourceFilePath(), getCompileSpecification() 
+</pre>
+<p>to access files and compile specifications given by command line.
+</p>
+<p>
+As the next step, the compiler driver instantiates SymRoot to 
+make symbol information be shared between compiler components.
+All Sym objects such as symbol table and entries in the symbol
+table (variable, subprogram, constant, type, etc.) contain a
+reference to the SymRoot object so that methods of Sym class
+and IoRoot class can be invoked. The symbol tables are nested
+reflecting scope of symbols and organized into tree structure.</p>
+<p>
+The root of the symbol tables is named as symTableRoot. The 
+symbol table currently effective is called current symbol table
+and named as symTableCurrent. They are accessed from SymRoot
+object. Built-in symbols representing basic types, etc. are
+registered in symTableRoot and can be accessed from SymRoot
+object, hence they can be accessed from all methods under 
+Sym and its subclasses. </p>
+<p>
+The compiler driver instantiates HirRoot and then invokes
+some parser such as C parser that translates source program
+into HIR. The parser should convey the instance of HirRoot
+to its components so that they can access I/O files, symbol
+tables, and HIR information. The super class of HirRoot is
+IrRoot where the root of intermediate representation (IR) of 
+input source program is recorded as programRoot. 
+The IrRoot is also the super class of HirRoot. 
+HIR representation of input program can be traced 
+starting from programRoot. </p>
+<p>
+The compiler driver may either parse all subprograms in a source 
+file before code generation, or repeat parsing and code generation 
+for each subprogram in the source file. In the former case, 
+inter-procedural optimization and parallelization may be 
+possible but consumes large memory space. In the later case, 
+required memory space is relatively small but the possibility 
+of inter-procedural optimization is limited.</p>
+<p>
+Error messages and warning messages are issued by invoking
+put method of Message class in "coins" package.
+The number of messages issued is counted for each group
+of messages. Compiler implementers may prepare their own
+error handlers that invokes the put method in order to provide
+some information peculiar to each component such as source program
+line number. (See Message.java.)</p>
+<p>
+It is often required to see the status of compiler for debugging.
+The method </p>
+<pre>
+   void print(int pLevel, String pAt, String pMessage) 
+</pre>
+<p>in the class Debug in coins package prints pAt and pMessage if 
+pLevel is less or equal to the debug level specified by command line. 
+Its usage is illustrated by</p>
+<pre>
+    hirRoot.ioRoot.dbgHir.print(4, "subpNode", pSubp.getName());
+</pre>
+<p>(See Debug.java.)</p>
+
+<h4 id='i-1-3-2'>1.3.2. Getting Triggers of Intermediate Representation</h4>
+<p>
+In the process of parsing, the list of subprogram definitions will
+be constructed (by addSubpDefinition() of coins.ir.hir.Program
+called in the parser). Each subprogram definition can be get by
+using iterator in such way as</p>
+<pre>
+    coins.ir.IrList lSubpDefList
+      = ((Program)hirRoot.programRoot).getSubpDefinitionList();
+    Iterator lSubpDefIterator = lSubpDefList.iterator();
+    while (lSubpDefIterator.hasNext()) {
+      SubpDefinition lSubpDef = (SubpDefinition)(lSubpDefIterator.next());
+      ....
+    }
+</pre>
+<p>where, hirRoot refers to the HirRoot object.</p>
+<p>The subprogram defined by the subprogram definition is get by</p>
+<pre>
+    Subp lSubp = lSubpDef.getSubpSym();
+</pre>
+<p>The symbol table local to the subprogram is get by</p>
+<pre>
+    SymTable lSymTable = lSubp.getSymTable();
+</pre>
+<p>or</p>
+<pre>
+    SymTable lSymTable = lSubpDef.getSymTable();
+</pre>
+<p>The procedural body of the subprogram is get by</p>
+<pre>
+    HIR lHirSubpBody = lSubp.getHirBody();
+</pre>
+<p>or</p> 
+<pre>
+    HIR lHirSubpBody = lSubpDef.getHirBody();
+</pre>
+<p>(See IrLisr of coins.ir, SubpDefinition, HirIterator of coins.ir.hir, 
+Subp of coins.sym)</p>
+<p>
+Every HIR nodes of the subprogram lSubp can be traversed by using
+HirIterator in such a way as</p>
+<pre>
+    for (HirIterator lHirIterator 
+           = hirRoot.hir.hirIterator(lSubp.getHirBody());
+         lHirIterator.hasNext(); ) {
+      HIR lNode = lHirIterator.next();
+      ....
+    }
+</pre>
+<p>All statements in the subprogram can be traversed by a coding sequence
+such as</p>
+<pre>
+    for (HirIterator lHirIterator 
+          = hirRoot.hir.hirIterator(lSubp.getHirBody());
+         lHirIterator.hasNextStmt(); ) {
+      Stmt lStmt = lHirIterator.getNextStmt();
+      ....
+    }
+</pre>
+<p>Note that some node or statement may be null and it is better to do
+null-check before applying methods to them.</p>
+<p>
+To catch node or statement of some particular class during the
+traversing procedure, such coding as</p>
+<pre>
+    if (lNode instanceof VarNode) { .... }
+    if (lNode instanceof SubpNode) { .... }
+    if (lStmt instanceof AssignStmt) { .... }
+</pre>
+<p>will be convenient. They may be also caught by such coding as</p>
+<pre>
+    if (lStmt.getOperator() == HIR.OP_VAR) { .... }
+</pre>
+<p>Another way of coding is to use HirVisitor in such a way as</p>
+<pre>
+    public class 
+    ProcessHirNode extends coins.ir.hir.HirVisitorModel1
+    {
+      public final HirRoot
+      hirRoot;
+
+      public 
+      ProcessSymNode( HirRoot pHirRoot )
+      {
+        super(pHirRoot);
+        hirRoot = pHirRoot;
+      }
+
+      public void
+      processSymNode( Subp pSubp )
+      {
+        hirRoot.symRoot.subpCurrent = pSubp;
+        visit(pSubp.getHirBody());
+      }
+
+      protected void
+      atVarNode( VarNode pVarNode )
+      {
+        ....
+      }
+
+      protected void
+      atSubpNode( SubpNode pSubpNode )
+      {
+        ....
+      }
+      ....
+    }
+</pre>
+<p>(See HIR, HirVisitor, HirVisitorModel1, HirVisitorModel2 in 
+coins.ir.hir.)</p>
+<p>
+To scan all symbols recorded in symbol tables, iterators are
+provided in SymTable interface. A coding sequence</p>
+<pre>
+    for (SymIterator lIterator = lSymTable.getSymIterator();
+         lIterator.hasNext(); ) {
+      Sym lSym = lIterator.next();
+      .....
+    }
+</pre>
+<p>traverses all symbols recorded in the symbol table lSymTable.
+If SymIterator is applied to symTableRoot, all global symbols 
+in the given program unit are traversed.</p>
+<p>
+Another coding sequence</p>
+<pre>
+    for (SymNestIterator lIterator = lSymTable.getSymIterator();
+         lIterator.hasNext(); ) {
+      Sym lSym = lIterator.next();
+      .....
+    }
+</pre>
+<p>traverses all symbols recorded in the symbol table lSymTable and
+its descendent symbol tables. If SymNestIterator is applied to
+symTableCurrentSubp, all symbols local to the current subprogram
+are traversed. If SymNestIterator is applied to symTableRoot,
+all symbols recorded in the given program unit except constants
+in symTableConst are traversed. </p>
+<p>
+The next coding sequence </p>
+<pre>
+    for (SymTableIterator lTableIterator = lSymTable.getSymTableIterator();
+         lTableIterator.hasNext(); ) {
+      SymTable lSymTableCurr = lTableIterator.next();
+      for (SymIterator lSymIterator = lSymTableCurr.getSymIterator();
+         lSymIterator.hasNext(); ) {
+        Sym lSym = lSymIterator.next();
+        ......
+      }
+    }
+</pre>
+<p>will traverse all symbol tables under lSymTable and all symbols 
+in the traversed symbol tables examining attributes of the traversed
+symbol tables. </p>
+
+
+<h4 id='i-1-3-3'>1.3.3. Symbol Handling</h4>
+
+<h5 id='i-1-3-3-1'>1.3.3.1. Factory Methods</h5>
+<p>
+Construction of Sym and HIR are done by factory methods, 
+that is, objects of Sym and HIR are not usually 
+constructed by invoking constructors directly but by invoking 
+factory methods. The factory methods of Sym are described
+in the Sym interface (Sym.java). Examples of the usage of
+factory methods are shown in <a href='./SimpleMain.java'>SimpleMain.java</a>.</p>
+
+<h5 id='i-1-3-3-2'>1.3.3.2. Subprograms, Variables, Constants</h5>
+
+<p>A subprogram symbol can be constructed in such coding as</p>
+<pre>
+Subp lSubp = symRoot.sym.defineSubp("sub1".intern(), symRoot.sym.typeInt);
+</pre>
+<p>where, the first parameter specifies subprogram name and
+the second parameter specifies return value type. 
+symRoot refers to SymRoot object. If symRoot is not 
+accessible directly but hirRoot is accessible, replace 
+symRoot in the above coding by hirRoot.symRoot.
+String parameters for Sym, HIR methods should have
+.intern() in order to make unique String object that 
+can be compared by "==" operator instead of the "equals" method.
+All String objects returned by Sym, HIR methods
+are unique String object and need not to have .intern().
+(See Sym0.java, Sym.java, HIR0.java, HIR.java.)</p>
+<p>
+Similarly, a variable symbol can be constructed by</p>
+<pre>
+Var lVar = symRoot.defineVar("var1".intern(), symRoot.typeFloat);
+</pre>
+<p>Integer constant, long int constant can be made by</p>
+<pre>
+IntConst lIntConst1 = symRoot.sym.intConst(123, symRoot.typeInt);
+IntConst lLongConst1= symRoot.sym.intConst(123, symRoot.typeLong);
+IntConst lIntConst2 = symRoot.sym.intConst("123".intern(), symRoot.typeInt);
+</pre>
+<p>and floating constant can be made by</p>
+<pre>
+FloatConst lPai = symRoot.sym.floatConst(3.14, symRoot.typeFloat);
+FloatConst lDoubleConst1 = symRoot.sym.floatConst(1.2, symRoot.typeDouble);
+</pre>
+<p>For mode detail, see the Sym interface (Sym0.java and Sym.java).</p>
+<p>
+Care should be taken in making a string constant because the 
+representation of character string differs by language. For example,
+a string constant in C has trailing "\0" and may contain preceding
+escape character for some special characters. A string constant is 
+recorded as a pure string (processing escape characters by 
+makeStringBody of coins.SourceLanguage) that is language independent. 
+To make a string for C language from the pure string, makeCstring method 
+is provided, for Java language, makeJavaString method is provided, 
+and so on.</p>
+
+<h5 id='i-1-3-3-3'>1.3.3.3. Symbol Table</h5>
+<p>
+All symbols are recorded in some symbol table.
+The interface of the symbol table is SymTable (SymTable.java).
+An instance of SymTable is created for each scope
+of symbols corresponding such language constructs
+as program, subprogram, struct, etc.</p>
+<p>
+Several symbol tables are constructed according to the
+structure of given source program.
+At first, a global symbol table is created by initiate()
+of SymRoot and symbols inherent to the COINS infrastructure
+are recorded in it. The symbols inherent to the COINS compiler
+infrastructure are such ones as basic types and bool constants.
+Types of each source language are mapped to the corresponding
+types of the COINS compiler infrastructure in such way as</p>
+<pre>
+    C int            COINS int
+    C array          COINS vector
+    Fortran INTEGER  COINS int
+    Fortran REAL     COINS float
+</pre>
+<p>When a new scope of symbols is opened, a new symbol table is
+to be created and linked to ancestor symbol table that contains
+symbols to be inherited by the new scope (pushSymTable()).
+When the current scope is closed, the current symbol table is
+to be closed by which the ancestor symbol table becomes the 
+current symbol table again (by using popSymTable()).</p>
+<p>
+Symbols are searched in the current symbol table 
+(symTableCurrent of SymRoot) and its ancestors in the reverse 
+order of scope addition. The methods pushSymTable and popSymTable 
+changes symTableCurrent when they are called.
+Popped symbol table is not discarded unless it is empty but
+made invisible for search procedures so as to make
+inter-procedure optimization and parallelization can be done.
+A symbol table usually has corresponding program construct
+such as subprogram and it is called as the owner of the symbol
+table. There are links between such constructs (owner) and 
+corresponding symbol table to show their correspondence (getOwner). 
+Anonymous construct (anonymous Struct, BlockStmt, etc.) may have 
+name generated by the compiler.</p>
+
+<h5 id='i-1-3-3-4'>1.3.3.4. Scope of Symbols</h5>
+<p>
+Source program symbols (symbols appearing in source program)
+have their scope as defined by the grammar of the language.
+Each Struct and Union opens a new scope.
+Scope of constants is the entire compile unit.
+Scope of temporal variables generated by the compiler
+is the subprogram within which the temporal variables
+are defined.</p>
+<p>
+Symbols may have indication of scope (extern, public, private,
+compile_unit, etc.) and variables may have indication of
+storage class (static, automatic, etc.). In storage allocation
+and symbol treatment in code generation, these indications and
+nesting of symbol tables should be properly treated. Care should
+be taken that one subprogram may have nested symbol tables.
+Nesting of subprograms is treated as the nesting of corresponding
+symbol tables.</p>
+
+<h5 id='i-1-3-3-5'>1.3.3.5. SymRoot</h5>
+<p>
+SymRoot class is used to access Sym (symbol) information and
+information prepared by other classes such as IoRoot, HIR, etc.
+All Sym objects contain a reference to the SymRoot object
+from which symbol information and methods can be quickly accessed. 
+The SymRoot object contains a reference to IoRoot.
+Thus, every Sym objects can access input/output methods, too.
+SymRoot contains SymTable references:</p>
+<pre>
+    symTableRoot    // Root of SymTable.
+    symTableConst   // Constant table.
+    symTableUnique  // SymTable that contains generated unique name.
+    symTableCurrent // Referes to the symbol table for subprogram, 
+                    // etc. under construction or under processing.
+    symTableCurrentSubp // Symbol table of current subprogram. Some kinds of
+                        // symbols (Type, Label, tmporal variable, etc.) are
+                        // registered not in symTableCurrent
+                        // but in symTableCurrentSubp.
+</pre>
+<p>The subprogram under construction or processing is recorded in
+subpCurrent of SymRoot.</p>
+<p>In parsing, flow analysis, optimization, code generation, etc.,
+it is strongly recommended to set SymTableCurrent, subpCurrent,
+symTableCurrentSubp as it is exemplified 
+in <a href='./SimpleMain.java'>SimpleMain.java</a>. </p>
+<p>They are used in searching/generating symbols.
+If new symbols are to be created in such processing, 
+SymTableCurrent and subpCurrent should be set properly.
+Several methods such as sym/pushSymTable, sym/popSymTable, 
+aflow/subpFlow keeps such consistency automatically as
+it is described in explanations of these methods.</p>
+<p>
+pushSymTalbe/popSymTable methods should be used in parsers but 
+should not be used in optimization, code generation, etc. because 
+pushSymTable creates a new SymTable corresponding to a new scope
+in input source program.</p>
+<p>
+SymRoot contains type symbols of base types such as
+typeBool, typeChar, typeInt, etc. as predefined symbols.</p>
+
+<h5 id='i-1-3-3-6'>1.3.3.6. Type</h5>
+<p>
+Symbols such as variables, subprograms, constants have type.
+The type is represented by a type symbol.
+Types used in HIR are classified into base type and introduced
+type. </p>
+<pre>
+    Base type (type intrinsic to HIR):
+      int        represented by typeInt   of SymRoot
+      float      represented by typeFloat of SymRoot
+      ....       (see SymRoot)
+    Introduced type (type introduced by the input program):
+      pointer type     represented by the class PointerType
+      vector type      represented by the class VectorType
+      structure type   represented by the class StructType
+      union type       represented by the class UnionType 
+      enumeration type represented by the class EnumType
+      subprogram type  represented by the class SubpType
+      defined type     represented by the class DefinedType 
+</pre>
+<p>A pointer type is defined by pointer indication (* in C) and
+the type of the target of the pointer.<br/>
+A vector type is derived from element type by specifying the type
+of vector element and the number of elements in the vector.<br/>
+A structure type is defined by specifying its elements
+that may represent object different with each other.<br/>
+A union type is defined by specifying overlaid elements.<br/>
+A subprogram type is defined by specifying type of parameters
+and the type of return value.<br/>
+An enumeration type is defined by specifying enumeration
+literals representing some integer value.<br/>
+Defined types may be a renaming of base type or a compound
+type that is derived from base type or defined type.</p>
+<p>
+Type symbols are created by factory methods in Sym interface. 
+The factory methods for type creation are baseType, pointerType, 
+vectorType, structType, unionType, enumType, subpType
+and definedType.</p>
+<p>
+The structure of SubpType, StructType, UnionType, and EnumType 
+are a little complicated. It is not recommended to use subpType
+directly but it is recommended to use defineSubp of Sym interface
+that defines both subprogram symbol and subprogram type.
+For making type instance of StructType, UnionType, or EnumType,
+read carefully the explanation of the corresponding method
+structType, unionType, or enumType of Sym interface.</p>
+<p>
+In order to define a subprogram symbol,</p>
+<pre>
+    make the subprogram symbol by defineSubp(...),
+    add formal parameters by addParam(....),
+    close the subprogram declaration by closeSubpHeader(....)
+</pre>
+<p>in such a way as</p>
+<pre>
+    Subp lSubp = symRoot.sym.defineSubp("name".intern(), returnType);
+    SymTable lSubpSymTable = symRoot.symTableCurrent.pushSymTable(lSubp);
+    lSubp.addParam(param1);
+    lSubp.addParam(param2);
+    ....
+    lSubp.setOptionalParam(); // Not required if it has no optional parameter.
+    lSubp.closeSubpHeader();
+    Var lVar1 = lSubpSymTable.defineVar("a".intern(), symRoot.typeInt);
+    ....
+    symRoot.symTableCurrent.popSymTable();
+</pre>
+<p>Above procedure will make a subprogram object with
+inevitable fields such as parameter list,
+return value type, and subprogram type.<br/>
+closeSubpHeader() will make subprogram type of the form</p>
+<pre>
+  &lt;SUBP &lt; paramType_1 paramType_2 ... &gt; returnValueType
+        optionalParam &gt;
+</pre>
+<p>where, paramType_1, paramType_2, ... are parameter type,
+returnValueType is return value type,
+optionalParam is true or false depending on whether optional
+parameter ("..." in C) is specified or not.<br/>
+pushSymTable(lSubp) makes new symbol table owned by the subprogram
+lSubp and makes it symTableCurrent. lSubpSymTable.defineVar( .... )
+defines a variable as an element of lSubpSymTable. popSymTable()
+makes lSubpSymTable invisible form symbol serach procedure and makes
+the previous symbol table as symTableCurrent.</p>
+<p>
+To make a structure type, structType method is provided in Sym
+interface. Users may understand how to use it by following example:<br/>
+    As for</p>
+<pre>
+       struct listNode {
+         int nodeValue;
+         struct listNode *next;
+        } listAnchor, listNode1;
+</pre>
+<p>    following coding will make corresponding StructType.</p>
+<pre>
+      Sym lTag = symRoot.symTableCurrent.generateTag("listNode".intern());
+      StructType lListStruct = sym.structType(null, lTag); // Incomplete type.
+      PointerType lListPtrType = sym.pointerType(lListStruct);
+      PointerType lIntPtrType = sym.pointerType(symRoot.typeInt);
+      symRoot.symTableCurrent.pushSymTable(lListStruct);
+      Elem lValue = sym.defineElem("nodeValue".intern(), symRoot.typeInt);
+      Elem lNext  = sym.defineElem("next".intern(), lListPtrType);
+      lListStruct.addElem(lValue);
+      lListStruct.addElem(lNext);
+      lListStruct.finishStructType(true);
+      symRoot.symTableCurrent.popSymTable();
+</pre>
+<p>Methods are provided to get information of introduced types:</p>
+<pre>
+    getSizeValue     of Sym interface
+    getPointedValue  of Sym interface
+    getElemCount     of VectorType interface
+    getElemList      of StructType interface
+    getParameterTypeList of SubpType interface
+    ....
+</pre>
+
+<h5 id='i-1-3-3-7'>1.3.3.7. Generation of Temporal Variables and Labels</h5>
+<p>
+In compilers, temporal variables are often required to be generated 
+for optimization, code generation, etc.
+A method </p>
+<pre>
+    public Var generateVar( Type pType );
+</pre>
+<p>is provided in the SymTable interface to generate a temporal variable
+in the symbol table local to the current subprogram (symTableCurrentSubp).</p>
+<p>
+In order to generate labels, a method</p> 
+<pre>
+    public Label generateLabel();
+</pre>
+<p>is provided in the SymTable interface. It generates a label
+in the symbol table local to the current subprogram (symTableCurrentSubp).</p>
+
+<h5 id='i-1-3-3-8'>1.3.3.8. Representation of Symbol in Text Form</h5>
+<p>
+The method toString() gives the representation of a symbol 
+in text form. It may be used for debug purpose, etc.
+toStringShort() shows short description and toStrindDetail()
+shows full description of the symbol.</p>
+
+<h4 id='i-1-3-4'>1.3.4. HIR Handling</h4>
+
+<h5 id='i-1-3-4-1'>1.3.4.1. Getting Information of HIR</h5>
+<p>
+HIR can be instantiated and handled mostly by using methods in
+HIR0 (plain HIR interface). Simple compilers can be constructed 
+by using methods in HIR0 and Sym0 interfaces. In constructing 
+more complicated compiler, use methods in HIR and Sym. HIR inherits HIR0
+and Sym inherits Sym0. In the following explanations, HIR may be read as
+HIR0 in most cases.
+</p>
+<p>
+Most of HIR constructs have correspondence to some source language
+constructs, e.g.</p>
+<pre>
+    SubpDefinition - subprogram definition
+    Stmt           - statement
+    AssignStmt     - assign statement
+    LoopStmt       - loop statement
+    BlockStmt      - block statement
+    Exp            - expression
+    VarNode        - variable
+    ConstNode      - constant
+</pre>
+<p>
+Subcomponent of HIR constructs can be get by methods provided
+in each HIR subclass (interface that extends HIR). For example,</p>
+<pre>
+    getLeftSide(), getRightSide() of AssignStmt
+    getIfCondition(), getThenPart(), getElsePart() of IfStmt
+    getLoopStartCondition(), getLoopBodyPart() of 
+      ForStmt, WhileStmt, UntilStmt that extend LoopStmt
+    getExp1(), getExp2() of Exp
+    getSymNodeSym() of VarNode, ElemNode, ConstNode that extend SymNode
+</pre>
+<p>As for detail, see corresponding interfaces that extend HIR.</p>
+<p>
+The subcomponents can be get also by specifying child number
+by getChild1(), getChild2(), and getChild(int pChildNumber). 
+In such coding, exact knowledge of HIR data structure is required. 
+getChildCount of IR interface gives the number of children of HIR nodes.
+(getChild1() and getChild2() have less overhead than getChild(1) and 
+getChild(2).)
+</p>
+<p>
+All HIR nodes have type attribute. It can be get by the method
+getType. Some HIR nodes may have flags set during parsing, 
+analysis, etc. The method getFlag(int pFlagNumber) returns 
+the status of the flag indicated by pFlagNumber.</p>
+
+<h5 id='i-1-3-4-2'>1.3.4.2. Representation of HIR in Text Form</h5>
+<p>
+The method toString() gives the representation of an HIR node
+in text form. It may be used for debug purpose, etc.
+toStringShort() shows short description and toStrindDetail()
+shows full description of the node.</p>
+<p>
+The method print(....) of HIR prints the subtree stemming from the 
+specified node, that is, all subtrees of the specified node are 
+printed recursively.</p>
+
+<h5 id='i-1-3-4-3'>1.3.4.3. Normal Construction of HIR</h5>
+<p>
+HIR nodes can be constructed by methods defined in HIR interface.
+Leafs of HIR tree are symbol node, list, etc. In HIR, symbols
+are represented by symbol nodes having reference to some 
+symbol table entry such as variable and subprogram.</p>
+<p>
+A Symbol node can be generated by factory methods of HIR.</p>
+<pre>
+    VarNode lVarNode1     = hirRoot.hir.varNode(lVar1);
+    SubpNode lSubpNode1   = hirRoot.hir.subpNode(lSubp);
+    ConstNode lConstNode1 = hirRoot.hir.constNode(lIntConst1);
+</pre>
+<p>will instantiate VarNode, SubpNode, ConstNode, each respectively.
+hirRoot.hir, hirRoot.symRoot.sym, etc. may be shortened by local 
+declarations</p>
+<pre>
+    HIR hir = hirRoot.hir;
+    Sym sym = hirRoot.symRoot.sym;
+</pre>
+<p>Arithmetic expressions can be built by such coding as</p>
+<pre>
+    Exp lExp1 = hir.exp(HIR.OP_ADD, lVarNode1, lConstNode1);
+    Exp lExp2 = hir.exp(HIR.OP_MULT, lExp1, hir.varNode(lVar2));
+</pre>
+<p>Assign-statement, if-statement, etc. are built by</p>
+<pre>
+    Stmt lAssign1 = hir.assignStmt(lVarNode1, lExp1);
+    Stmt lAssign2 = hir.assignStmt(lVarNode1, lExp2);
+    Stmt lIf1 = hir.ifStmt(hir.exp(HIR.OP_CMP_EQ, lExp1,
+               hir.constNode(0, symRoot.typeInt)), lAssign1, lAssign2);
+</pre>
+<p>etc. </p>
+
+<h5 id='i-1-3-4-4'>1.3.4.4. Top down Construction of HIR</h5>
+<p>
+HIR tree is usually constructed in bottom up manner starting from 
+leafs and combining them as above. Top down construction is also
+possible by attaching a subtree (leaf node or nonleaf node) to parent 
+tree as its child.</p>
+<pre>
+    setChild1( IR pChild1 ), setChild2( IR pChild2 ),
+    setChild( int pChildNumber, IR pChild )
+</pre>
+<p>of IR interface are available for such construction. The top down
+construction requires knowledge of detailed structure of HIR tree.
+Recommended way is bottom up construction by using the prepared
+factory methods.</p>
+<p> 
+In some cases, strict bottom up construction is difficult. For
+example, in the construction of block statement and subprogram 
+definition, most of their children are not known at first.
+Several methods are provided to construct such subtrees.
+They are explained in the next section.</p>
+ 
+<h5 id='i-1-3-4-5'>1.3.4.5. Construction by Sequence of Statements</h5>
+<p> 
+Block statement can be constructed by a statement sequence such as</p>
+<pre>
+    BlockStmt lBlockStmt = hir.blockStmt(null);
+    lBlockStmt.addLastStmt(lAssign1);
+    lBlockStmt.addLastStmt(lIf1);
+    ....
+</pre>
+<p>(See HIR, BlockStmt in coins.ir.hir.)</p>
+<p>
+Subprogram can be constructed by such statement sequence as</p>
+<pre>
+    Subp lMain = symRoot.sym.defineSubp("main".intern(), symRoot.typeInt);
+    SymTable lSymTable = symRoot.symTableRoot.pushSymTable(lMain);
+    lMain.closeSubpHeader();
+    SubpDefinition lMainDef = hir.subpDefinition(lMain, lSymTable);
+    BlockStmt lBlockStmt = hir.blockStmt(null);
+    lMainDef.setHirBody(lBlockStmt);
+    ....
+    lBlockStmt.addLastStmt(lAssign1);
+    ....
+    symRoot.symTableCurrent.popSymTable();
+</pre>
+<p>(In case of prototype declaration, use closeSubpPrototype instead of 
+ closeSubpHeader.  See HIR, SubpDefinition, Subp, 
+<a href='./SimpleMain.java'>SimpleMain.java</a>, etc.)</p>
+<p>
+IrList, HirList can be constructed by such statement sequence as</p>
+<pre>
+    HirList lList = hir.irList();
+    lList.add(....);
+    ....
+</pre>
+<p>(See HIR in coins.ir.hir, IrList in coins.ir.)</p>
+
+<h5 id='i-1-3-4-6'>1.3.4.6. Note on HIR Construction and Transformation</h5>
+<p>
+An example of HIR generation is shown by <a href='./SimpleMain.java'>SimpleMain.java</a>.
+ Readers can see how
+to construct symbol table and HIR tree of a program. It may
+be useful in coding new parser.</p>
+<p>
+It is possible to build Sym objects and HIR objects by invoking 
+constructors of VarImpl, SubpImpl, VarNodeImpl, ConstNodeImpl, 
+AssignStmtImpl, IfStmtImpl, etc. but such coding is not recommended.
+Such coding may cause many errors because there are some hidden 
+parameters supplied by factory methods and there are some preparatory 
+methods to be applied to parameters.</p>
+<p>
+It should be noted that the structure of HIR is tree. Every 
+nodes in the HIR tree should be created newly  and should not 
+be shared because sharing of nodes violates the data structure
+rule of tree. If a subtree same as some subtree X is required,
+X should be copied by the method</p>
+<pre>
+    X.copyWithOperands()
+</pre>
+<p>if X is an expression or</p>
+<pre>
+    X.copyWithOperandsChangingLabels()
+</pre>
+<p>if X is a statement that may include label definitions.
+The HIR method "isTree" checks whether the rule of tree structure
+is violated or not. The method "isTree" is invoked automatically
+if debug-print level of HIR is greater than 1 in Driver.java.</p>
+<p>
+When entire HIR subtree of a subprogram is constructed, finishHir()
+should be called in such way as </p>
+<pre>
+    lSubpDefinition.finishHir();
+</pre>
+<p>where lSubpDefinition represents SubpDefinition node of the subprogram.
+The method finishHir() does such operations as giving index number to HIR 
+nodes under the subtree, checking tree structure conformance, certificating
+getHirPosition() for labels, and so on. When the HIR subtree of a subprogram
+was changed in optimization and parallelization, then finishHir() should
+also be called for the subtree. This method is not required to call for each
+modification of statements ans expressions of SubpDefinition but at the end 
+of creation or transformation of the entire SubpDefinition subtree.
+</p>
+
+<h5 id='i-1-3-4-7'>1.3.4.7. Indispensable Items and Optional Items</h5>
+<p>
+Syntactic structure of HIR is shown in HIR0.java and in HIR.java as comment lines.
+Nonterminals that do not derive to null are indispensable items.
+Nonterminals that derive to null are optional items.
+There may be some exceptional nonterminal that derives to null
+but represents indispensable item. Such case may happen in 
+avoiding BNF productions to become too much verbose but such
+case can be clearly discriminated by considering semantics.</p>
+
+
+<h3 id='i-1-4'>1.4. Test Program Suite</h3>
+
+<h4 id='i-1-4-1'>1.4.1. Overview</h4>
+<p>
+Under the directory &quot;test&quot; there are many small programs written
+to test the COINS compiler infrastructure. The directory &quot;test/c&quot;
+contains C test program suite composed of more than 1000 small C programs 
+which are available to test C front-end and basic features of the COINS 
+compiler infrastructure. The C test programs are grouped under many 
+sub-directories such as Assign, Exp, If, Loop, etc.
+(See &quot;README.c.txt&quot;, &quot;README.c-result-may-differ.txt&quot;, 
+&quot;README.c-not-for-auto-test.txt&quot; under the &quot;test&quot; directory.)</p>
+<p>
+The C test program suite also contains expected execution results 
+corresponding to each test program so that automatic test is possible
+by compiling and executing the test programs and comparing the result
+of execution for them. There are test programs that are not suitable 
+for execution test, for example, programs to test syntax error detection,
+programs to test implementation dependent features, and so on. Such
+test programs are placed under the sub-directories named 
+&quot;test/c/unsupported&quot; and &quot;test/c-result-may-differ&quot;.</p>
+<p>
+When some component of the COINS compiler infrastructure is modified
+or added, it is recommended to test whether it is correctly executed
+or not by using the test suite.</p>
+
+<h4 id='i-1-4-2'>1.4.2. Automatic test</h4>
+
+<h5 id='i-1-4-2-1'>1.4.2.1. On Sparc machine</h5>
+<p>
+The test script</p>
+<pre>
+    test/c/testdriver.sh
+</pre>
+<p>is available to do automatic test for the C test program suite.
+It can automatically compile and execute the programs in the
+test program suite and compare the results with the corresponding
+expected results. Following is an example of command sequence to do
+such automatic test.</p>
+<pre>
+    cd ./classes   -- Type at the root of the COINS compiler infrastructure.
+    ../test/c/testdriver.sh -v ../test/c/*/*.c
+    ../test/c/testdriver.sh -v ../test/c/*/*/*.c
+</pre>
+<p>The first and the second invocations of &quot;testdriver.sh&quot; will do test by using 
+test programs under the first level and the second level sub-directories, 
+respectively. The result of the test will be shown by files which will be 
+located under</p> 
+<pre>
+    testdriver-yymmdd-hhmmss
+</pre>
+<p>that is a directory created during the test.</p>
+<p>
+If &quot;Arg list too long&quot; message is issued in your environment by the command</p>
+<pre>
+    ../test/c/testdriver.sh -v ../test/c/*/*.c
+</pre>
+<p>then make a temporal directory such as &quot;test/c2&quot; and move several 
+sub-directories such as TestFnami2, WhiteBox1, WhiteBox2 (that contain 
+many files) to the temporal directory and execute</p>
+<pre>
+    ../test/c/testdriver.sh -v ../test/c2/*/*.c
+</pre>
+<p>as additional command.</p>
+<p>
+There is a command line</p>
+<pre>
+    if ! java coins.driver.Driver -coins:${TARGET}preprocessor=\
+      'cpp -I../lang/c/include' -S -o $CCCOUT $i &amp;&gt;$CCCLOG
+</pre>
+<p>
+in &quot;testdriver.sh&quot;. You can change compile option by changing this line in such 
+way as</p>
+<pre>
+    if ! java coins.driver.Driver -coins:${TARGET},hirOpt=cse,preprocessor=\
+       'cpp -I../lang/c/include' -S -o $CCCOUT $i &amp;&gt;$CCCLOG
+</pre>
+<p>You can do automatic test by using test programs under some sub-directory only.
+For example, if you want to do test by using test programs under 
+Loop sub-directory only, give following command:</p>
+<pre>
+    ../test/c/testdriver.sh -v ../test/c/Loop/*.c
+</pre>
+<p>Some test programs under sub-directories &quot;test/c/unsupported&quot; and 
+&quot;test/c-result-may-differ&quot; will cause error but it may be normal because 
+each of them may be a test program to cause error. Result of these test
+programs should be examined individually.</p>
+<p>
+Some test programs may require further investigation even if &quot;OK&quot; sign
+is issued for them. For example, &quot;test/c/Opt&quot;, 
+&quot;test/c/OptAdd&quot; and &quot;test/c/TestSsa&quot;
+contain test programs for optimization and it is required to examine object 
+codes generated.</p>
+
+<h5 id='i-1-4-2-2'>1.4.2.2. On Intel x86 machine and others </h5>  
+<p>
+If test is to be done on x86-cygwin, use &quot;test/c/testdriverw.sh&quot; 
+instead of &quot;testdriver.sh&quot;. Its usage is the same as the 
+&quot;testdriver.sh&quot; but it is required
+to prepare expected results on x86 machine as explained in the next section.</p>
+<p>
+Note.<br/>
+  Target machine can be changed by command option in such a way as</p>
+<pre>
+    ../test/c/testdriver.sh -v -t x86-cygwin ../test/c/Loop/*.c
+</pre>
+<p>but this command option is not yet reliable and in some environment,
+this may not correctly work. It is better to use the test script</p>
+<pre>
+   test/c/testdriverw.sh
+</pre>
+<p>for x86-cygwin.</p>
+<p>
+As for other machine, please adjust the &quot;testdriver.sh&quot; to the machine.</p>
+
+<h4 id='i-1-4-3'>1.4.3. Preparation of expected results</h4>
+
+<h5 id='i-1-4-3-1'>1.4.3.1. On Sparc machine</h5>
+<p>
+Currently, the expected results of the test programs are prepared by
+using gcc compiler on Sparc machine. You can renew the expected results by 
+the following command sequence:</p>
+<pre>
+    cd ./classes
+    ../test/c/testprepare.sh ../test/c/*/*.c
+    ../test/c/testprepare.sh ../test/c/*/*/*.c
+</pre>    
+<p>When you added or modified test programs, you should also renew the expected
+results of the test programs added or modified.</p>
+
+<h5 id='i-1-4-3-2'>1.4.3.2. On Intel x86 machine and others</h5>
+<p>
+If you want to do test on a machine other than Sparc, you should renew
+the expected results by using gcc compiler or some other existing compiler
+on the machine. </p>
+<p>
+If test is to be done on x86-cygwin, use &quot;test/c/testpreparew.sh&quot; 
+instead of &quot;testprepare.sh&quot;. Its usage is the same as the 
+&quot;testdprepare.sh&quot;.</p>
+<p>
+As for other machine, please adjust the &quot;testprepare.sh&quot; to the machine.</p>
+
+<h3 id='i-1-5'>1.5. Visualization Tools</h3>
+
+<h4 id='i-1-5-1'>1.5.1. CoVis: Visualiztion tools for HIR/LIR</h4>
+<p>
+CoVis is the visualization tools for source programs, HIRs, LIRs, and control flow graphs.
+An example is shown in Fig.1-2.</p>
+<center>
+<img src="covis.jpg" /><br/>
+Fig.1-2 A view of CoVis
+</center>
+<p>
+In the figure, the control flow graph (upper left), the HIR representation (upper right), 
+and the source program (lower right) of the selected function are shown.
+The selected basic block is colored red, and the corresponding parts of the HIR and the source
+are colored blue.
+The detailed information of the selected basic block is shown in the lower left.</p>
+<p>
+The intermediate representation can be selected by clicking one of the four buttons:
+Generated HIR (generated by the front end), Optimized HIR (by HIR optimization), 
+Generated LIR (generated by HIR-to-LIR translation),
+and Optimized LIR (by SSA optimization). </p>
+
+(In using Java 1.7 and Java 1.8, there may be a case where
+graphs are irregularly overlaid. If you find such cases,
+please use Java 1.5 or Java 1.6 until the CoVis is revised.)
+
+<h5 id='i-1-5-1-1'>1.5.1.1. How to install CoVis</h5>
+<ol>
+<li>Get the following packages:
+<ul>
+<li>
+<!-- CoVis.tgz from <a href='./CoVis.tgz'>here</a> or from<br/> --!>
+CoVis (covis.gz) from <a href='./covis.gz'>here</a> or from<br/>
+<!-- http://www.coins-project.org/COINSdoc/visual/CoVis.tgz --!>
+http://coins-compiler.osdn.jp/download/covis.gz
+</li>
+
+<li>
+<!-- grappa.tgz from<br/> --!>
+grappa (grappa-built.jar) from 
+<a href='http://coins-compiler.osdn.jp/download/grappa-built.jar'>here</a> in built form or grappa.tgz from
+<br/>
+http://www2.research.att.com/~john/Grappa/grappa.tgz
+</li>
+<li>
+The CoVis and grappa versions suitable for COINS can be get also from
+<a href='http://coins-compiler.osdn.jp/download/covisPackagex.tgz'>here</a>.
+</li>
+
+<li> graphviz from<br>
+http://www.research.att.com/sw/tools/graphviz/download.html<br>
+(Select the one that suits to your environment (Windows, MacOS, etc.))
+</li>
+</ul></li>
+
+<li>Expand covis.gz (or CoVis.tgz) and grappa-built.jar (or grappa.tgz) and get the following:
+
+<ul>
+	<li>CoVis/build.xml</li>
+	<li>CoVis/classes/covis-class-files(covis package)</li>
+	<li>CoVis/src/covis-source-files</li>
+	<li>CoVis/coins.xsd</li>
+	<li>CoVis/sample-files</li>
+	<li>
+         grappa/classes/att and java_cup packages <br>
+         or grappa/archives/grappa1_2.jar(att and java_cup packages)
+        </li>
+	<li>grappa/src/jdk1.2/grappa-source-files(att and java_cup)</li>
+</ul>
+(The file build.xml is prepared to rebuild CoVis when 
+some source files are changed. Initially, CoVis is 
+already built when it is downloaded.)
+</li>
+<li>Make a directory for visualization (say CoVis) and 
+    set class files as follows:
+<ul>
+	<li>CoVis/classes/covis/</li>
+	<li>CoVis/classes/att/</li>
+	<li>CoVis/classes/java_cup/</li>
+</ul>
+The class files att and java_cup are prepared in 
+grappa-built/classes when grappa-built.jar is expanded 
+by such command as <br>
+&nbsp;&nbsp; jar -xvf grappa-built.jar  <br>
+In case of expanding grappa.tgz, 
+make an empty directory named classes on the same level as src,
+then compile the source files on the directory grappa/src 
+by such command as<br>
+&nbsp;&nbsp; javac -d ../classes -Xlint:unchecked jdk1.2/*/*/*.java<br>
+then following class files will be generated.
+<ul>
+<li> classes/att/grappa/*.class</li>
+<li> classes/java_cup/runtime/*.class </li>
+</ul>
+There is another way using grappa1_2.jar instead of 
+grappa class files as it is explained later.
+</li>
+<li>
+  Install the graphviz and see the existence of the executable file<br>
+  &nbsp;&nbsp; graphvis/bin/dot <br> 
+  Set a path to the directory graphviz/bin/ <br>
+  so that a command named dot can be executed.
+</li>
+</ol>
+
+<h5 id='i-1-5-1-2'>1.5.1.2. How to use CoVis</h5>
+<ol>
+<li>Genrate the XML file
+<p>
+By the coins compiler option</p>
+<pre>
+   -coins:debuginfo,snapshot
+</pre>
+<p>the coins internal representation is translated to
+the XML file. For example, the command</p>
+<pre>
+  java -cp ./classes coins.driver.Driver -coins:debuginfo,snapshot -S source.c
+</pre>
+<p>will generate the XML file "source.xml" from "source.c". (The option debuginfo is optional.)</p>
+</li>
+
+<li>View the XML file
+<ul>
+<p>
+<li>Put the XML file and source file (source.xml and source.c)
+ on the same directory as that of coins.xsd 
+(CoVis in the above example).</li>
+<br>
+<li>Run CoVis and open the XML file by the command such as
+<pre> 
+    java -cp CoVis/classes covis.CoVis CoVis/source.xml
+</pre>
+(If the classpath is to be specified not only for the classes 
+directory but also for grappa/archives/grappa1_2.jar, then
+it is unnecessary to include the grappa class files 
+(att, java_cup) to the classes directory.
+The way of specifying multiple classpaths may differ by OS
+ used.)
+<br>
+<br>
+</li>
+<li>You may open other XML files by selecting "open" button 
+in the "FILE" menu if you want to see several files in succession.</li>
+<!--
+<p>On the derectory containing build.xml (CoVis in above case) you may run CoVis and open the sample XML file by the command</p>
+<pre>
+    ant sample
+</pre>
+You may open other XML file from the "open" menu as before.</li>
+</li>
+--!>
+</ul>
+
+<p>
+If you get the Exception "java.lang.UnsupportedClassVersionError"
+when you open the XML file,
+recompile the CoVis and grappa source files.</p>
+</li>
+</ol>
+
+<h4 id='i-1-5-2'>1.5.2. Trace of the code generation process</h4>
+
+<p>
+The trace of the code generation process can be viewed by a browser.
+An example is shown in Fig.1-3.</p>
+<center>
+<img src="backendtrace.jpg" /><br/>
+Fig.1-3 A view of code generation process
+</center>
+<p>
+The left column of the figure shows the phase when the traced data obtained.
+By clicking "[&lt;&lt;]" or "[&gt;&gt;]",  the previous or the next information of the same basic block
+can be viewed.</p>
+
+<h5 id='i-1-5-2-1'>1.5.2.1. How to use this tool</h5>
+
+<p>The traced data can be generated by the compiler option: </p>
+<pre>
+    -coins:debuginfo,trace=xxx
+</pre>
+<p>and the data can be formatted as a html file by the perl script <a href='./trace2html.pl'>trace2html.pl</a>.</p>
+<pre>
+    java coins.driver.Driver -coins:debuginfo,... &gt; trace.java
+    perl trace2html.pl -o trace -c  trace.java
+</pre>
+<p>The trace options are:</p>
+<ul>
+<li>trace=LIR
+<p>output the LIR at the entry and the exit of the backend.</p>
+</li>
+<li>trace=TMD
+<p>output the detailed information of code generation process.</p>
+</li>
+<li>trace=<i>phasenames</i>
+<p>output the LIR before and after the phase <i>phasenames</i> where <i>phasenames</i> is the list of the following names:</p>
+<p>ToMachineCode, EarlyRewriting, LateRewriting, InstSel, ConvToAsm, IntroVirReg, JumpCanon, JumpOpt, LoopInversion, SimpleOpt, LiveRange, RegisterAllocation</p>
+</li>
+</ul>
+
+  </body>
+</html>

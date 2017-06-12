@@ -1,0 +1,103 @@
+05/08/12 アーキテクチャ指定を追加し、環境設定の記述を追加
+04/08/16 coins.driver.Driver を使った Coins コンパイラ検証スクリプト
+04/12/22 CoinsCC に適応する"stdarg.h"がインクルードパスに追加された。
+
+testdriver.sh は testcoins.sh に次の改良を加えたものである。
+・テストプログラムの検索を大幅に高速化
+・実行時間の詳細なログ
+・すべてのパスを相対パスで指定
+・使われないオプションの廃止
+
+
+
+testdriver.sh は coins.driver.Driver でコンパイルされた実行ファイルが正しく
+動作するかを検証する。
+
+例えば、テストプログラム test.c が coins.driver.Driver によってコンパイル
+されてできた実行ファイルが正しく動作したかどうかは、その標準出力とエラー
+出力が test.c と同じディレクトリにある test.ans と test.err に等しいか
+どうかによって検証される。
+testprepare.sh によって test.ans と test.err が作られていれば、コンパイル
+エラーや実行時エラーが起こることが正しい動作である、とするテストもできる。
+
+testdriver.sh は bash・java・gcc・cpp・awk・diff・date を使う。
+
+デフォルトでは、<coins package>/classes をカレントディレクトリにして
+testdriver.sh を実行することで <coins package> をテストすることができ、
+そのログファイルは <coins package>/testdriver-%y%m%d-%H%M%S に作られる。
+このディレクトリ構成は、ログファイルを Coins の別バージョンへコピーして
+再テストすることなどを考慮して、相対パスで指定されている。
+しかし、testdriver.sh の変数 LOGDIR LOGDIRFORMAT JAVA を絶対パスで指定すれ
+ば、このスクリプトはどこに置いてもどこから実行してもよい。
+
+デフォルトでは、ログファイルはテストに失敗したもののみ作られる。
+その命名は、テストプログラムのパス名の最後の部分
+  .../dir1/dir2/test.c
+を使って
+  dir1-dir2-test.txt
+となる。
+
+
+
+使い方
+  testdriver.sh [options] [filename ...]
+
+オプション
+  -a      すべての結果のログをとる (デフォルト: エラーのみ)
+  -s -S   アセンブルしない (コンパイル成功ならテスト成功とする)
+  -t arch アーキテクチャの指定
+  -v      進行状況を表示する
+  -h      ヘルプを表示する
+
+ファイル名
+  *.c       テストプログラム
+  その他    テストプログラムのリストが書かれたファイル
+  指定なし  最も最近のテストでエラーだったものを再テストする。
+            これは、最も日付の大きいログディレクトリ内の errors.txt を
+            testdriver.sh の引数にするのと同じである。
+
+環境設定
+（コマンドインタープリターの設定）
+testdrive.shは、bash scriptであるため、コマンドラインにおいて
+which bash
+により、bashの絶対パスを調べ、testdrive.shの第１行目を
+#!/usr/lcoal/bin/bash
+や
+#!/bin/bash
+などに書換える必要がある。
+（アーキテクチャの設定）
+方法１：-tオプションで指定
+方法２：~/.coins/testdriver.confに
+target=ppc
+などと記述する。
+
+ただし、同時に設定された場合は、-tオプションが優先される。
+
+使用例
+
+デフォルトの設定
+  <coins package>/
+   |
+   |- classes/                  (ここをカレントディレクトリにする)
+   |
+   |- test/c
+   |       |- testdriver.sh         (テストスクリプト)
+   |       |- testdriver.txt        (このファイル)
+   |       |- xxx/                  (テストプログラムのあるディレクトリ)
+   |       :
+   |
+   |- testdriver-%y%m%d-%H%M%S/ (ログディレクトリ)
+   |   |- log.txt               (全体のログ)
+   |   |- errors.txt            (エラーだったテストプログラムのリスト)
+   |   |- xxx-yyy-zzz.txt       (テストプログラムごとのログ)
+   :   :
+
+以下、カレントディレクトリを <coins package>/classes にして、
+  ../test/c/testdriver.sh -v ../test/c/*/*.c
+    ../test/c/*/*.c にマッチするテストプログラムで、進行状況を表示しながら
+    テストする。
+  ../test/c/testdriver.sh ~/list.txt
+    ~/list.txt に書かれたテストプログラムでテストする。
+  ../test/c/testdriver.sh
+    最も最近のテストでエラーだったものを再テストする。
+

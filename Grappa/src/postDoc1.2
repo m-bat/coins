@@ -1,0 +1,25 @@
+#!/bin/ksh
+cd ../docs
+rm -f java.*.html Package-java.*.html
+#file=packages.html
+#sed \
+#	-e 's;<body>;<body bgcolor="#FFFFFF">;' \
+#	-e 's;href="API_;href="http://java.sun.com/products/jdk/1.1/docs/api/API_;g' \
+#	-e 's;href="Package-java[.];href="http://java.sun.com/products/jdk/1.1/docs/api/Package-java.;g' \
+#  $file > xx || exit 1
+#/bin/mv xx $file
+#print $file
+/bin/cp ../src/packages.src packages.html
+print packages.html
+for file in att.*.html
+do
+	sed \
+		-e 's;<body>;<body bgcolor="#FFFFFF">;' \
+		-e 's;href="java[.];href="http://java.sun.com/.;g' \
+		$file > xx || exit 1
+	/bin/mv xx $file
+	print $file
+done
+/bin/cp ../src/tree.src tree.html
+print tree.html
+exit 0

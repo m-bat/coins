@@ -1,0 +1,49 @@
+<html lang="en">
+  <head>
+    <title>a COmpiler INfraStructure project</title>
+    <meta http-equiv="Content-Type" content="text/html;">
+    <link rel="stylesheet" type="text/css" href="../style01.css">
+  </head>
+<body>
+
+<div id="logo">
+COINS
+</div>
+
+<div id="sub-logo-left">
+a Compiler Infrastructure Project
+</div>
+
+<div id="sub-logo-right">
+A <u>co</u>mpiler <u>in</u>fra <u>s</u>tructure
+</div>
+
+<hr id="status-hr">
+
+<div id="menu">
+<h3 id="menu-h3">INDEX</h3>
+<a href="../index.html">Japanese Top</a><br>
+<a href="index.html">Abstract</a><br>
+<a href="overview.pdf">Overview(pdf)</a><br>
+<a href="flow-en.pdf">Processing Flow(pdf)</a><br>
+<a href="example.html">Compilation examples</a><br>
+
+<br>
+Sub Projects
+
+<ul>
+<li><a href="base/basePartDoc.txt">Base</a>
+<li><a href="http://www.is.titech.ac.jp/~sassa/coins-www-ssa/english/">SSA optimization</a>
+<li><a href="para/para1.htm">Parallelisation</a>
+<li><a href="procserpar/procserpar-index.html">Processor level parallelisation</a>
+</ul>
+<a href="use.html">How to use COINS</a><br>
+<a href="advanceduse.html">Developing new compilers with COINS</a><br>
+<a href="shiyosho.html">Specifications</a><br>
+<br>
+<a href="paper.html">Papers and presentations</a><br>
+<a href="organization.html">Research organization</a><br>
+<a href="personnel.html">Members</a><br>
+<a href="download/dl.cgi">Download Coins<br>(Ver. 1.3.1 050830)</a><br>
+<a href="related.html">Related info. of Coins</a>
+</div>

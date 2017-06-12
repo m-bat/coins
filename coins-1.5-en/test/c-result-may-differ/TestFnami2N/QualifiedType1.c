@@ -1,0 +1,57 @@
+int printf(char *s, ...);
+
+signed char const csc;
+short const cs;
+int const ci;
+long const cl;
+long long const cll;
+unsigned char const cuc;
+unsigned short const cus;
+unsigned int const cui;
+unsigned long const cul;
+unsigned long long const cull;
+char const cc;
+float const cf;
+double const cd;
+long double const cld;
+signed char volatile vsc;
+short volatile vs;
+int volatile vi;
+long volatile vl;
+long long volatile vll;
+unsigned char volatile vuc;
+unsigned short volatile vus;
+unsigned int volatile vui;
+unsigned long volatile vul;
+unsigned long long volatile vull;
+char volatile vc;
+float volatile vf;
+double volatile vd;
+long double volatile vld;
+signed char const volatile cvsc;
+short const volatile cvs;
+int const volatile cvi;
+long const volatile cvl;
+long long const volatile cvll;
+unsigned char const volatile cvuc;
+unsigned short const volatile cvus;
+unsigned int const volatile cvui;
+unsigned long const volatile cvul;
+unsigned long long const volatile cvull;
+char const volatile cvc;
+float const volatile cvf;
+double const volatile cvd;
+long double const volatile cvld;
+
+int main() {
+  printf("%d %d %d %d %d\n",(int)sizeof csc,(int)sizeof  cs,(int)sizeof  ci,(int)sizeof  cl,(int)sizeof  cll);
+  printf("%d %d %d %d %d\n",(int)sizeof cuc,(int)sizeof cus,(int)sizeof cui,(int)sizeof cul,(int)sizeof cull);
+  printf("%d %d %d %d\n",   (int)sizeof cc,(int)sizeof cf,(int)sizeof cd,(int)sizeof cld);
+  printf("%d %d %d %d %d\n",(int)sizeof vsc,(int)sizeof  vs,(int)sizeof  vi,(int)sizeof  vl,(int)sizeof  vll);
+  printf("%d %d %d %d %d\n",(int)sizeof vuc,(int)sizeof vus,(int)sizeof vui,(int)sizeof vul,(int)sizeof vull);
+  printf("%d %d %d %d\n",   (int)sizeof vc,(int)sizeof vf,(int)sizeof vd,(int)sizeof vld);
+  printf("%d %d %d %d %d\n",(int)sizeof cvsc,(int)sizeof  cvs,(int)sizeof  cvi,(int)sizeof  cvl,(int)sizeof  cvll);
+  printf("%d %d %d %d %d\n",(int)sizeof cvuc,(int)sizeof cvus,(int)sizeof cvui,(int)sizeof cvul,(int)sizeof cvull);
+  printf("%d %d %d %d\n",   (int)sizeof cvc,(int)sizeof cvf,(int)sizeof cvd,(int)sizeof cvld);
+  return 0;
+}

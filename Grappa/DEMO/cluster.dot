@@ -1,0 +1,173 @@
+digraph "G" {
+	graph [	size = "10,10",
+		label = "Cluster Graph Example",
+		rotate = 360 ];
+	node [	label = "\N" ];
+	graph [lp= "1625,0"];
+	graph [bb= "0,0,3250,226"];
+	subgraph cluster_omnipresent_centrals {
+		graph [label= "omnipresent clients/suppliers"];
+		graph [color= black]; // set default color to black
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "0,144,232,210"];
+		"{{{appl|MPG}|NDC}}" [shape=record, color=lightgray, fontcolor=black, style=filled, pos="116,177", width="2.97", height="0.67", rects="9,177,115,201 9,153,115,177 115,153,223,201"];
+	}
+	subgraph cluster2 {
+		graph [label= 2];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "240,144,340,210"];
+		"{{{appl|MPG}|CAF}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="290,177", rects="249,177,291,195 249,159,291,177 291,159,332,195", width="1.14", height="0.50"];
+	}
+	subgraph cluster4 {
+		graph [label= 4];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "348,144,454,210"];
+		"{{{appl|TBD}|CNM}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="401,177", rects="357,177,399,195 357,159,399,177 399,159,445,195", width="1.22", height="0.50"];
+	}
+	subgraph cluster5 {
+		graph [label= 5];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "462,144,586,210"];
+		"{{{appl|MPG}|CENTAR}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="524,177", rects="471,177,513,195 471,159,513,177 513,159,578,195", width="1.47", height="0.50"];
+	}
+	subgraph cluster6 {
+		graph [label= 6];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "594,0,908,210"];
+		"{{{appl|MPG}|Corporate System(s)}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="749,177", rects="664,177,706,195 664,159,706,177 706,159,835,195", width="2.36", height="0.50"];
+		"{{{appl|MPG}|BITS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="645,27", rects="603,27,645,45 603,9,645,27 645,9,688,45", width="1.17", height="0.50"];
+		"{{{appl|MPG}|DIDP}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="749,27", rects="705,27,747,45 705,9,747,27 747,9,793,45", width="1.22", height="0.50"];
+		"{{{appl|MPG}|UPAR}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="855,27", rects="811,27,853,45 811,9,853,27 853,9,900,45", width="1.22", height="0.50"];
+		"{{{appl|MPG}|CLMP21}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="749,99", rects="694,99,736,117 694,81,736,99 736,81,804,117", width="1.53", height="0.50"];
+		"{{{appl|MPG}|Corporate System(s)}}" -> "{{{appl|MPG}|CLMP21}}" [color=blue, font=6, pos="e,743,117 743,159 742,149 742,137 742,126"];
+		"{{{appl|MPG}|BITS}}" -> "{{{appl|MPG}|CLMP21}}" [color=blue, font=6, pos="s,729,81 722,76 708,66 692,54 677,45"];
+		"{{{appl|MPG}|DIDP}}" -> "{{{appl|MPG}|CLMP21}}" [color=blue, font=6, pos="s,755,81 755,75 756,65 756,54 755,45"];
+		"{{{appl|MPG}|UPAR}}" -> "{{{appl|MPG}|CLMP21}}" [color=blue, font=6, pos="s,782,81 787,78 803,67 820,55 835,45"];
+		"{{{appl|MPG}|CLMP21}}" -> "{{{appl|MPG}|Corporate System(s)}}" [color=blue, font=6, pos="s,755,159 755,153 756,141 756,128 755,117"];
+		"{{{appl|MPG}|CLMP21}}" -> "{{{appl|MPG}|BITS}}" [color=blue, font=6, pos="e,665,45 717,81 702,72 686,60 672,50"];
+		"{{{appl|MPG}|CLMP21}}" -> "{{{appl|MPG}|DIDP}}" [color=blue, font=6, pos="e,743,45 743,81 742,73 742,63 742,54"];
+		"{{{appl|MPG}|CLMP21}}" -> "{{{appl|MPG}|UPAR}}" [color=blue, font=6, pos="e,823,45 770,81 783,72 799,60 815,50"];
+	}
+	subgraph cluster7 {
+		graph [label= 7];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "961,0,1375,126"];
+		"{{{appl|HRDBS}|CLMP21}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1256,99", rects="1194,99,1250,117 1194,81,1250,99 1250,81,1318,117", width="1.72", height="0.50"];
+		"{{{appl|MPG}|CASM}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1128,99", rects="1080,99,1122,117 1080,81,1122,99 1122,81,1176,117", width="1.33", height="0.50"];
+		"{{{appl|MPG}|IDSNI}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1016,99", rects="970,99,1012,117 970,81,1012,99 1012,81,1063,117", width="1.28", height="0.50"];
+		"{{{appl|HR}|ASSETS(FRONT END)}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1062,27", rects="970,27,1008,45 970,9,1008,27 1008,9,1155,45", width="2.56", height="0.50"];
+		"{{{appl|HR}|DIDP}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1214,27", rects="1172,27,1210,45 1172,9,1210,27 1210,9,1256,45", width="1.17", height="0.50"];
+		"{{{appl|AMA}|UPAR}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1320,27", rects="1274,27,1320,45 1274,9,1320,27 1320,9,1367,45", width="1.28", height="0.50"];
+		"{{{appl|HRDBS}|CLMP21}}" -> "{{{appl|HR}|ASSETS(FRONT END)}}" [color=blue, font=6, pos="e,1110,45 1207,81 1180,71 1145,58 1116,47"];
+		"{{{appl|HRDBS}|CLMP21}}" -> "{{{appl|HR}|DIDP}}" [color=blue, font=6, pos="e,1224,45 1245,81 1240,72 1234,62 1229,52"];
+		"{{{appl|HRDBS}|CLMP21}}" -> "{{{appl|AMA}|UPAR}}" [color=blue, font=6, pos="e,1304,45 1272,81 1280,72 1290,61 1298,51"];
+	}
+	subgraph cluster9 {
+		graph [label= 9];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "1350,144,1468,210"];
+		"{{{appl|MPG}|BIPAS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1409,177", rects="1359,177,1401,195 1359,159,1401,177 1401,159,1459,195", width="1.39", height="0.50"];
+	}
+	subgraph cluster11 {
+		graph [label= 11];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "1476,144,1598,210"];
+		"{{{appl|MPG}|MDRSL}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1537,177", rects="1485,177,1527,195 1485,159,1527,177 1527,159,1589,195", width="1.44", height="0.50"];
+	}
+	subgraph cluster12 {
+		graph [label= 12];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "1606,144,1838,210"];
+		"{{{appl|MPG}|TMPS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1783,177", rects="1737,177,1779,195 1737,159,1779,177 1779,159,1830,195", width="1.28", height="0.50"];
+		"{{{appl|MPG}|FC-RTS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1667,177", rects="1615,177,1657,195 1615,159,1657,177 1657,159,1719,195", width="1.44", height="0.50"];
+	}
+	subgraph cluster14 {
+		graph [label= 14];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "916,144,1342,210"];
+		"{{{appl|HR}|SETAS/ORACLE}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1256,177", rects="1179,177,1217,195 1179,159,1217,177 1217,159,1334,195", width="2.14", height="0.50"];
+		"{{{appl|MPG}|DCPAS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1111,177", rects="1061,177,1103,195 1061,159,1103,177 1103,159,1162,195", width="1.39", height="0.50"];
+		"{{{appl|MPG}|BBROX AI}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="984,177", rects="925,177,967,195 925,159,967,177 967,159,1043,195", width="1.64", height="0.50"];
+	}
+	subgraph cluster15 {
+		graph [label= 15];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "1846,144,1964,210"];
+		"{{{appl|MPG}|ACASP}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="1905,177", rects="1855,177,1897,195 1855,159,1897,177 1897,159,1956,195", width="1.39", height="0.50"];
+	}
+	subgraph cluster18 {
+		graph [label= 18];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "1972,144,2198,210"];
+		"{{{appl|MPG}|FFEC}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2142,177", rects="2095,177,2137,195 2095,159,2137,177 2137,159,2189,195", width="1.31", height="0.50"];
+		"{{{appl|TBD}|CMAC}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2029,177", rects="1981,177,2023,195 1981,159,2023,177 2023,159,2077,195", width="1.33", height="0.50"];
+	}
+	subgraph cluster20 {
+		graph [label= 20];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "2206,144,2438,210"];
+		"{{{appl|MPG}|MCF/DSD}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2372,177", rects="2315,177,2357,195 2315,159,2357,177 2357,159,2430,195", width="1.58", height="0.50"];
+		"{{{appl|TBD}|TSP}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2256,177", rects="2215,177,2257,195 2215,159,2257,177 2257,159,2297,195", width="1.14", height="0.50"];
+	}
+	subgraph cluster21 {
+		graph [label= 21];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "2446,144,2770,210"];
+		"{{{appl|MPG}|KLAS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2715,177", rects="2669,177,2711,195 2669,159,2711,177 2711,159,2761,195", width="1.28", height="0.50"];
+		"{{{appl|MPG}|BBC}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2610,177", rects="2569,177,2611,195 2569,159,2611,177 2611,159,2651,195", width="1.14", height="0.50"];
+		"{{{appl|MPG}|SHRKS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2503,177", rects="2455,177,2497,195 2455,159,2497,177 2497,159,2551,195", width="1.33", height="0.50"];
+	}
+	subgraph cluster23 {
+		graph [label= 23];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "2778,144,2878,210"];
+		"{{{appl|MPG}|MET}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2828,177", rects="2787,177,2829,195 2787,159,2829,177 2829,159,2870,195", width="1.14", height="0.50"];
+	}
+	subgraph cluster26 {
+		graph [label= 26];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "2886,144,3114,210"];
+		"{{{appl|MPG}|LCESA}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="3055,177", rects="3005,177,3047,195 3005,159,3047,177 3047,159,3105,195", width="1.39", height="0.50"];
+		"{{{appl|MPG}|DMRS}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="2941,177", rects="2895,177,2937,195 2895,159,2937,177 2937,159,2987,195", width="1.28", height="0.50"];
+	}
+	subgraph cluster31 {
+		graph [label= 31];
+		graph [color= black];
+		graph [style= bold];
+		graph [lp= ""];
+		graph [bb= "3122,144,3250,210"];
+		"{{{appl|MPG}|DBMAIN}}" [shape=record, color=lightblue, fontcolor=black, style=filled, pos="3186,177", rects="3131,177,3173,195 3131,159,3173,177 3173,159,3242,195", width="1.53", height="0.50"];
+	}
+	"{{{appl|HR}|SETAS/ORACLE}}" -> "{{{appl|HRDBS}|CLMP21}}" [color=blue, font=6, pos="e,1256,117 1256,159 1256,149 1256,137 1256,126"];
+}

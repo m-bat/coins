@@ -1,0 +1,73 @@
+<div id="main">
+<h2>Abstract</h2>
+<h4>1. Aims of the project</h4>
+
+<p>
+COINS is a project to develop a compiler infrastructure which
+may be used as a base for constructing various compilers
+such as research compilers, educational compilers, and
+production compilers.
+COINS has two levels of intermediate representation, HIR:
+High-level Intermediate Representation, and LIR: Low-level
+Intermediate Representation.
+The infrastructure is composed of many components, such as
+front-ends, back-ends, various kind of optimizing and parallelizing
+modules.  Optimizations and parallelizations are applied to HIR or LIR.
+Compiler developers can construct a compiler by selecting
+appropriate components.  They may add their own components or
+modify some existing components to add new features to their
+compiler.
+The main aim of the project is to help compiler developers build
+good compilers in relatively short term and accelerate the
+development of compiler technology.
+</p>
+
+<h4>2. Benefit of using the COINS infrastructure</h4>
+
+<p>
+New compiling techniques can be implemented by adding or modifying
+a component without writing the rest of the compiler.  For example,
+a compiler for a new machine can be built by adding a new
+code generator without developing the front-end.  A compiler for
+a new language can be built by adding a new front-end without
+developing the back-end.  Basic modules for code optimization and
+parallelization are available.
+Evaluation of compiling techniques becomes easy by comparing results
+based on the same infrastructure.
+</p>
+
+<h4>3. Structure of the COINS compiler</h4>
+<pre>
+  Compiler control<br>
+    Compiler driver<br>
+  IR (Intermediate Representation) handler<br>
+    HIR handler<br>
+    LIR handler<br>
+    Symbol handler<br>
+  Front-end<br>
+    C language front-end<br>
+    Fortran front-end<br>
+  Middle<br>
+    Basic optimizer<br>
+    Advanced optimizer<br>
+    SSA (Static Single Assignment) optimizer<br>
+    Basic parallelizer<br>
+    SMP (Symmetric Multi-Processor) parallelizer<br>
+    SIMD (Single Instruction Multiple Data stream) parallelizer<br>
+    HIR-to-C source code generator<br>
+  Back-end<br>
+    Code generator-generator<br>
+    Sparc machine code generator<br>
+    x86 machine code generator<br>
+    ARM machine code generator<br>
+    MIPS machine code generator<br>
+    SH-4 machine code generator<br>
+    PowerPC machine code generator<br>
+    LIR-to-C source code generator<br>
+</pre>
+
+<p>
+All modules are written in Java for ease of extension and
+increase of reliability.
+</p>
+</div>

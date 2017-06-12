@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>How to use C Compiler</title>
+
+  </head>
+  <body>
+	<h1>3. How to use C Compiler</h1>
+    
+	<h2>Contents</h2>
+<ul>
+<li><a href='#i-3-1'>3.1. How to Compile this Compiler</a></li>
+<li><a href='#i-3-2'>3.2. How to Execute the Compiler</a></li>
+<ul>
+<li><a href='#i-3-2-1'>3.2.1. Short Descriptions</a></li>
+<li><a href='#i-3-2-2'>3.2.2. Required Software</a></li>
+</ul>
+<li><a href='#i-3-3'>3.3. Automatic Test of the  Compiler</a></li>
+<li><a href='#i-3-4'>3.4. Unsupported Features</a></li>
+</ul>
+
+<h3 id='i-3-1'>3.1. How to Compile this Compiler</h3>    
+
+    The COINS infrastructure includes the
+    class coins.driver.Driver that serves as the driver of a
+    C compiler. The target machine architecture can be selected from the
+following list:
+<ul>
+<li>sparc ...... SUN SPARC (mult/div is a subroutine)</li>
+<li>sparc-v8 ... SUN SPARC (mult/div is a machine instruction)</li>
+<li>x86 ........ Intel i386</li>
+<li>arm ........ ARM</li>
+<li>mips ....... MIPS</li>
+<li>sh4 ........ Hitachi SH-4</li>
+<li>ppc ........ IBM PowerPC</li>
+</ul>
+
+    All the classes of COINS are precompiled into the directory 'classes', so you can
+    try to compile your C programs immediately.<p>
+    If you wish to compile the compiler yourself, do the following:
+<ul>
+<li>    Download the COINS infrastructure.</li>
+<li>    Expand the downloaded file if it is an archive.</li>
+<li>    Change directory (cd) to the top directory of COINS.</li>
+<li>    Compile the compiler by a command
+<pre>
+      javac -classpath classes -d classes -sourcepath src/coins/driver/Driver.java
+</pre>
+    where '/' should be replaced by the path separator of your platform.
+    You actually can place your class files anywhere.<br>
+    (Note: If you happened to have modified the default suffix database file
+    (located at classes/coins/driver/suffixes in the distribution), please make
+    sure to copy it to where you place your class files. For more information
+    on the suffix database file, see 
+<a href="./driver.html#i-2-4-8">2.4.8 Suffix Rules</a>.)</li>
+
+<li>    Alternatively, Ant may be used to do some smart building. See the section
+    'Build/Rebuild with Ant' in README.txt.    </li>
+</ul>
+     
+<h3 id='i-3-2'>3.2. How to Execute the Compiler</h3>
+ 
+<h4 id='i-3-2-1'>3.2.1. Short Descriptions</h4>
+
+   Follow the following procedures:<p>
+   On UNIX running a sh-compatible shell, type
+<pre>
+     export CLASSPATH=$HOME/Java/coins-1.x.y/classes
+            ## Change according to your environment.
+</pre>
+   or for Windows
+<pre>
+     SET CLASSPATH=c:\home\Java\coins-1.x.y\classes
+            ## Change according to your environment.
+</pre>
+  Then on either platform type
+<pre>
+     java coins.driver.Driver -S xxx.c
+</pre>
+   or
+<pre>
+     java -classpath ./classes coins.driver.Driver -S xxx.c
+</pre>
+  To specify the target machine add the option "-b <i>arch</i>"
+to the above command, where <i>arch</i> is sparc, sparc-v8, x86,
+arm, mips, sh4, or ppc. The default is "sparc".<p>
+
+   Debug information will be printed if the following command is used.
+<pre>
+     java coins.driver.Driver -S -coins:trace=Sym.1/HIR.1/back xxx.c
+</pre>
+   or
+<pre>
+     java -classpath ./classes coins.driver.Driver -S  -coins:trace=Sym.1/HIR.1/back xxx.c
+</pre>
+     (if class files are under 'classes')
+
+   where, "trace= ..." specifies debug control and the number "1" in "Sym.1", 
+   etc.  is a trace level. "Sym" in "Sym.1" is a trace category.  Large
+   trace categories number (e.g. 500, 10000) may produce a huge amount
+   of debug print. <br>
+
+   Available trace categories are described in 
+<a href='./driver.html#i-2-3-4'>2.3.4. -coins Options</a>.<p>
+
+
+   Object code (xxx.s)  will be generated on the same directory
+   as that of source program xxx.c. It can be executed by
+<pre>
+     cc xxx.s; ./a.out or ./a.exe
+</pre>
+   For more information on C compiler driver coins.driver.Driver, see
+  <a href="./driver.html">2. How to use the Compiler Driver</a>.
+
+<h4 id='i-3-2-1'>3.2.2. Required Software</h4>
+
+  COINS C compiler driver requires following commands to execute compilation:
+<ul>
+<li>cpp</li>
+  <li>  gas</li>
+  <li>  gcc (as a linker)</li>
+</ul>
+  Prior to compilation, make sure that you can invoke these commands
+  (i.e., include them in your execution path). If you don't have
+  these commands but have alternatives (e.g., 'as' for 'gas'),
+  the driver provides a way to specify alternative commands.<p>
+  For more detail, see
+<ul>
+<li>     -coins:preprocessor/assembler/linker</li>
+</ul>
+
+  options described in <a href='./driver.html#i-2-3-4'>2.3.4. -coins Options</a>.
+
+<h3 id='i-3-3'>3.3. Automatic Test of the  Compiler</h3>
+
+   Many test programs are prepared under Test/C directory.<br>
+
+   They are arranged for automatic test by the shell script
+   "testcoins.sh" that is placed under the Test directory.<br>
+
+   Preparation procedure for the automatic test is explained
+   in test/c/testprepare.txt (in Japanese).<br>
+
+<h3 id='i-3-4'>3.4. Unsupported Features</h3>
+
+  This compiler supports language facilities specified in
+<ul>
+ <li>   ISO/IEC 9899:1990  Programming Language C</li>
+</ul>
+  except for following features:
+
+<ul>
+ <li>    preprocessing</li>
+ <li>    library</li>
+ <li>    long double (the size is same as double)</li>
+ <li>    wchar_t and L"xx" string</li>
+</ul>
+  As for preprocessor and library, it is recommended to use 
+  those of gcc.
+
+
+
+
+  </body>
+</html>

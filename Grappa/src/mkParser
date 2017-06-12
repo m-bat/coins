@@ -1,0 +1,21 @@
+#!/bin/ksh
+
+JAVACUP=/usr/datadog/JavaCup0.10j
+CLASSPATH=$CLASSPATH:$JAVACUP
+cd $JDK/att/grappa
+case "$JDK" in
+jdk1.0)
+	print -u2 "java java_cup.Main -package att.grappa -nonterms < parser.cup"
+	java java_cup.Main -package att.grappa -nonterms < parser.cup
+	;;
+*)
+	print -u2 "java java_cup.Main -package att.grappa -parser Parser -symbols Symbols -nonterms < Parser.cup"
+	java java_cup.Main -package att.grappa -parser Parser -symbols Symbols -nonterms < Parser.cup
+	LEAD_COMMENT="$(/bin/sed -n '/^.[*]/s/$/\\/p' Parser.cup)"
+	/bin/sed -e "/^public/i\\
+$LEAD_COMMENT
+" < Parser.java > xx || exit 1
+	/bin/mv xx Parser.java
+	;;
+esac
+exit 0

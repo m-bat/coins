@@ -1,0 +1,23 @@
+Files/directories:
+  CPL_1_0.html
+  CPL_1_0.pdf
+  CPL_1_0.txt
+  DEMO/
+  FILES
+  README
+  archives/
+  docs/
+  src/
+
+License info is in any the CPL_1_0.* (html, pdf or txt) files.
+
+DEMO contains some simple demo applications.
+
+achives contains zip/jar/cab versions of the Grappa byte code
+
+docs contains HTML documentation.
+
+src contains the Grappa source files (and the JavaCup runtime files).
+
+The html and txt files contains license information.
+

@@ -1,0 +1,8 @@
+c1 -1 c2 2 c3 4 c4 2 c5 0 c6 50 c7 48 c8 52 -c8 -52 ~c8 -53
+s1 -1 s2 2 s3 4 s4 2 s5 0 s6 50 s7 48 s8 52 -s8 -52 ~s8 -53
+i1 -1 i2 2 i3 4 i4 2 i5 0 i6 50 i7 48 i8 52 -i8 -52 ~i8 -53
+uc1 255 uc2 2 uc3 4 uc4 2 uc5 0 uc6 50 uc7 48 uc8 52 -uc8 -52 ~uc8 -53
+us1 65535 us2 2 us3 4 us4 2 us5 0 us6 50 us7 48 us8 52 -us8 -52 ~us8 -53
+ui1 -1 ui2 2 ui3 4 ui4 2 ui5 0 ui6 50 ui7 48 ui8 52 -ui8 -52 ~ui8 -53
+i1 -3 i2 -4 s1 -6 s2 -7 c2 -5 c3 -8 
+c4 1 uc4 250 s3 -3 us3 65523 i3 -3 ui3 -7 

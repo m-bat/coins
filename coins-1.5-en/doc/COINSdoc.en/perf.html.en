@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+  "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<!--
+  $Id: htmlpage.tmpl,v 1.1.1.1 2003/02/26 13:07:29 ko1 Exp $
+  paper index
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+  <head>
+	<meta http-equiv="Content-Type" content="text/html;charset=Shift_JIS" />
+	<meta http-equiv="Content-Style-Type" content="text/css" />
+	
+	<link rel="stylesheet" type="text/css" href="./contents.css" />
+
+    <title>Performance of COINS compilers</title>
+
+  </head>
+  <body>
+	<h1>12. Performance of COINS compilers</h1>
+<p>    
+COINS supports a wide range of optimizations such as SSA based optimizations and conventional optimizations based on data-flow analysis.
+These optimizations are selectable by the compiler optins.
+The backend process of COINS also has several basic optimization
+processes such as register allocation, jump optimization, constant
+foldings. These optimizations are always applied by default.
+<p>
+The relative execution times of
+the SPEC benchmarks are shown in Fig.12-1.
+<center>
+<img src="speed1.en.jpg" ><br>
+<font size=3>Fig.12-1 Relative excecution time of SPEC benchmark</font><p>
+</center>
+In this figure, "COINS O0" means "COINS compiler: no optimization selected (only backend optimizations)", and "gcc O2" means "gcc compiler: with 
+compiler option -O2". The target machine is x86 (Pentium 4).
+<p>
+This figure shows the good performance of the backend optimizations.
+<p>
+The effects of SSA optimizations and some added optimizations are
+shown in Fig.12-2.
+<center>
+<img src="speed2.en.jpg" ><br>
+<font size=3>Fig.12-2 Result of optimizations</font><p>
+</center>
+In this figure, the execution times of small programs are compared, where:
+<pre><tt>isort:   insertion sort
+ssort:   selection sort
+heap:    heap sort
+shell:   shell sort
+queen:   8-queen
+soukan:  correlation coefficient
+komachi: "komachi" calculation
+prime:   prime number
+
+COINS O0:  COINS C compiler, no optimization selected
+COINS ssa:  COINS C compiler, with compiler options
+            -coins:ssa-opt=prun/divex/cse/cstp/hli/osr/hli/cstp/cse/dce/srd3
+COINS ssa+S+R: COINS C compiler, with compiler options
+            -coins:ssa-opt=prun/divex/cse/cstp/hli/osr/hli/cstp/cse/dce/srd3,
+                   attach=coins.backend.sched.Schedule,schedule,attach=Regromote,regpromote
+gcc O2:     gcc compiler, with compiler options "-O2"
+
+target machine:  SPARC (Sun Blade 1000)</tt></pre>
+"S" of "ssa+S+R" means instruction scheduling (with "nop"-instruction elimination, in case of SPARC), and "R" means register promotion of static variables.
+See <a href='./backend.html#i-11-2-1'>11.2.1. Example 1: Instruction Scheduler</a> for "S",
+and see <a href='./backend.html#i-11-2-2'>11.2.2. Example 2: Register Promotion</a> for "R".
+<p>
+These  are the added optimizations using the hook features of the backend process.
+
+  </body>
+</html>

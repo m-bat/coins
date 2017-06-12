@@ -1,0 +1,403 @@
+
+2005-05-31(Tue) 22:03:44 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* StmtFuncType.java : fix to remove deprecated constructor
+
+
+2005-05-31(Tue) 13:00:20 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* TypeUtility.java, ProcessData.java, I77Utils.java : remove unused
+	import statement
+
+	* DeclManager.java, AssignOrFuncStmt.java, CallStmt.java, EntryStmt.java,
+	HirUtility.java, SubscrOrFunCallNode.java : remove Sym#subpType() call and
+	DeclManager#defineSubp close header
+
+	* FirToHir.java : call finishHir at last
+
+
+2005-01-27(Thu) 08:58:01 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* CommonManager.java : set common struct tag Sym.FLAG_COMMON to true
+
+	* TypeUtility.java : set complex struct tag Sym.FLAG_COMPLEX_FLAG to true
+
+
+2004-12-28(Tue) 15:58:49 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* BinaryNode.java : fix bug (op_cmp_ne was not worked)
+
+	* ConstManager.java : support double complex type
+
+	* DeclManager.java : change fCharParamList initialize timing
+	and add isParamIdent to support get adjustable dim type
+
+	* TypeUtility.java : ditto
+
+	* ExecStmtManager.java : temp var must be use as discrete variable
+
+	* SubscrOrFunCallNode.java : support double complex type
+
+
+2004-12-20(Mon) 15:25:45 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* FStmt.java : add line number and file name to all stmts
+
+	* F77Hir.java : setIndexNumberToAllNodes(0) after frontend processing
+
+	* f77k.jay : fix line number start
+
+
+2004-12-20(Mon) 13:19:39 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* I77Utils.java : fix address bug
+
+	* BlockIfStmt.java, UnLabeldDoStmt.java : set current stmt
+	after using nested getExecStmtManager()
+
+
+2004-12-19(Sun) 22:16:10 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* F77Driver.java : removed
+
+
+2004-12-19(Sun) 22:14:00 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* fix some bugs
+
+
+2004-11-10(Wed) 19:41:01 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* DeclManager.java : fix save statement bug
+
+	* FirToHir.java, FStmt.java : add souce file name and line number
+	to each Stmt object
+
+
+2004-10-28(Thu) 14:32:46 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* BinaryNode.java : support complex * 16
+
+	* ConstManager.java : ditto
+
+	* DoubleComplexExp.java : ditto
+
+	* I77Utils.java : ditto
+
+	* TypeUtility.java: ditto
+
+	* UnaryNode.java : ditto
+
+	* IntrinsicUtility.java : support dimag, dconjg
+
+
+2004-10-28(Thu) 04:42:00 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ProcessData.java : fix and refactoring
+
+	* SubscrOrFunCallNode.java : fix makeArgAddr to return subscr addr
+
+
+2004-09-28(Tue) 00:31:38 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* I77Utils.java : fix dolist access and read parameter
+
+
+2004-09-26(Sun) 08:00:45 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* AssignOrFuncStmt.java : characterAssignment use exp address
+
+	* BinaryNode.java : character_operation use exp address
+
+	* CommonManager.java, EquivManager.java : call finishUnionType(false) last (?)
+
+	* ConcatNode.java : use exp address
+
+	* DeclManager.java : use exp address to initialize
+
+	* I77Utils.java : fix readInit.
+	fix do_io to use suitable target pointer
+
+	* ReadStmt.java : ditto
+
+
+2004-09-25(Sat) 13:41:37 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ConstantManager.java : fix bug (remove ComplexType)
+
+
+2004-09-25(Sat) 07:19:25 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* SubscrOrFuncall.java : support parameter passing function call(?)
+
+
+2004-09-25(Sat) 06:59:11 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ComplexType.java : removed
+
+	* TypeUtility.java, SubscrOrFunCallNode.java, DeclManager.java :
+	ditto
+
+	* IntrinsicUtility.java : fix funcNearest to use cast
+
+	* HirUtility.java : use getIntValue() == 0 instead of isConstInt0()
+
+
+2004-09-24(Fri) 22:52:33 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* DeclManager.java : add isDefinedInLocal
+
+	* ConcatNode.java : support concat string with substring
+
+
+2004-09-24(Fri) 19:21:00 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* DeclManager.java : add defineVar and getProgramUnitName
+
+	* Token.java : define var if token lexeme point Subp symbol
+	(Maybe, it is point extra scope subroutine)
+
+	* TypeUtility.java : fix getDimSizeParamExp to avoid backend
+	error (bug?)
+
+
+2004-09-24(Fri) 18:09:29 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ExecStmtManager.java : fix makeNewLabel()
+	(sym.defineLabel() return null if label is already defined)
+
+
+2004-09-24(Fri) 17:51:59 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* BinaryNode.java : fix makeExp about complex and complex
+
+	* ExecStmtManager.java : use defineLabel instead of label
+
+	* TypeUtility.java : restore symRoot.symTableCurrentSubp
+	after popSymTable
+
+	* UnLabeledDoStmt.java : make process to simple
+
+
+2004-09-24(Fri) 15:17:28 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ComplexConstNode.java : fix makeArgAddr
+
+	* DeclManager.java : fix complex type function registeration
+
+	* HirUtility.java : fix makeAssignStmt to check type
+
+
+2004-09-23(Thu) 18:44:33 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* PauseStmt.java : added
+
+	* UnLabeledDoStmt.java : added to support unlabeled do stmt
+	(using "end do")
+
+	* f77k.lex, f77k.jay, F77Hir.java, F77Scanner.java : ditto
+
+	* DeclManager.java(declVariable) : ignore if already declared
+	(maybe as Param)
+
+	* ExecStmtManager.java : ignore null stmt
+
+	* SubscrOrFunCallNode.java : don't remove intrinsic name symbol
+	if that is a kind of external function
+
+	* TypeUtility.java : add getDimSizeParamExp
+
+	* f77k.jay : fix FORMAT statement rule
+
+
+2004-09-23(Thu) 16:18:15 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* CommonManager.java : support complex exp.
+	try to support initial value for block variable
+
+	* DeclManager.java : support BLOCK DATA statement
+
+	* EntryStmt.java : fix symbol table setting and
+	replace ConstMananger for new Subp definition
+
+	* F77Hir.java : support BLOCK DATA statement
+
+	* F77Sym.java : ditto
+
+	* FirToHir.java : ditto
+
+	* TypeUtility.java : fix "Type getType(Pair pTypeName)"
+
+
+2004-09-23(Thu) 06:02:37 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* I77Utils.java : fix inquire parameters
+
+
+2004-09-23(Thu) 05:12:04 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* SubscrOrFunCallNode.java : remove symbole if this symbol is a
+	intrinsic function
+
+
+2004-09-23(Thu) 04:06:11 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* DeclManager.java : fix "data statement with character" routine
+
+
+2004-09-23(Thu) 03:00:40 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ProcessData.java : fix to avoid coins bug
+
+2004-09-23(Thu) 02:07:11 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ExecStmtManager.java : apply copyWithOperands to forStmt
+
+
+2004-09-23(Thu) 01:47:52 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* somefiels : remove .copyWithOpenrads()
+
+	* FStmt.java, DeclManager.java : apply copyWithOperands()
+	to top stmt tree.
+
+
+2004-09-22(Wed) 23:59:00 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* change package path (ffront -> coins.ffront)
+
+	* F77TestDriver.java : added
+	This file is copy of coins.driver.F77Driver.java and add
+	isTree() HIR test
+
+	* ChangeLog.ffront : added
+
+
+2004-09-21(Tue) 21:09:49 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* ComplexExp.java : use copyWithOperands()
+
+	* HirUtility.java : Type checkTwoExpType(Exp arg1, Exp arg2) added,
+	Exp castIfNeeded(Exp exp, Type type) added,
+	Exp makeTyped0Node(Type type) added
+
+	* IntrinsicUtility.java : use copyWithOperands(),
+	fix max, min, and some white space replace.
+
+2004-09-17(Fri) 21:22:20 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* HirUtility.java, LabeledDoStmt.java : add copyWithOperands()
+
+	* IntrinsicUtility.java : fix bug (abs(real*8))
+
+
+2004-09-17(Fri) 19:29:22 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* DeclManager.java, ProcessData.java : use ExpListExp#getExp
+	instead of ExpListExp#get
+
+
+2004-07-18(Sun) 20:08:48 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* IfStmtInterface.java : removed
+
+	* CommonManager.java : fix common character bug
+
+	* DeclManager.java : fix initialize equivalence variable bug
+
+	* HirUtility.java(makeBooleanExp) : added
+
+	* HirUtility.java(makeIfStmt) : fix using XOR conditon
+
+	* SubscrOrFunCallNode.java : raise error "unsupport parameter passing procedure"
+
+	* Token.java: MakeExp(subp) return fHirUtil.makeConstInt0Node()
+	it's temporarily.
+
+
+2004-07-16(Fri) 12:27:26 +0900
+
+	* BlockIfStmt.java, HirUtility.java, IfStmt.java : add makeIfStmt and use this one
+
+	* ExecStmtManager.java : add makeNewLabel with some string parameter
+
+
+2004-07-15(Thu) 10:34:26 +0900  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* some files: remove Kanji comment
+
+	* BlockIfStmtr.java: remove nested compare(cond != false)
+
+	* DeclManager.java: add flattenExpList, flattenExpList
+
+	* DeclManager.java: fix auto storage initializer(flatten expList)
+
+	* DeclManager.java: fix auto storage of Character type(buggy)
+
+	* F77Scanner.java: 'endif' can have label
+
+	* FStmt.java: add fSymTable and setSymTable and mergeSymTable
+	to treat statement function symbol table
+
+	* IntrinsicUtility.java: "sign" don't use same exp
+
+	* LabeledDoStmt.java: don't call super.process in makeInitStmt
+
+	* SubscrOrFunCallNode.java: change fTypeUtil.pushSymTable parameter to null
+
+	* TypeUtility.java: fix isFortranCharacterType(support 'char *' type)
+
+
+2004-06-03  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* EquivManager.java, CommonManager.java: support equivalence
+	variables with common block
+
+	* ProcessData.java: fix bug(data statement with array)
+
+
+2004-04-20  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* TypeUtility.java: adjustable array size to temporary value.
+
+
+2004-04-16  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* TypeUtility.java: change elemCountExp
+	if lower bound is fixnum or 1.
+
+
+2004-04-08  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* (some files) array parameter as pointer to vector type.
+	and adjust array's size specifier variable is treate as
+	parameter.
+
+
+2004-04-05  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* (some files) make HirUtility#makeSubpExp() and use instead of 
+	hir.subpNode. This method make pointer exp of subp node.
+
+
+2004-03-29  Koichi Sasada <sasada@namikilab.tuat.ac.jp>
+
+	* DeclManager.java: local variable storage class changed to VAR_AUTO
+	from VAR_STATIC.
+
+	* DeclManager.java, FirToHir.java: add Initial Part to initialize 
+	auto variables.
+
+	* HirUtility.java (makeArgAddr): fixed. if exp is VarNode, return
+	address exp of this var.
+
+	* DeclManager.java (processSave): added.
+
+	* HirUtility.java, and related files: unify assign process to
+	HirUtility#makeAssignStmt
+
+	* HirUtility.java (checkAssignStmt): fixed to pass assign
+	PTR and (int)0
+
+
+

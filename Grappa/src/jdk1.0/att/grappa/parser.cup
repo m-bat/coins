@@ -1,0 +1,486 @@
+// JavaCup specification for a graph definition output by dot
+
+import java.io.*;
+import java_cup.runtime.*;
+
+/* a list of variables used in action code during grammar translation */
+action code {:
+  DotSubgraph rootSubgraph;
+  DotGraph    dotGraph;
+  DotSubgraph thisGraph;
+  DotNode     thisNode;
+  DotEdge     thisEdge;
+  DotNode     fromNode;
+  DotNode     toNode;
+  String      portName;
+  String      toPortName;
+  String      fromPortName;
+  int         thisAttrType;
+  int         thisElemType;
+  String      graphType;
+  private int anon_id = 0;
+:};
+
+/* a method to get the final result from caller to the parser */
+parser code {:
+  private DotGraph theGraph = null;
+  private InputStream inStream;
+  private PrintStream errStream;
+  private lexer mylexer;
+  private int debugLevel = 0;
+
+  public parser (InputStream inputStream, PrintStream errorStream, DotGraph graph) {
+    super ();
+    inStream = inputStream;
+    errStream = errorStream;
+    theGraph = graph;
+    mylexer = new lexer (inputStream, errorStream);
+  }
+
+  public parser (InputStream inputStream, PrintStream errorStream) {
+    this(inputStream,errorStream,null);
+  }
+
+  public parser (InputStream inputStream) {
+    this(inputStream,null,null);
+  }
+
+  public PrintStream getErrorStream() {
+    return(errStream);
+  }
+
+  public int getDebugLevel() {
+    return(debugLevel);
+  }
+
+  public void report_error(String message, Object info) {
+    if(errStream != null) {
+      errStream.println("ERROR: parser: " + message);
+    }
+    throw new GraphParserException(message);
+  }
+
+  public void report_warning(String message, Object info) {
+    if(errStream != null) {
+      errStream.println("WARNING: parser: " + message);
+    }
+  }
+
+  public void debug_message(String message) {
+    debug_message(5, message);
+  }
+
+  public void debug_message(int level, String message) {
+    if(debugLevel < level) {
+      return;
+    }
+    if(errStream != null) {
+      errStream.println("DEBUG: parser: " + message);
+    }
+  }
+
+  public void debug_parse(int debug) throws java.lang.Exception {
+    if(debug == 0) {
+      parse();
+      return;
+    }
+
+    debugLevel = debug;
+
+    // the current action code 
+    int act;
+
+    // the symbol/stack element returned by a reduce 
+    symbol lhs_sym;
+
+    // information about production being reduced with 
+    short handle_size, lhs_sym_num;
+
+    // set up direct reference to tables to drive the parser 
+    production_tab = production_table();
+    action_tab = action_table();
+    reduce_tab = reduce_table();
+
+    debug_message(5, "# Initializing parser");
+
+    // initialize the action encapsulation object 
+    init_actions();
+
+    // do user initialization 
+    user_init();
+
+    // the current token 
+    cur_token = scan();
+
+    debug_message(5, "# Current token is #" + cur_token.sym);
+
+    // push dummy symbol with start state to get us underway 
+    stack.push(new symbol(0, start_state()));
+    tos = 0;
+
+    // continue until we are told to stop 
+    for (_done_parsing = false; !_done_parsing;) {
+      // current state is always on the top of the stack 
+
+      // look up action out of the current state with the current input 
+      act = get_action(((symbol) stack.peek()).parse_state, cur_token.sym);
+
+      // decode the action -- > 0 encodes shift 
+      if (act > 0) {
+	// shift to the encoded state by pushing it on the stack 
+	cur_token.parse_state = act - 1;
+	debug_shift(cur_token);
+	stack.push(cur_token);
+	tos++;
+
+	// advance to the next token 
+	cur_token = scan();
+	debug_message(5, "# Current token is #" + cur_token.sym);
+      }
+      // if its less than zero, then it encodes a reduce action 
+      else if (act < 0) {
+	// perform the action for the reduce 
+	lhs_sym = do_action((-act) - 1, this, stack, tos);
+
+	// look up information about the production 
+	lhs_sym_num = production_tab[(-act) - 1][0];
+	handle_size = production_tab[(-act) - 1][1];
+
+	debug_reduce((-act) - 1, lhs_sym_num, handle_size);
+
+	// pop the handle off the stack 
+	for (int i = 0; i < handle_size; i++) {
+	  stack.pop();
+	  tos--;
+	}
+
+	// look up the state to go to from the one popped back to 
+	act = get_reduce(((symbol) stack.peek()).parse_state, lhs_sym_num);
+
+	// shift to that state 
+	lhs_sym.parse_state = act;
+	stack.push(lhs_sym);
+	tos++;
+
+	debug_message(5, "# Goto state #" + act);
+      }
+      // finally if the entry is zero, we have an error 
+      else if (act == 0) {
+	// call user syntax error reporting routine 
+	syntax_error(cur_token);
+
+	// try to error recover 
+	if (!error_recovery(true)) {
+	  // if that fails give up with a fatal syntax error 
+	  unrecovered_syntax_error(cur_token);
+
+	  // just in case that wasn't fatal enough, end parse 
+	  done_parsing();
+	}
+      }
+    }
+  }
+
+  public CUP$actions getActionObject () {
+    return action_obj;
+  }
+
+  public DotGraph getGraph () {
+    return action_obj.dotGraph;
+  }
+:};
+
+/* Preliminaries to set up and use the scanner.  */
+init with {:
+  mylexer.init();
+  action_obj.dotGraph = theGraph;
+:};
+scan with {: return mylexer.next_token(debugLevel); :};
+
+/* Terminals (tokens returned by the scanner). */
+terminal token  GRAPH, STRICT, DIGRAPH, NODE, EDGE, SUBGRAPH, ND_EDGE_OP, D_EDGE_OP,
+                SEMI, COMMA, LCUR, RCUR, LBR, RBR, EQUAL, COLON;
+terminal str_token ID;
+
+/* Non terminals */
+non terminal symbol     file, attr_class, inside_attr_list,
+                        optcomma, attr_list, rec_attr_list, opt_attr_list,
+                        attr_set, stmt_list, stmt_list1, stmt, stmt1,
+                        attr_stmt, node_stmt, edge_stmt, edgeRHS,
+                        subg_stmt;
+non terminal str_token  graph_type, edgeOP, node_id;
+
+start with file;
+
+/* The grammar */
+file  ::=  graph_type ID:graph_id
+           {:
+	     if(dotGraph == null) {
+	       dotGraph = new DotGraph(graph_id.str_val, graphType);
+	     } else {
+	       dotGraph.reset(graph_id.str_val, graphType);
+	     }
+	     rootSubgraph = dotGraph.getRoot();
+             ((parser)(CUP$parser)).debug_message(1, "Creating top level graph (" + graph_id.str_val + ")");
+           :}
+           LCUR
+           {:
+	     thisGraph = rootSubgraph;
+	     thisElemType = Grappa.DOT_GRAPH;
+             ((parser)(CUP$parser)).debug_message(1, "thisGraph(" + graph_id.str_val + ")");
+           :}
+           stmt_list
+           RCUR
+           {:
+             parser thisParser = ((parser)(CUP$parser));
+             int level = 1;
+
+             if(thisParser.getErrorStream() != null && thisParser.getDebugLevel() >= level) {
+               
+               thisParser.debug_message(level, "parsed graph follows:");
+               rootSubgraph.printSubgraph(thisParser.getErrorStream());
+             }
+           :}
+           | error
+           {:
+             CUP$parser.report_error ("An error was encountered while graph parsing.", null);
+           :}
+           |  /* empty*/
+           {:
+             dotGraph = new DotGraph("empty", "digraph");
+             ((parser)(CUP$parser)).report_warning ("The graph to parse is empty.", null);
+           :}
+           ;
+
+graph_type  ::=  GRAPH
+                 {:
+                   graphType = "graph";
+                 :}
+                 | STRICT GRAPH
+                 {:
+                   graphType = "strict graph";
+                 :}
+                 | DIGRAPH
+                 {:
+                   graphType = "digraph";
+                 :}
+                 | STRICT DIGRAPH
+                 {:
+                   graphType = "strict digraph";
+                 :}
+                 ;
+
+attr_class  ::=  GRAPH
+                 {: thisAttrType = Grappa.DOT_GRAPH; :}
+                 | NODE
+                 {: thisAttrType = Grappa.DOT_NODE; :}
+                 | EDGE
+                 {: thisAttrType = Grappa.DOT_EDGE; :}
+                 ;
+
+inside_attr_list ::=  attr_set optcomma inside_attr_list
+                      | /* empty */
+                      ;
+
+optcomma ::=  /* empty */
+              |  COMMA
+              ;
+
+attr_list   ::=  LBR
+                 inside_attr_list
+                 RBR
+                 ;
+
+rec_attr_list  ::=  rec_attr_list attr_list
+                    |  /* empty */
+                    ;
+
+opt_attr_list  ::=  rec_attr_list
+                    ;
+
+attr_set ::=  ID:id_name
+              EQUAL
+              ID:id_val
+              {:
+		switch(thisElemType) {
+		case Grappa.DOT_GRAPH:
+		  switch(thisAttrType) {
+		  case Grappa.DOT_GRAPH:
+                    ((parser)(CUP$parser)).debug_message(1, "Setting graph attribute of graph (" + thisGraph.getName() + ")...");
+		    thisGraph.setGraphAttribute(new Attribute(id_name.str_val,id_val.str_val));
+		    break;
+		  case Grappa.DOT_NODE:
+                    ((parser)(CUP$parser)).debug_message(1, "Setting node attribute of graph (" + thisGraph.getName() + ")...");
+		    thisGraph.setNodeAttribute(new Attribute(id_name.str_val,id_val.str_val));
+		    break;
+		  case Grappa.DOT_EDGE:
+                    ((parser)(CUP$parser)).debug_message(1, "Setting edge attribute of graph (" + thisGraph.getName() + ")...");
+		    thisGraph.setEdgeAttribute(new Attribute(id_name.str_val,id_val.str_val));
+		    break;
+		  }
+		  break;
+		case Grappa.DOT_NODE:
+                  ((parser)(CUP$parser)).debug_message(1, "Setting attribute of node (" + thisNode.getName() + ")...");
+		  thisNode.setAttribute(new Attribute(id_name.str_val,id_val.str_val));
+		  break;
+		case Grappa.DOT_EDGE:
+                  ((parser)(CUP$parser)).debug_message(1, "Setting attribute of edge (" + thisEdge.getName() + ")...");
+		  thisEdge.setAttribute(new Attribute(id_name.str_val,id_val.str_val));
+		  break;
+		}
+                ((parser)(CUP$parser)).debug_message(1, "attribute(" + id_name.str_val + "," + id_val.str_val + ")");
+              :}
+              ;
+
+stmt_list   ::=  stmt_list1
+                 |  /* empty */
+                 ;
+
+stmt_list1  ::=  stmt
+                 |  stmt_list1 stmt
+                 ;
+
+stmt  ::=  stmt1
+           | stmt1 SEMI
+           ;
+
+stmt1 ::= node_stmt
+          | edge_stmt
+          | attr_stmt
+          | subg_stmt
+          ;
+
+attr_stmt ::= attr_class attr_list
+              | attr_set
+              ;
+
+node_id ::= ID:id_name
+            {:
+	      RESULT.str_val = id_name.str_val;
+	      portName = null;
+	    :}
+            | ID:id_name COLON ID:port_name
+            {:
+	      RESULT.str_val = id_name.str_val;
+	      portName = port_name.str_val;
+	    :}
+            ;
+
+node_stmt ::=  node_id:node_name
+               {:
+		 if((thisNode = rootSubgraph.findNodeByName(node_name.str_val)) == null) {
+                   ((parser)(CUP$parser)).debug_message(1, "Creating node in subgraph (" + thisGraph.getName() + ")...");
+		   thisNode = new DotNode(thisGraph, node_name.str_val);
+		 } else {
+                   ((parser)(CUP$parser)).debug_message(1, "Node already in subgraph (" + thisNode.getSubgraph().getName() + ")...");
+		   // thisNode.setSubgraph(thisGraph);
+		 }
+                 ((parser)(CUP$parser)).debug_message(1, "thisNode(" + thisNode.getName() + ")");
+		 thisElemType = Grappa.DOT_NODE;
+               :}
+               opt_attr_list
+               ;
+
+edge_stmt ::=  node_id:id_name
+               {:
+		 if((fromNode = rootSubgraph.findNodeByName(id_name.str_val)) == null) {
+                   ((parser)(CUP$parser)).debug_message(1, "Creating node in subgraph (" + thisGraph.getName() + ")...");
+		   fromNode = new DotNode(thisGraph, id_name.str_val);
+		 }
+                 ((parser)(CUP$parser)).debug_message(1, "fromNode(" + fromNode.getName() + ")");
+		 if(portName == null) {
+		   fromPortName = null;
+		 } else {
+		   fromPortName = new String(portName);
+		 }
+               :}
+               edgeRHS
+               {:
+		 thisElemType = Grappa.DOT_EDGE;
+               :}
+               opt_attr_list
+               | subg_stmt
+                 edgeRHS
+                 {:
+		   thisElemType = Grappa.DOT_EDGE;
+                 :}
+                 opt_attr_list
+                 ;
+
+edgeOP ::= D_EDGE_OP /* {: ((parser)(CUP$parser)).debug_message (10, "->"); :} */
+           | ND_EDGE_OP /* {: ((parser)(CUP$parser)).debug_message (10, "--"); :} */
+           ;
+
+edgeRHS ::=  edgeOP node_id:id_name
+             {:
+	       if((toNode = rootSubgraph.findNodeByName(id_name.str_val)) == null) {
+                 ((parser)(CUP$parser)).debug_message(1, "Creating node in subgraph (" + thisGraph.getName() + ")...");
+		 toNode = new DotNode(thisGraph, id_name.str_val);
+	       }
+               ((parser)(CUP$parser)).debug_message(1, "toNode(" + toNode.getName() + ")");
+	       if(portName == null) {
+		 toPortName = null;
+	       } else {
+		 toPortName = new String(portName);
+	       }
+	       thisEdge = new DotEdge(thisGraph, fromNode, fromPortName, toNode, toPortName);
+               ((parser)(CUP$parser)).debug_message(1, "Creating edge in subgraph (" + thisGraph.getName() + ")...");
+               ((parser)(CUP$parser)).debug_message(1, "thisEdge(" + thisEdge.getName() + ")");
+             :}
+             |  edgeOP node_id:id_name
+             {:
+	       if((toNode = rootSubgraph.findNodeByName(id_name.str_val)) == null) {
+		 toNode = new DotNode(thisGraph, id_name.str_val);
+	       }
+	       if(portName == null) {
+		 toPortName = null;
+	       } else {
+		 toPortName = new String(portName);
+	       }
+	       thisEdge = new DotEdge(thisGraph, fromNode, fromPortName, toNode, toPortName);
+               ((parser)(CUP$parser)).debug_message(1, "thisEdge(" + thisEdge.getName() + ")");
+	       fromNode = toNode;
+	       fromPortName = toPortName;
+             :}
+             edgeRHS
+             |  edgeOP subg_stmt
+             |  edgeOP subg_stmt
+                edgeRHS
+                ;
+
+
+subg_stmt ::= SUBGRAPH LCUR
+              {:
+		String anon = att.grappa.Grappa.ANONYMOUS_PREFIX + anon_id++;
+		thisGraph = new DotSubgraph(thisGraph, anon);
+                ((parser)(CUP$parser)).debug_message(1, "thisGraph(" + thisGraph.getName() + ")");
+		thisElemType = Grappa.DOT_GRAPH;
+              :}
+              stmt_list
+              RCUR
+              {:
+		// getSubgraph() gets the parent subgraph
+		thisGraph = thisGraph.getSubgraph();
+                ((parser)(CUP$parser)).debug_message(1, "Creating subgraph in subgraph (" + thisGraph.getName() + ")...");
+                ((parser)(CUP$parser)).debug_message(1, "thisGraph(" + thisGraph.getName() + ")");
+              :}
+              | SUBGRAPH ID:id_name LCUR
+              {:
+		thisGraph = new DotSubgraph(thisGraph, id_name.str_val);
+                ((parser)(CUP$parser)).debug_message(1, "thisGraph(" + thisGraph.getName() + ")");
+		thisElemType = Grappa.DOT_GRAPH;
+              :}
+              stmt_list
+              RCUR
+              {:
+		// getSubgraph() gets the parent subgraph
+		thisGraph = thisGraph.getSubgraph();
+                ((parser)(CUP$parser)).debug_message(1, "Creating subgraph in subgraph (" + thisGraph.getName() + ")...");
+                ((parser)(CUP$parser)).debug_message(1, "thisGraph(" + thisGraph.getName() + ")");
+              :}
+              | SUBGRAPH ID:id_name
+              {:
+		thisGraph = new DotSubgraph(thisGraph, id_name.str_val);
+                ((parser)(CUP$parser)).debug_message(1, "thisGraph(" + thisGraph.getName() + ")");
+              :}
+              ;

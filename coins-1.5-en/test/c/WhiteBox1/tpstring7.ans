@@ -1,0 +1,7 @@
+0: \\ tab:	 newLine:
+ 
+alarm: backSpace: feed: return: 
+vtab: ?:? squote:' dquote:" 
+x00: x01: x09:	 x0a:
+ 
+END 

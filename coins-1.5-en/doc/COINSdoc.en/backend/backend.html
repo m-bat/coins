@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+
+<html>
+  <head>
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>Structure and Extensions of the Backend Process</title>
+
+  </head>
+  <body>
+	<h1>11. Structure and Extensions of the Backend Process</h1>
+
+<h3 id='i-11-1'>11.1. How to call Backend Processes</h3>
+The backend processes are called from coins.driver.Driver as follows:
+<pre>
+00    /* pass 7 -- Code generation */
+01    Root root = new Root(spec, new PrintWriter(System.out, true));
+02    String targetName
+03      = coinsOptions.getArg(CommandLine.COINS_TARGET_NAME_OPTION);
+04    String targetConvention
+05      = coinsOptions.getArg(CommandLine.COINS_TARGET_CONVENTION_OPTION);
+06    trace.trace(myName, 5000, "target name = " + targetName);
+07    Module unit = Module.loadSLir(sexp, targetName, targetConvention, root);
+08    makeCSourceFromLir("new", lirToCTimings, unit, io);
+09
+10    if(spec.getCoinsOptions().isSet("snapshot"))
+11      snap.shot(unit,"Generated LIR");
+12
+13    /* SSA optimization */
+14    if (spec.getCoinsOptions().isSet(coins.ssa.OptionName.SSA_OPT)) {
+15      unit.apply(new coins.ssa.SsaDriver(unit, io, spec));
+16      /* Simple/JumpOpt again */
+17      unit.apply(coins.backend.opt.SimpleOpt.trig);
+18      unit.apply(coins.backend.opt.JumpOpt.trig);
+19    } else {
+20      unit.basicOptimization();
+21    }
+22    if (spec.getCoinsOptions().isSet("simd")) {
+23      unit.apply(new coins.simd.SimdDriver(unit, io, spec));
+24    }
+25    makeCSourceFromLir("opt", lirToCTimings, unit, io);
+26
+27    if(spec.getCoinsOptions().isSet("snapshot"))
+28      snap.shot(unit,"Optimized LIR");
+29
+30    if(spec.getCoinsOptions().isSet("snapshot"))
+31      snap.generateXml();
+32
+33    unit.generateCode(out);
+34
+35    if (trace.shouldTrace("Sym", 1)) {
+36      trace.trace("Sym", 1, "\nSym after code generation ");
+37      symRoot.symTable.printSymTableAllDetail(symRoot.symTableRoot);
+38      symRoot.symTableConst.printSymTableDetail();
+39    }
+</pre>
+The instance <tt>root</tt> made at the line 1 has the root information of the backend process. 
+It has the information of the compiler options (<tt>spec</tt>)
+and output assembly file (<tt>System.out</tt>).
+The backend processes are called at the line 7, 20, and 33 as:
+<pre>
+Module unit = Module.loadSLir(sexp, targetName, targetConvention, root);
+unit.basicOptimization();
+unit.generateCode(out);
+</pre>
+The instance <tt>unit</tt> has the internal representaion of the LIR made
+from the S-expression <tt>sexp</tt>.
+<p>
+The above three methods, loadSLir, basicOptimizations, and generateCode,
+are composed of several steps as follows:
+<dl>
+<dt>loadSLir</dt><dd>
+<pre>
+Module unit = new Module(sexp, targetName, convention, root);
+unit.apply(new String[] {
+    "IntroVirReg",
+    "EarlyRewriting",
+    "+AfterEarlyRewriting",
+    "If2Jumpc" });
+return unit;
+</pre></dd>
+<dt>basicOptimization</dt><dd>
+<pre>
+unit.apply(new String[] {
+    "+BeforeBasicOpt",
+    "SimpleOpt",
+    "JumpOpt",
+    "PreHeaders",
+    "LoopInversion",
+    "+AfterBasicOpt" });
+</pre></dd>
+<dt>generateCode</dt><dd>
+<pre>
+unit.apply(new String[] {
+    "+BeforeCodeGeneration",
+    "LateRewriting",
+    "+AfterLateRewriting",
+    "ToMachineCode",
+    "+AfterToMachineCode",
+    "ConvToAsm"  });
+</pre></dd>
+</dl>
+For example, by the first
+<pre>
+unit.apply("IntroVirReg");
+</pre>
+the method <tt>doIt</tt> in the class <tt>coins.backend.opt.IntroVirReg</tt> is executed,
+because the <tt>Module</tt> constructor has registered the transformer 
+<tt>IntroVirReg.trig</tt> with the name
+<tt>"IntroVirReg"</tt> to the instance <tt>root</tt> by the following statement:
+<pre>
+root.registerTransformer(IntroVirReg.trig);
+</pre>
+By the execution of <tt>doIt</tt> of <tt>coins.backend.opt.IntroVirReg</tt>,
+frame variables are named as virtual registers.
+<p>
+Furthermore, the execution of 
+<pre>
+unit.apply("ToMachineCode");
+</pre>
+in <tt>generateCode</tt> causes the excecution of the instance method 
+<tt>toMachineCode</tt> of the class
+<tt>Function</tt>, and  the <tt>toMachineCode</tt> method executes the following steps:
+<pre>
+    apply(LiveRange.trig);   // live range analysis
+    apply(JumpOpt.trig);   // jump optimization
+    apply(JumpCanon.trig);   // canonicalize JUMPC instructions
+    apply("+BeforeFirstInstSel");   // call Hook point
+    apply(module.targetMachine.instSelTrig);   // instruction selection
+    apply("+AfterFirstInstSel");  // call Hook point
+    int count = 0;
+    for (;;) {
+      if (count++ &gt;= REGALOLIMIT)
+        throw new CantHappenException("Looks like an infinite loop during Register allocation");
+      if (apply(RegisterAllocation.trig))  // register allocation
+        break;          //  if success
+      apply("+BeforeSecondInstSel");  // call Hook point
+      apply(module.targetMachine.instSelTrig);   // instruction selection again
+      apply("+AfterSecondInstSel");  // call Hook point
+    }
+    postProcess(); // eliminate redundant jumps
+</pre>
+The argument string with prefixed "<tt>+</tt>" in the above calls of the <tt>apply</tt> method
+means that it is a hook name.
+Usually this call does nothing.
+But, if the method
+<pre>
+ Root#addHook(String, Transformer)
+</pre>
+has been called with a hook name and a Transformer object, the <tt>doIt</tt> method 
+of the Transformer object is executed when the <tt>apply</tt> method is called with the hook name.
+
+<h3 id='i-11-2'>11.2. How to Add New Process to Backend</h3>
+
+By using the previous hooking features a new process can be added to the backend
+without modifing the backend.
+The class for a new process should be in the following form:
+<pre><tt>class NewProcess {
+  class NewTrigger  implements LocalTransformer{ // or GlobalTransformer
+    void doIt(...){...}
+    ...
+  }
+  static void attach(CompileSpecification spec, Root root){
+//  if (spec.getCoinsOptions().isSet("newprocess")) {
+      root.addHook("+<i>xxx</i>", new NewTrigger());
+// }
+  }
+}</tt></pre>
+where <tt>"+<i>xxx</i>"</tt> is a hook name. LocalTransformer is applied to each Function instance,
+and GlobalTransformer is applied to a Module instance.
+<p>
+When the compiler option 
+<pre><tt>-coins:attach=NewProcess</tt></pre>
+is specified, the <tt>NewProcess.attach</tt> method is called at the entry of the backend process.
+And the <tt>doIt</tt> method of the <tt>NewTrigger</tt> object is executed at 
+the hook point <tt>"+<i>xxx</i>"</tt>.<br>
+If the commented-out if-statement is effective, this execution occurs only when the option 
+<pre><tt>-coins:newprocess</tt></pre>
+is specified.
+<p>
+
+<h4 id='i-11-2-1'>11.2.1. Example 1: Instruction Scheduler</h4>
+
+The instruction scheduler is called when the following compiler options are specified:
+<pre>
+<tt>-coins:schedule,attach=coins.backend.sched.Schedule</tt>
+</pre>
+or
+<pre>
+<tt>-coins:attach=coins.backend.sched.Schedule</tt>
+</pre>
+The <tt>attach</tt> method of coins.backend.sched.Schedule is defined as follows:
+<pre>
+<tt>public static void attach(CompileSpecification spec, Root root) {
+	root.addHook("+AfterToMachineCode", after);
+    if (spec.getCoinsOptions().isSet("schedule")) {
+      root.addHook("+AfterFirstInstSel", before);
+    }
+  }</tt>
+</pre>
+Therefore, if the "<tt>schedule</tt>" option is specified,
+the instruction scheduler is called twice by two triggers, one is the <tt>before</tt> trigger
+at the "+AfterFirstInstSel" hook point, and the other is the <tt>after</tt> trigger
+at the "+AfterToMachineCode" hook point. 
+The former point is before the register allocation, and the latter 
+is after the regisiter allocation.
+If the "<tt>schedule</tt>" option is not specified, the instruction sheduler is called only once
+after the regisiter allocation. 
+<p>
+The two triggers are almost the same except that the latter does the "nop"-instruction
+elimination if the target CPU has delayed branch instructions.
+They are written machine independently, and can be applied to any target machine.
+<p>
+See Fig.12-2 in 
+<a href='../perf/perf-frame.html' target="_top">12. Performance of COINS compilers</a> 
+for some resultsof this optimization.
+
+<h4 id='i-11-2-2'>11.2.2. Example 2: Software Pipelining</h4>
+
+<p>Software pipelining is an optimization that can improve the 
+loop-executing performance by taking advantage of the 
+instruction-level parallelism. However, the conventional software
+pipelining method has several problems. It can only be applied to
+counter controled loops. In some cases the loop control instruction 
+should be modified. It can not be applied if the number of iterations
+is smaller than the number of stages of pipelining.</p>
+<p>Our method solves all these problems. 
+Our method first schedules the loop control instruction and its dependent 
+instructions, and then schedules the remaining 
+instructions for pipelining.
+</p>
+
+The software pipelining module is called when the following compiler 
+options are specified:
+<pre>
+<tt>-coins:schedule,pipelining,attach=coins.backend.sched.Schedule</tt>
+</pre>
+<p>For example, the following source program</p> 
+<pre>
+	for (i = 0; i &lt; N; i++)
+		for (j = 0; j &lt; M; j++) {
+			s = 0;
+			for (k = 0; k &lt; L; k++) 
+				s += a[i][k] * b[k][j];
+			c[i][j] = s;
+		}
+</pre>
+<p>is software pipelined as follows.</p>
+
+<p>By specifying the SSA-optimizations as</p>
+<pre>
+ssa-opt=prun/divex/cse/cstp/hli/osr/hli/cstp/cpyp/preqp/cstp/rpe/dce/srd3
+</pre>
+and by specifying the target machine as SPARC, the generated LIR codes for 
+the above program looks like (in assembly form)
+<pre>
+.L4:
+	ld	[%i5],%f1       ; %f1 = a[i][k]
+	ld	[%i4],%f0	; %f0 = b[k][j]
+	fmuls	%f1,%f0,%f0	; %f0 = %f1*%f0 = a[i][k]*b[k][j]
+	fadds	%f2,%f0,%f2	; %f2 = s = %f2+%f0 = s + a[i][k]*b[k][j]
+	add	%i4,2000,%i4	; %i4 = &amp;b[k][j] + 2000 = &amp;b[k+1][j]
+	add	%i5,4,%i5	; %i5 = &amp;a[i][k] + 4 = &amp;a[i][k+1] 
+	cmp	%i4,%o2      	; &amp;b[k+1][j] : &amp;b[L][j] 
+	bl	.L4		; k+1 &lt; L
+	nop
+</pre>
+The result of software pipelining for this LIR is as follows:
+<pre>
+.L4:	ld	[%i4],%f0
+	add	%i4,2000,%i4                               ; P
+	cmp	%i4,%o2                                    ; R
+	bge	.L7                                        ; O
+	ld	[%i5],%f1                                  ; L
+	fmuls   %f1,%f0,%f3                                ; O		
+	add	%i5,4,%i5	                           ; G
+				 ld    [%i4],%f0           ; U
+				 add   %i4,2000,%i4        ; E
+				 cmp   %i4,%o2
+				 bge   .L6
+				 ld    [%i5],%f1
+----------------------------------------------
+.L5:	fadds  %f2,%f3,%f2
+				 fmuls  %f1,%f0,%f3                            ; K
+				 add    %i5,4,%i5                              ; E
+							   ld	 [%i4],%f0     ; R
+							   add  %i4,2000,%i4   ; N
+							   cmp  %i4,%o2        ; E
+							   bl   .L5            ; L
+							   ld   [%i5],%f1
+----------------------------------------------
+.L6:				 fadds %f2,%f3,%f2                             ; EPIL-
+.L7:							   fmuls %f1,%f0,%f3   ; OGUE
+							   add   %i5,4,%i5
+							   fadds %f2,%f3,%f2
+</pre>
+In this example, the loop control instruction and its dependent 
+instructions are scheduled at first.
+<pre>
+	ld	[%i4],%f0     ; stage 0
+	add	%i4,2000,%i4  ; stage 0
+	cmp	%i4,%o2       ; stage 0
+	bl	.L4           ; stage 0
+	nop	              ; stage 0
+</pre>
+<p>Then, by scheduling the remaining instructions for pipelining
+the kernel loop becomes</p>
+<pre>
+	fadds	%f2,%f0,%f2     ; stage 2
+	fmuls	%f1,%f0,%f0     ; stage 1
+	add	%i5,4,%i5       ; stage 1
+	ld	[%i5],%f1       ; stage 0
+	ld	[%i4],%f0       ; stage 0
+	add	%i4,2000,%i4    ; stage 0
+	cmp	%i4,%o2         ; stage 0
+	bl	.L4             ; stage 0
+	nop	                ; stage 0
+</pre>
+<p>In our method, all "stage 0" instructions, including the branch instruction,
+are placed in the prologue part.</p>
+Finally, after the phase of regster allocation, the <tt>nop</tt> instruction is
+replaced with the "<tt>ld  [%i5],%f1</tt>" instruction by instruction
+scheduling.
+
+<h4 id='i-11-2-3'>11.2.3. Example 3: Register Promotion</h4>
+
+The process of register promotion is called when the following compiler options are specified:
+<pre>
+<tt>-coins:regpromote,attach=RegPromote</tt>
+</pre>
+The class <tt>RegPromote</tt> is in the package <tt>coins.backend.contrib</tt>.
+The name of this special package  can be omitted.
+<p>
+The register promotion is the process to promote static variables to registers
+within some loops.
+<p>
+
+The compiler option
+<pre>
+<tt>-coins:regpromote-ex</tt>
+</pre>
+invokes the process of extended register promotion that 
+promotes more variables to registers based on pointer analysis.
+<p>
+The register promotion is  effective especially for such a program as:
+<pre>
+int candidat, quotient, remaindr, index, nth, primenum, loopend ;
+int primeNumbers[SIZE] ;
+
+void getPrime(int primevec[SIZE], int count)
+{
+ primevec[0] = 2 ;
+ nth = 1 ;
+ candidat = 3 ;
+ while (nth&lt;count) {
+   remaindr = 1 ;
+   index = 0 ;
+   loopend = 0 ;
+   while(loopend==0) {
+     primenum = primevec[index] ;
+     quotient = candidat / primenum ;
+     remaindr = candidat - quotient*primenum ;
+     if (remaindr==0)
+       loopend = 1 ;
+     if (quotient*quotient&lt;candidat)
+       loopend = 1 ;
+     index = index + 1 ;
+     if (index&gt;=nth)
+       loopend = 1 ;
+   }
+   if (remaindr != 0) {
+     primevec[nth] = candidat ;
+     nth = nth + 1 ;
+   }
+   candidat = candidat + 2 ;
+ }
+ nth   = 0 ;
+ while (nth&lt;count) {
+/*   print(primevec[nth]) ;
+*/
+   nth   = nth + 1 ;
+ }
+ return;
+}
+</pre>
+This program is the prime program in the Fig.12-2 of the chapter
+<a href='../perf/perf-frame.html' target="_top">12. Performance of COINS compilers</a>.
+This register promotion produces almost all the performance gain of the prime program.
+
+  </body>
+</html>

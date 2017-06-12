@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>How to use C Compiler</title>
+
+  </head>
+  <body>
+	<h1>3. How to use C Compiler</h1>
+    
+<h3 id='i-3-1'>3.1. How to Compile this Compiler</h3>    
+
+    The COINS infrastructure includes the
+    class coins.driver.Driver that serves as the driver of a
+    C compiler. The target machine architecture can be selected from the
+following list:
+<ul>
+<li>sparc ...... SUN SPARC (mult/div is a subroutine)</li>
+<li>sparc-v8 ... SUN SPARC (mult/div is a machine instruction)</li>
+<li>x86 ........ Intel i386</li>
+<li>x86_64 ........ Intel 64 (comform to AMD64 ABI Draft 0.98) (from coins-1.4.3)</li>
+<li>arm ........ ARM</li>
+<li>mips ....... MIPS</li>
+<li>sh4 ........ Hitachi SH-4</li>
+<li>ppc ........ IBM PowerPC</li>
+<li>alpha ... Alpha</li>
+<li>thumb ... Thumb (16 bit ARM architecture)</li>
+<li>mb ...... Xilinx MicroBlaze</li>
+</ul>
+<p>
+Note: (Status at November 2006)<br>
+All of above target options have been tested by using test programs
+under the directory test/c and succeeded to execute correctly
+except for a few number of special cases. As for the sparc and x86,
+the compiler passed the test by comprehensive test program set
+composed of 8000 programs and successfully executed the SPEC
+CPU 2000 benchmark programs. (When -O3 option is specified,
+some programs in SPEC CPU 2000 fails yet.)
+When target=arm is specified, a few programs in SPEC CPU 2000
+can be executed successfully but others failed because of
+restrictions from test environment and remaining defects
+in code generation. As for other targets (mb, mips, ppc,
+sh4, thumb, alpha), test by SPEC CPU2000 is not yet tried.</p>
+<p>
+The compilers for sparc and x86 support the "long long" type,
+while the others do not support it.</p>
+<p>
+    All the classes of COINS are precompiled into the directory 'classes', so you can
+    try to compile your C programs immediately.</p>
+    If you wish to compile the compiler yourself, do the following:
+<ul>
+<li>    Download the COINS infrastructure.</li>
+<li>    Expand the downloaded file if it is an archive.</li>
+<li>    Change directory (cd) to the top directory of COINS.</li>
+<li>    Compile the compiler by a command
+<pre>
+      javac -classpath classes -d classes -sourcepath src/coins/driver/Driver.java
+</pre>
+    where '/' should be replaced by the path separator of your platform.
+    You actually can place your class files anywhere.<br>
+    (Note: If you happened to have modified the default suffix database file
+    (located at classes/coins/driver/suffixes in the distribution), please make
+    sure to copy it to where you place your class files. For more information
+    on the suffix database file, see 
+"2.4.8 Suffix Rules" in 
+<a href="../driver/driver-frame.html" target="_top">2. How to use the Compiler Driver</a>.)</li>
+
+<li>    Alternatively, Ant may be used to do some smart building. See the section
+    'Build/Rebuild with Ant' in README.txt.    </li>
+</ul>
+     
+<h3 id='i-3-2'>3.2. How to Execute the Compiler</h3>
+ 
+<h4 id='i-3-2-1'>3.2.1. Short Descriptions</h4>
+
+   Follow the following procedures:<p>
+   On UNIX running a sh-compatible shell, type
+<pre>
+     export CLASSPATH=$HOME/Java/coins-1.x.y/classes
+            ## Change according to your environment.
+</pre>
+   or for Windows
+<pre>
+     SET CLASSPATH=c:\home\Java\coins-1.x.y\classes
+            ## Change according to your environment.
+</pre>
+  Then on either platform type
+<pre>
+     java coins.driver.Driver -S xxx.c
+</pre>
+   or
+<pre>
+     java -classpath ./classes coins.driver.Driver -S xxx.c
+</pre>
+  To specify the target machine add the option "-b <i>arch</i>"
+to the above command, where <i>arch</i> is sparc, sparc-v8, x86,
+arm, mips, sh4, or ppc. The default is "sparc".<p>
+
+   Debug information will be printed if the following command is used.
+<pre>
+     java coins.driver.Driver -S -coins:trace=Sym.1/HIR.1/back xxx.c
+</pre>
+   or
+<pre>
+     java -classpath ./classes coins.driver.Driver -S  -coins:trace=Sym.1/HIR.1/back xxx.c
+</pre>
+     (if class files are under 'classes')
+
+   where, "trace= ..." specifies debug control and the number "1" in "Sym.1", 
+   etc.  is a trace level. "Sym" in "Sym.1" is a trace category.  Large
+   trace categories number (e.g. 500, 10000) may produce a huge amount
+   of debug print. <br>
+
+   Available trace categories are described in 
+"2.3.4. -coins Options" of 
+<a href="../driver/driver-frame.html" target="_top">2. How to use the Compiler Driver</a>.<p>
+
+
+   Object code (xxx.s)  will be generated on the same directory
+   as that of source program xxx.c. It can be executed by
+<pre>
+     cc xxx.s; ./a.out or ./a.exe
+</pre>
+   For more information on C compiler driver coins.driver.Driver, see
+  <a href="../driver/driver-frame.html" target="_top">2. How to use the Compiler Driver</a>.
+
+<h4 id='i-3-2-2'>3.2.2. Required Software</h4>
+
+  COINS C compiler driver requires following commands to execute compilation:
+<ul>
+<li>cpp</li>
+  <li>  gas</li>
+  <li>  gcc (as a linker)</li>
+</ul>
+  Prior to compilation, make sure that you can invoke these commands
+  (i.e., include them in your execution path). If you don't have
+  these commands but have alternatives (e.g., 'as' for 'gas'),
+  the driver provides a way to specify alternative commands.<p>
+  For more detail, see
+<ul>
+<li>     -coins:preprocessor/assembler/linker</li>
+</ul>
+
+  options described in "2.3.4. -coins Options" of
+<a href="../driver/driver-frame.html" target="_top">2. How to use the Compiler Driver</a>.
+
+<h3 id='i-3-3'>3.3. Source language</h3>
+<h4 id='i-3-3-1'>3.3.1. C language</h4>
+  This compiler supports language facilities specified in
+<ul>
+ <li>   ISO/IEC 9899:1990  Programming Language C</li>
+</ul>
+  except for following features:
+
+<ul>
+ <li>    preprocessing</li>
+ <li>    library</li>
+ <li>    long double (the size is same as double)</li>
+ <li>    wchar_t and L"xx" string</li>
+</ul>
+  As for preprocessor and library, it is recommended to use 
+  those of gcc.
+
+<h4 id='i-3-3-2'>3.3.2. "asm" statement</h4>
+The syntax of the asm-statement is the following:
+<pre>
+  asm("#param descriptor-list\n"
+      "#clobber destroyed registers...\n"
+      "instruction 1\n"
+             ...
+      "instruction n\n",
+      input arguments(any expression)...);
+
+ descriptor-list:
+    descriptor
+    descriptor-list , descriptor
+ 
+ descriptor:
+    %register
+    %register-class-name         /* input parameter, actual parameter is rvalue */
+    w%register
+    w%register-class-name        /* output parameter, actual parameter is lvalue */
+    m%register
+    m%register-class-name        /* input and output parameter, actual parameter is lvalue */
+    s          /* actual parameter is static address */
+ 
+ register:
+    register-name
+ 
+ register-class-name:
+    register-class-name defined in the TMD file.
+</pre>
+<p><b>Example 1:</b></p>
+ asm-statement for "z = x + y;"
+<pre> asm("#param %I32,%I32,w%I32\n"
+     " mov %1,%3\n"
+     " add %2,%3\n",
+     x, y, z);
+</pre>
+<p><b>example 2:</b></p> 
+asm-statement for "x++;"
+<pre> asm("#param m%I32\n"
+     "  add 1,%1\n",
+     x);
+</pre>
+
+<h5 id='i-3-3-2-1'>3.3.2.1. HIR of "asm" statement</h5>
+The HIR form of an asm-statement is the following:
+<pre> * AsmStmt    -&gt;        //
+ *    ( asmCode attr    // Asm statement.
+ *      StringConstNode_ @ //String constant representing formal parameters
+ *                       // and sequence of assembly language instructions.
+ *      HirList @ )        // List of l-value expressions (variable nodes,
+ *                      // pointer expressions, etc.) and arithmetic
+ *                      // expressions representing actual parameters.
+</pre>
+<p><b>Example 1:</b></p>
+source program:
+<pre>int x, y, z;
+int main()
+{
+  int a, b, c;
+  a = 1;
+  b = a + 2;
+  z = -1;
+  asm("#param %I32, %I32, w%I32\n"
+      "mov %1,%3\n"
+      "add %2,%3\n",
+      a, b+1, z);
+  printf("a=%d b=%d z=%d \n", a, b, z);
+  return 0;
+}
+</pre>
+HIR for the above program is the following:
+<pre>
+ (prog     1
+  &lt;null 0 void&gt;
+  &lt;nullNode 2&gt;
+  (subpDef  3 void
+   &lt;subp     4 &lt;SUBP &lt;( )&gt; false false int&gt; main&gt;
+  &lt;null 0 void&gt;
+   (labeldSt 5 void
+    (list 6
+     &lt;labelDef 7 _lab1&gt;)
+    (block    8 void line 2
+     (assign   9 int line 5
+      &lt;var      10 int a&gt;
+      &lt;const    11 int 1&gt;)
+     (assign   12 int line 6
+      &lt;var      13 int b&gt;
+      (add      14 int
+       &lt;var      15 int a&gt;
+       &lt;const    16 int 2&gt;))
+     (assign   17 int line 7
+      &lt;var      18 int z&gt;
+      (neg      19 int
+       &lt;const    20 int 1&gt;))
+     (asm      21 void line 8
+      &lt;const    22 &lt;VECT 46 0 char&gt; "#param %I32, %I32, w%I32\nmov %1,%3\nadd %2,%3\n"&gt;
+      (list 23
+       &lt;var      24 int a&gt;
+       (add      25 int
+        &lt;var      26 int b&gt;
+        &lt;const    27 int 1&gt;)
+       &lt;var      28 int z&gt;))
+     (expStmt  29 int line 12
+      (call     30 int
+       (addr     31 &lt;PTR &lt;SUBP &lt;( )&gt; false true int&gt;&gt;
+        &lt;subp     32 &lt;SUBP &lt;( )&gt; false true int&gt; printf&gt;)
+       (list 33
+        (decay    34 &lt;PTR char&gt;
+         &lt;const    35 &lt;VECT 17 0 char&gt; "a=%d b=%d z=%d n"&gt;)
+        &lt;var      36 int a&gt;
+        &lt;var      37 int b&gt;
+        &lt;var      38 int z&gt;)))
+     (return   39 int line 13
+      &lt;const    40 int 0&gt;)))))
+</pre>
+<p><b>Example 2:</b></p>
+asm-statement:
+<pre>  asm("#param %I32, m%I32\n"
+      "add %1,%2\n",
+      i, j);  /* j = j + i; */
+</pre>
+HIR for the above statement is the following:
+<pre>     (asm      17 void line 11
+      &lt;const    18 &lt;VECT 30 0 char&gt; "#param %I32, m%I32\nadd %1,%2\n"&gt;
+      (list 19
+       &lt;var      20 int i&gt;
+       &lt;var      21 int j&gt;))
+</pre>
+
+<h5 id='i-3-3-2-2'>3.3.2.2. LIR of "asm" statement</h5>
+
+The syntax of LIR generated from an asm-statement is the following:
+<pre>(ASM &lt;body-string&gt; &lt;in-list&gt; &lt;out-list&gt; &lt;inout-list&gt;
+     &amp;argtype &lt;arg-list&gt;
+     &amp;clobber &lt;clobber-list&gt;)
+</pre>
+
+<p><b>Example 1:</b></p>
+asm-statement:
+<pre>asm("#param w%I32,%I32,%I32\n"
+    "#clobber %eax,%ebx\n"     /* unrealistic example */
+    " mov %2,%1\n"
+    " add %3,%1\n",
+    z, x+1, y);
+</pre>
+LIR generated from the above statement is the following:
+<pre>(ASM " mov %1,%3\n add %2,%3\n"  ; numbers are changed
+     ((ADD I32 (MEM I32 (FRAME I32 "x") (INTCONST I32 1)) (MEM I32 (FRAME I32 "y")))   ;in-list
+     ((MEM I32 (FRAME I32 "z")))   ;out-list
+     ()	      ;inout-list
+     &amp;argtype (%I32 %I32 w%I32)
+     &amp;clobber (%eax %ebx))  
+</pre>
+This is further transformed and becomes finally to:
+<pre>(SET I32 (REG I32 ".t1%") (ADD I32 (REG I32 "x%") (INTCONST I32 1)))
+(PARALLEL
+   (ASM " mov %1,%3\n add %2,%3\n"	;body
+        ((REG I32 ".t1%") (REG I32 "y%"))	;in-list
+        ((REG I32 "z%"))			;out-list
+        () )				;inout-list
+        (CLOBBER (REG I32 "%eax") (REG I32 "%ebx")))
+</pre>
+<p><b>Example 2:</b></p>
+source program:
+<pre> int vec[10] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+ 
+ int foo(int i) {
+   int autov = i;
+   int x;
+
+   /* x = vec[i] + autov; */
+   asm("#param %I32,s,%I32,w%I32\n"
+       " movl %2(,%3,4),%4\n"
+       " addl (%1),%4\n",
+       &amp;autov, vec, i, x);
+   return x;
+ }
+</pre>
+LIR generated from the above asm-statement is the following:
+<pre> (ASM " mov %2(,%3,4),%4\n add %1(%%ebp),%4\n"
+      ((FRAME I32 "autov") (STATIC I32 "vec") (REG I32 "i%"))
+      ((REG I32 "x%"))
+      ()
+      &amp;argtype (a s %I32 w%I32))
+
+  (ASM " movl %2(,%3,4),%4\n addl (%1),%4\n"
+      ((FRAME I32 "autov.5") (STATIC I32 "vec") (MEM I32 (FRAME I32 "i.4")))
+      ((MEM I32 (FRAME I32 "x.6"))) ()
+       &amp;argtype (%I32 s %I32 %I32))
+</pre>
+The final assembly form is:
+<pre>  ;i:%ebx, x:%eax, &amp;autov:%edx
+  leal -4(%ebp),%edx
+  movl vec(,%ecx,4),%eax
+  addl (%edx),%eax
+</pre>
+
+<h3 id='i-3-4'>3.4. Automatic Test of the  Compiler</h3>
+
+   Many test programs are prepared under test/c directory.<br>
+
+   They are arranged for automatic test by the shell script
+   "testdriver.sh" that is placed under the test/c directory.<br>
+
+   Preparation procedure for the automatic test is explained
+   in test/c/testprepare.txt (in Japanese).<br>
+
+  </body>
+</html>

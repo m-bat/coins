@@ -1,0 +1,21 @@
+c1 1 ca1 10 ca2 200 
+wc1 4 wca1 40 wca2 800 
+st1 4 st2 4 st3 4 
+*st1 1 *st2 1 *st3 1 
+wst1 4 wst2 4 wst3 4 
+*wst1 4 *wst2 4 *wst3 4 
+sizeof null 1 abc 4 文字 5 
+sizeofwchar_t null 4 abc 16 文字 20 
+si1 2 sia1 6 sia2 24 sia3 120 
+ix1 4 ixa1 12 ixa2 48 ixa3 240 
+ui1 4 sia1 12 uia2 48 uia3 240 
+iya1 12 iya2 24 
+lx1 4 lxa1 12 lxa2 48 lxa3 240 
+dx1 8 dxa1 24 dxa2 96 dxa3 480 
+func1 pi1 4 pa1 4 pa2 4 pa3 4 pa4 4 
+int 4 point 8 triangle 24 
+line 16 figure 24 
+pt1 8 pt2 8 tri1 24  
+ln1 16 ln2 16 fig1 24  
+mix1 16 align1 16 
+func2 pp1 4 pp2 4 *pp1 12 *pp2 48 

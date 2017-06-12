@@ -1,0 +1,14 @@
+JAVA_PACKAGES='
+	java.awt 
+	java.awt.event 
+	java.awt.image 
+	java.io 
+	java.lang 
+	java.math 
+	java.net 
+	java.util 
+'
+/bin/rm -f $PWD/../docs/*.html
+javadoc -version -author -sourcepath $PWD/$JDK:$JAVAHOME/src:$JAVACUP -d $PWD/../docs $JAVA_PACKAGES att.grappa java_cup.runtime
+#javadoc -sourcepath $PWD/$JDK:$JAVAHOME/src:$JAVACUP -d $PWD/../docs att.grappa 
+exit 0

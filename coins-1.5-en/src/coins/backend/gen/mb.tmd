@@ -1,0 +1,1390 @@
+;; -----------------------------------------------------------------------
+;;%   Copyright (C) 2007 Association for the COINS Compiler Infrastructure 
+;;%       (Read COPYING for detailed information.)             
+;;------------------------------------------------------------------------ 
+;;-*-Lisp-*-
+;;;;;; Target machine description for Xilinx MicroBlaze.
+; Ver.0.06
+; $Id: mb.tmd,v 1.7 2008/05/10 07:09:36 tan Exp $
+
+;;; Reference Xilinx UG081 (v5.3)
+
+(include "common.tmd")
+(use-convuf-fu)
+
+;;;;;; common macros
+(defmacro (xcat @a @b) @a@b)
+(defmacro (cat a b) (xcat a b))
+
+(defmacro (xcat3 @a @b @c) @a@b@c)
+(defmacro (cat3 a b c) (xcat3 a b c))
+
+(defmacro (rep n m)
+  (@if (@eq n 0) () ())
+  (@if (@eq n 1) (m) ())
+  (@if (@eq n 2) (m m) ())
+  (@if (@eq n 3) (m m m) ())
+  (@if (@eq n 4) (m m m m) ())
+  (@if (@eq n 5) (m m m m m) ())
+  (@if (@eq n 6) (m m m m m m) ())
+  (@if (@eq n 7) (m m m m m m m) ())
+  (@if (@eq n 8) (m m m m m m m m) ())
+  (@if (@eq n 9) (m (rep 8 m)) ())
+  (@if (@eq n 10) (m m (rep 8 m)) ())
+  (@if (@eq n 11) (m m m (rep 8 m)) ())
+  (@if (@eq n 12) (m m m m (rep 8 m)) ())
+  (@if (@eq n 13) (m m m m m (rep 8 m)) ())
+  (@if (@eq n 14) (m m m m m m (rep 8 m)) ())
+  (@if (@eq n 15) (m m m m m m m (rep 8 m)) ())
+  (@if (@eq n 16) (m m m m m m m m (rep 8 m)) ())
+  (@if (@eq n 17) (m (rep 16 m)) ())
+  (@if (@eq n 18) (m m (rep 16 m)) ())
+  (@if (@eq n 19) (m m m (rep 16 m)) ())
+  (@if (@eq n 20) (m m m m (rep 16 m)) ())
+  (@if (@eq n 21) (m m m m m (rep 16 m)) ())
+  (@if (@eq n 22) (m m m m m m (rep 16 m)) ())
+  (@if (@eq n 23) (m m m m m m m (rep 16 m)) ())
+  (@if (@eq n 24) (m m m m m m m m (rep 16 m)) ())
+  (@if (@eq n 25) (m (rep 24 m)) ())
+  (@if (@eq n 26) (m m (rep 24 m)) ())
+  (@if (@eq n 27) (m m m (rep 24 m)) ())
+  (@if (@eq n 28) (m m m m (rep 24 m)) ())
+  (@if (@eq n 29) (m m m m m (rep 24 m)) ())
+  (@if (@eq n 30) (m m m m m m (rep 24 m)) ())
+  (@if (@eq n 31) (m m m m m m m (rep 24 m)) ())
+  (@if (@eq n 32) (m m m m m m m m (rep 24 m)) ())
+)
+
+;;;;;; machine dependent macros
+;; generate memw, memh, memb, memf, memwi, memhi, membi, memfi
+(defmacro (memX t I)
+  (@if (@eq I i)
+       ((cat mem (@if (@eq t I32) (wi)
+		      ((@if (@eq t I16) (hi)
+			    ((@if (@eq t I8) (bi)
+				  ((@if (@eq t F32) (fi) (bug))))))))))
+       ((cat mem (@if (@eq t I32) (w)
+		      ((@if (@eq t I16) (h)
+			    ((@if (@eq t I8) (b)
+				  ((@if (@eq t F32) (f) (bug))))))))))
+       ))
+
+;; generate regw, regh, regb, regf
+(defmacro (regX t)
+  (cat reg (@if (@eq t I32) (w)
+		((@if (@eq t I16) (h)
+		      ((@if (@eq t I8) (b)
+			    ((@if (@eq t F32) (f) (bug)))))))) ))
+
+;; generate xregw, xregh, xregb, xregf
+(defmacro (xregX t)
+  (cat xreg (@if (@eq t I32) (w)
+		((@if (@eq t I16) (h)
+		      ((@if (@eq t I8) (b)
+			    ((@if (@eq t F32) (f) (bug)))))))) ))
+
+;; generate base, basei
+(defmacro (isuffix base ir) 
+  (@if (@eq ir i) ((cat base ir)) (base)))
+
+;; generate base, basea
+(defmacro (asuffix base ia) 
+  (@if (@eq ia a) ((cat base ia)) (base)))
+
+;(defmacro (suffix base i)
+;  (suffix_ base i))
+
+
+;;;;;; Machine types
+(def *type-address* I32)
+(def *type-bool* I32)
+
+;;;;;; Tree Rewriteing
+;;; target independent rewrite.
+;; JUMPN
+(defrewrite (JUMPN)
+  (to (eval "rewriteJumpn($0, pre)"))
+  (phase late) )
+
+;; Aggregate copy
+(defrewrite (SET)
+  (cond "Type.tag($0.type) == Type.AGGREGATE")
+  (to (eval "rewriteAggregateCopy($0, pre)"))
+  (phase late))
+
+;; Rewrite ASM
+(defrewrite (ASM)
+  (to (norescan (eval "rewriteAsm($0, pre, post)")))
+  (phase late))
+
+;; Prologue
+(defrewrite (PROLOGUE)
+  (to (norescan (eval "rewritePrologue($0, post)")))
+  (phase late))
+
+;; Epilogue
+(defrewrite (EPILOGUE)
+ (to (norescan (eval "rewriteEpilogue($0, pre)")))
+  (phase late))
+
+;;; MicroBlaze specific rewrite
+;; rewrite implict runtime library call
+;; must be rewritten before rewrite-call.
+
+;; soft mul/div/mod
+(foreach (@op @func @n @cond) 
+  ( (MUL mulsi3 2 "rewriteMul($2)") (MODS modsi3 2 "noUseMul || noUseDiv")
+    (MODU umodsi3 2 "noUseMul || noUseDiv") (DIVS divsi3 2 "noUseDiv")
+    (DIVU udivsi3 2 "noUseDiv") )
+  (defrewrite (@op _ _ _)
+    (cond @cond)
+    (to (norescan
+	 (eval "rewriteRtlCall($0, pre, \"__@func\", @n)")))
+    (phase early))
+)
+
+;; conversion between int and float
+(foreach (@op @func @n) 
+ ( (CONVFS fixsfsi 1) (CONVSF floatsisf 1) )
+  (defrewrite (@op)
+      (to (norescan
+          (eval "rewriteRtlCall($0, pre, \"__@func\", @n)")))
+      (phase early))
+)
+
+;; rewrite for soft-float (four rules)
+(foreach (@op @func @n) 
+ ( (ADD addsf3 2) (SUB subsf3 2) (MUL mulsf3 2) (DIVS divsf3 2) )
+  (defrewrite (@op)
+    (cond "softFloat && Type.tag($0.type) == Type.FLOAT")
+    (to (norescan
+	 (eval "rewriteRtlCall($0, pre, \"__@func\", @n)")))
+    (phase early))
+)
+
+;; rewrite floating comparison to soft-float + interger comparison
+(foreach (@op @func @n) 
+  ( (TSTNE nesf2 2) (TSTEQ eqsf2 2) (TSTLES lesf2 2) (TSTLTS ltsf2 2)
+   (TSTGES gesf2 2) (TSTGTS gtsf2 2) )
+  (defrewrite (JUMPC (@op))
+    (cond "softFloat")
+    (to (norescan
+	 (eval "rewriteJumpc($0, pre, \"__@func\", @n)")))
+    (phase early))
+)
+
+;; evaluate function parameter area size before rewriting prologue.
+(defrewrite (CALL)
+ (to (norescan (eval "rewriteCall($0, pre, post, true)")))
+  (phase early)
+ )
+
+;; Call
+(defrewrite (CALL)
+  (to (eval "rewriteCall($0, pre, post, false)"))
+  (phase late))
+
+
+;;;;;; define symbols
+(def *cmplib-xref-symtab*
+  (SYMTAB
+   (foreach @rtl (fixsfsi floatsisf modsi3 umodsi3 addsf3 subsf3 mulsf3 divsf3 mulsi3 divsi3 udivsi3) ("__@rtl" STATIC UNKNOWN 4 "text" XREF))
+  ))
+
+;; Real registers
+;; define all registers
+(defmacro (volatile-regs) 3 4 5 6 7 8 9 10 11 12)
+(defmacro (non-volatile-regs) 19 20 21 22 23 24 25 26 27 28 29 30 31)
+(defmacro (all-regs) (volatile-regs) (non-volatile-regs))
+;;(defmacro (all-regs) 5 6 7 8)
+
+(def *real-reg-symtab*
+  ;; symbol table entry of in-core register.
+     (SYMTAB
+      (foreach @n (0 1 2 (volatile-regs) 13 14 15 16 17 18 (non-volatile-regs))
+	       ("%r@n" REG I32 4 0) )
+      ("%vsp" REG I32 4 0)	; virtual stack pointer.
+      ("%cc" REG I32 4 0)	; floating compare result. (-1,0,1)
+      )
+)
+
+;;;;;; define regsets
+(def *reg-I32* ( (foreach @n ( (all-regs) ) (REG I32 "%r@n")) ))
+(foreach @T (I16 I8 F32)
+  (def *reg-@T* ( (foreach @n ( (all-regs) ) (SUBREG @T (REG I32 "%r@n") 0)) ))
+)
+
+;; used by asm-exp of floating compare with soft-float
+(def *reg-r3-I32* ( (REG I32 "%r5") ))
+(def *reg-r5-F32* ( (SUBREG F32 (REG I32 "%r5") 0) ))
+(def *reg-r6-F32* ( (SUBREG F32 (REG I32 "%r6") 0) ))
+
+;; regset clobbered by CALL
+(def *reg-call-clobbers* ( (foreach @n ( (volatile-regs) ) (REG I32 "%r@n")) ))
+(def *reg-callee-saves* ( (foreach @n ( (non-volatile-regs) ) (REG I32 "%r@n")) ))
+
+;;; Default register set for each nonterminals
+;; 32bit register, signedness is undefined
+;; unsigned 16, 8bit, upper bits are 0
+(foreach @T (I32 I16 I8 F32)
+  (defregset (regX @T) *reg-@T*)
+)
+
+;; Default register set for register variables.
+(defregsetvar
+  (I32 *reg-I32*) (I16 *reg-I16*) (I8 *reg-I8*) (F32 *reg-F32*)
+)
+
+;;;;;; --- rules start here ----
+;;; start symbol
+(defstart void)
+
+;;; label
+(defrule label (LABEL _))
+
+;;; non-terminals for register
+;;  xreg* can appear on first operand of SET. (l-value)
+;;  reg* appear only on right side hand
+(foreach @T (I32 I16 I8 F32)
+  (defrule (xregX @T) (REG @T))
+  (defrule (xregX @T) (SUBREG @T))
+  (defrule (regX @T) (xregX @T))
+)
+
+;;; inter register copy rule.
+(foreach @T (I32 I16 I8 F32)
+  (defrule void (SET @T (xregX @T) (regX @T))
+    (code (addk $1 $2 "r0"))
+    (cost 1) )
+
+  (defrule (xregX @T) (regX @T)
+    (code (addk $0 $1 "r0"))
+    (cost 1) )
+)
+
+;;; Jump Instructions
+(defrule void (JUMP label)
+  (code (bri $1) ;; bri has no delay slot
+	;;	(delayslot)
+	)
+  (cost 2)
+)
+
+;;; constants
+(defrule cnstf_ (FLOATCONST _) (cond "Type.bits(((LirFconst)$0).type) == 32"))
+(defrule cnstf cnstf_ (value (toInt $1)))
+
+(foreach (@t @n @mask) ((f 32 1) (h 16 65535) (b 8 255))
+  (@if (@eq @t f) () ( (defrule cnst@t (INTCONST _) (cond "Type.bits(((LirIconst)$0).type) == @n")) ))
+  (defrule reg@t cnst@t
+    (code (addik $0 "r0" $1)
+	  (@if (@eq @t f) () ( (andi $0 $0 @mask) ))
+	  )
+    (cost 1)
+    )
+)
+
+(defrule cnst0 (INTCONST _) (cond "((LirIconst)$0).signedValue() == 0"))
+(defrule cnst (INTCONST _))
+(defrule sta (STATIC I32))
+
+(defrule asmcnst cnst)
+(defrule asmcnst sta)
+
+;; It is assumed that following operations can be solved at linkage time.
+;; NB: const - static can not be solved in usual case. //##74
+(defrule asmcnst (ADD I32 asmcnst cnst) (value (+ $1 $2)))
+(defrule asmcnst (ADD I32 cnst asmcnst) (value (+ $2 $1)))
+(defrule asmcnst (SUB I32 asmcnst cnst) (value (- $1 $2)))
+
+(defrule regw asmcnst
+  (code (addik $0 "r0" $1))
+  (cost 1)
+  )
+
+;;; addressing mode
+(defrule addri asmcnst (value (base "r0" $1)))
+(defrule addrr regw (value (base "r0" $1)))
+
+(defrule addri (ADD I32 regw asmcnst)
+  (cond "eqReg(\"%vsp\", $1)") (value (base "r1" (adjDisp $2))) )
+(defrule addri (ADD I32 regw asmcnst) (value (base $1 $2)))
+(defrule addri (ADD I32 asmcnst regw) (value (base $2 $1)))
+(defrule addri (SUB I32 regw cnst) (value (base $1 $2)))
+
+;; regw + regw
+(defrule addrr (ADD I32 regw regw) (value (base $1 $2)))
+
+;;; special rules for no rewrite frame
+;;(defrule frame (FRAME))
+;;(defrule frame (ADD I32 frame asmcnst) (value (+ $1 $2)))
+;;(defrule frame (ADD I32 asmcnst frame) (value (+ $2 $1)))
+;;(defrule frame (SUB I32 frame asmcnst) (value (- $1 $2)))
+;;(defrule addri frame)
+;;(defrule regw frame (code (addik $0 $1)) (cost 1))
+
+;; mem[whb], mem[whb]i
+(foreach @ir (i r)
+  (foreach @T (I32 I16 I8 F32)
+	   (defrule (memX @T @ir) (MEM @T addr@ir)) )
+)
+
+;;; naive load
+(foreach @ir (i r)
+  (foreach (@T @inst) ((I32 lw) (I16 lhu) (I8 lbu) (F32 lw))
+    (defrule void (SET @T (xregX @T) (memX @T @ir))
+      (code ((isuffix @inst @ir) $1 $2))
+      (cost 2)
+      )
+
+    (defrule (regX @T) (memX @T @ir)
+      (code ((isuffix @inst @ir) $0 $1))
+      (cost 2)
+      )
+    )
+)
+
+;;; naive store
+(foreach @ir (i r)
+  (foreach (@T @t) ((I32 w) (I16 h) (I8 b) (F32 w))
+    (defrule void (SET @T (memX @T @ir) (regX @T))
+      (code ((isuffix s@t @ir) $2 $1))
+      (cost 2)
+      )
+    )
+)
+
+;;; conversion on register
+(foreach (@dst @T @src @inst) 
+	 ((regw I32 regh sext16) (regw I32 regb sext8) (regh I16 regb sext8))
+  (defrule @dst (CONVSX @T @src)
+    (code (@inst $0 $1))
+    (cost 1)
+    )
+  (defrule @dst (CONVZX @T @src))	; regX is already zero extended
+)
+
+(foreach (@dst @T @src @mask) 
+	 ((regh I16 regw 65535) (regb I8 regw 255) (regb I8 regh 255))
+  (defrule @dst (CONVIT @T @src)
+    (code (andi $0 $1 @mask))
+    (cost 1)
+    )
+)
+
+;;; load/store with explicit truncate	(mb003.c)
+;; these rules are optional.
+;; todo: check rule of @ir = r
+;; load with truncate
+(foreach @ir (i r)
+  (foreach (@T @dst @S @inst) ((I16 xregh I32 luh) (I8 xregb I32 lub)  (I8 xregb I16 lub))
+    (defrule void (SET @T @dst (CONVIT @T (memX @S @ir)))
+      (code ((isuffix @inst @ir) $1 $2))
+      (cost 2)
+      )
+    )
+)
+
+;; store with truncate
+(foreach @ir (i r)
+  (foreach (@T @src @inst) ((I16 regw sh) (I8 regw sb)  (I8 regh sb))
+    (defrule void (SET @T (memX @T @ir) (CONVIT @T @src))
+      (code ((isuffix @inst @ir) $2 $1))
+      (cost 2)
+      )
+    )
+)
+
+;;; operators	(mb004.c)
+;;; NB: all instructions are reverse operation.
+;; unary
+(defrule regw (NEG I32 regw)
+  (code (rsub $0 $1 "r0"))
+  (cost 1)
+  )
+
+(defrule regw (BNOT I32 regw)
+  (code (xori $0 $1 -1))
+  (cost 1)
+  )
+
+;; constant multiplication.
+;; Multiply by 2 always uses this rule. //##74
+(defrule regw (LSHS I32 regw asmcnst)
+  (cond "((LirIconst)$2).signedValue() == 1")
+  (code (addk $0 $1 $1))
+  (cost 1)
+  )
+
+;; Multiply by 3 uses this rule if !optspace. //##74
+(defrule regw (MUL I32 regw asmcnst)
+  (cond "((LirIconst)$2).signedValue() == 3")
+  (code (addk $0 $1 $1)
+	(addk $0 $0 $1))
+  (use-after-def)
+  (cost 2)
+  )
+
+;; asmcnst rules are optional.
+;; commutative
+(foreach (@OP @inst @c) ((ADD add 1) (MUL mul 3) (BAND and 1) (BOR or 1) (BXOR xor 1))
+  (defrule regw (@OP I32 regw regw)
+    (@if (@eq @inst mul) ( (cond "!noUseMul") ) ())
+    (code (@inst $0 $1 $2))
+    (cost @c 1)
+    )
+  (defrule regw (@OP I32 regw asmcnst)
+    (@if (@eq @inst mul) ( (cond "!noUseMul") ) ())
+    (code ((isuffix @inst i) $0 $1 $2))
+    (cost @c 1)
+    )
+  (defrule regw (@OP I32 asmcnst regw)
+    (@if (@eq @inst mul) ( (cond "!noUseMul") ) ())
+    (code ((isuffix @inst i) $0 $2 $1))
+    (cost @c 1)
+    )
+)
+
+;; special rules for constant multiplication
+;; by barrel shifter. (x5, x6, x7, x9, x10)
+(foreach @n (5 9)
+  (defrule regw (MUL I32 regw asmcnst)
+    (cond "!noUseBs && ((LirIconst)$2).signedValue() == @n")
+    (code (addk $0 $1 "r0")
+	  (bsll "r18" $1 (@if (@eq @n 5) (2) (3)))
+	  (addk $0 $0 "r18"))
+    (cost 4 3)
+    (use-after-def)
+  )
+)
+
+(foreach @n (6 10)
+  (defrule regw (MUL I32 regw asmcnst)
+    (cond "!noUseBs && ((LirIconst)$2).signedValue() == @n")
+    (code (bsll $0 $1 1)
+	  (bsll "r18" $1 (@if (@eq @n 6) (2) (3)))
+	  (addk $0 $0 "r18"))
+    (cost 5 3)
+    (use-after-def)
+  )
+)
+
+; 8n - n may be better ? //##74
+(defrule regw (MUL I32 regw asmcnst)
+  (cond "((LirIconst)$2).signedValue() == 7")
+  (code (addk $0 $1 "r0")
+	(bsll "r18" $1 1)
+	(addk $0 "r18" $0)
+	(bsll "r18" $1 2)
+	(addk $0 "r18" $0) )
+  (cost 7 5)
+  (use-after-def)
+)
+
+;; by 1bit shifter. (x5, x6, x7, x9, x10)
+(foreach (@n @c) ((5 5) (9 6))
+  (defrule regw (MUL I32 regw asmcnst)
+    (cond "((LirIconst)$2).signedValue() == @n")
+    (code (addk "r18" $1 "r0")
+	  (addk $0 "r18" "r0")
+	  (addk "r18" "r18" "r18")
+	  (addk "r18" "r18" "r18")
+	  (@if (@eq @n 5) (
+			   (addk $0 "r18" $0) ))
+	  (@if (@eq @n 9) (
+			   (addk "r18" "r18" "r18")
+			   (addk $0 "r18" $0) )) )
+    (cost @c)
+    (use-after-def)
+  )
+)
+
+(foreach (@n @c) ((6 5) (10 6))
+  (defrule regw (MUL I32 regw asmcnst)
+    (cond "((LirIconst)$2).signedValue() == @n")
+    (code (addk "r18" $1 "r0")
+	  (addk "r18" "r18" "r18")
+	  (addk $0 "r18" "r0")
+	  (addk "r18" "r18" "r18")
+	  (@if (@eq @n 6) (
+			   (addk $0 "r18" $0) ))
+	  (@if (@eq @n 10) (
+			   (addk "r18" "r18" "r18")
+			   (addk $0 "r18" $0) )) )
+    (cost @c)
+    (use-after-def)
+  )
+)
+
+(defrule regw (MUL I32 regw asmcnst)
+  (cond "((LirIconst)$2).signedValue() == 7")
+  (code (addk "r18" $1 "r0")
+	(addk $0 "r18" "r0")
+	(addk "r18" "r18" "r18")
+	(addk $0 "r18" $0)
+	(addk "r18" "r18" "r18")
+	(addk $0 "r18" $0) )
+  (cost 6)
+  (use-after-def)
+)
+
+;; div
+(foreach (@OP @inst) ((DIVU idivu) (DIVS idiv))
+  (defrule regw (@OP I32 regw regw)
+    (code (@inst $0 $2 $1))
+    (cost 34 1)
+    )
+)
+
+;; sub
+(foreach (@src @inst) ((regw rsub) (asmcnst rsubi))
+  (defrule regw (SUB I32 @src regw)
+    (code (@inst $0 $2 $1))
+    (cost 1)
+    )
+)
+
+;; modulo
+(foreach (@U @inst) ((U idivu) (S idiv))
+  (defrule regw (MOD@U I32 regw regw)
+    (cond "!noUseMul && !noUseDiv")
+    (code (@inst $0 $2 $1)
+	  (mul $0 $0 $2)
+	  (rsubk $0 $0 $1))
+    (use-after-def)
+    (cost 38 3)
+    )
+)
+
+;;; floating ops. (hard float)
+(defrule regf (NEG F32 regf)
+  (code (xori $0 $1 0x80000000))
+  (cost 1)
+)
+
+(foreach (@OP @inst @c) ((ADD fadd 6) (SUB frsub 6) (MUL fmul 6) (DIVS fdiv 30))
+  (defrule regf (@OP F32 regf regf)
+    (code (@inst $0 $2 $1))
+    (cost @c 1)
+    )
+)
+
+;;; shifts (mb026.c)
+;; rules for 1bit shifter
+;; NB: MicroBlaze doesn't have sll instruction.
+(foreach (@OP @inst) ((LSHS addk) (RSHS sra) (RSHU srl))
+  (defrule regw (@OP I32 regw regw)
+    (cond "noUseBs")
+    (code (andi "r18" $2 31)
+	  (beqid "r18" $L2)
+	  (addk $0 $1 "r0")
+	(deflabel $L1)
+	  (addik "r18" "r18" -1)
+	  (bneid "r18" $L1)
+	  (@inst $0 $0 (@if (@eq @inst addk) ($0) ()))
+	(deflabel $L2)
+	  )
+    (use-after-def)
+    (cost 52 6)				; speed = 4+3n
+  )
+
+  ;; 1bit shift uses always this rule. //##74
+  (defrule regw (@OP I32 regw asmcnst)
+    (cond "((LirIconst)$2).signedValue() == 1")
+    (code (@inst $0 $1 (@if (@eq @inst addk) ($1) ()) ))
+    (cost 1)
+  )
+
+  (foreach @n (2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+    (defrule regw (@OP I32 regw asmcnst)
+      (cond "noUseBs && ((LirIconst)$2).signedValue() == @n")
+      (code (addk $0 $1 "r0")
+	    (rep @n (@inst $0 $0 (@if (@eq @inst addk) ($0) ()) )) )
+      (cost @n @n)
+    )
+  )
+)
+
+;; rules for barrel shifter
+(foreach (@OP @inst) ((LSHS bsll) (RSHS bsra) (RSHU bsrl))
+  (defrule regw (@OP I32 regw regw)
+    (cond "!noUseBs")
+    (code (@inst $0 $1 $2))
+    (cost 2 1)
+  )
+
+  (defrule regw (@OP I32 regw asmcnst)
+    (cond "!noUseBs")
+    (code ((isuffix @inst i) $0 $1 $2))
+    (cost 2 1)
+  )
+)
+
+;;; conditional	(mb005.c)
+;; non delayed jump
+(foreach (@OP @INST)
+        ((TSTEQ beqi) (TSTNE bnei))
+  (defrule void (JUMPC (@OP I32 regw regw) label label)
+    (code (cmpu "r18" $1 $2)
+          (@INST "r18" $3))
+    (clobber (REG I32 "%r18"))
+    (cost 4)
+  )
+)
+
+;; rules for soft-float compare result
+(foreach (@OP @bcc) 
+  ((TSTEQ bnei) (TSTNE beqi) (TSTLES bgti) (TSTLTS bgei) (TSTGES blti) (TSTGTS blei))
+  (defrule void (JUMPC (@OP I32 regw regw) label label)
+    (cond "softFloat && eqReg(\"%cc\", $2)")
+    (code (@bcc $1 $3)
+;;	  (delayslot)
+	  )
+    (cost 2)
+  )
+)
+
+(foreach (@U @cmp) ((U cmpu) (S cmp))
+  (foreach (@OP @bcc) 
+    ((TSTLE@U bgei) (TSTLT@U bgti) (TSTGE@U blei) (TSTGT@U blti))
+    (defrule void (JUMPC (@OP I32 regw regw) label label)
+      (code (@cmp "r18" $1 $2)
+	    (@bcc "r18" $3))
+      (clobber (REG I32 "%r18"))
+      (cost 4)
+    )
+  )
+)
+
+;;; floating comparison	(mb005.c)
+(foreach (@OP @cc)
+        ((TSTEQ eq) (TSTNE ne) (TSTLES le) (TSTLTS lt) (TSTGES ge) (TSTGTS gt))
+  (defrule void (JUMPC (@OP I32 regf regf) label label)
+    (code (fcmp.@cc "r18" $2 $1)
+          (bgti "r18" $3))
+    (clobber (REG I32 "%r18"))
+    (cost 6)
+  )
+)
+
+;;; call (mb021.c)
+(foreach (@callee @inst) ((regw brald) (asmcnst brlid))
+  (defrule void (CALL @callee)
+    (code (@inst "r15" $1)
+	  (delayslot))	; MicroBlaze doesn't have non-delayed call
+    (cost 3 2)
+  )
+)
+
+
+%%
+// Java code starts here.
+
+import coins.backend.ana.SaveRegisters;
+import coins.backend.util.NumberSet;
+import coins.backend.lir.LirLabelRef;
+import coins.driver.CoinsOptions;
+import coins.driver.CommandLine;
+import coins.driver.CompileSpecification;
+import coins.driver.CompileThread;
+import coins.IoRoot;
+import java.util.Map;
+
+
+%State methods
+
+%CodeGenerator methods
+
+// compile option
+boolean softFloat = false;
+boolean noUseGp = false;
+boolean noUseBs = false;
+boolean noUseMul = false;
+boolean noUseDiv = false;
+boolean isSimulate = false;
+
+private void debug(String s)
+{
+    // System.out.println(s);
+}
+
+ImList regCallClobbers = $def(*reg-call-clobbers*);
+
+/** MicroBlaze's function attribute **/
+static class MicroBlazeAttr extends FunctionAttr {
+
+  /** Maximum stack space used by call. (parameters and return address) **/
+  int passedByStack;		// except r5-r10
+  int functionParameters;
+
+  /** callee save regsiters */
+  int calleeSaves;
+
+  /** pointer of aggregate return value. */
+  LirNode hiddenPtr;
+
+  /** real frame size */
+  int frameSize;
+
+  MicroBlazeAttr(Function func) {
+    super(func);
+    passedByStack = 0;	// leaf function.
+    functionParameters = 0;	// leaf function.
+    hiddenPtr = null;
+  }
+}
+
+FunctionAttr newFunctionAttr(Function func) {
+  MicroBlazeAttr attr = new MicroBlazeAttr(func);
+  if (isSimulate) {
+    attr.calleeSaves = 13 * REGWIDTH;
+  }
+  return attr;
+} 
+
+/// init.
+void initializeMachineDep() {
+    Thread th = Thread.currentThread();
+    if (th instanceof CompileThread) {
+	IoRoot io = ((CompileThread) th).getIoRoot();
+	CompileSpecification spec = io.getCompileSpecification();
+	CoinsOptions coinsOptions = spec.getCoinsOptions();
+	String opt = coinsOptions.getArg("x-mb");
+	if (opt != null) {
+	    Map m = coinsOptions.parseArgument(opt, '/', '.');
+	    if (m.get("no-fpu") != null) {
+		softFloat = true;
+	    }
+	    if (m.get("no-gp") != null) {
+		noUseGp = true;
+	    }
+	    if (m.get("no-bs") != null) {
+		noUseBs = true;
+	    }
+	    if (m.get("no-mul") != null) {
+		noUseMul = true;
+	    }
+	    if (m.get("no-div") != null) {
+		noUseDiv = true;
+	    }
+	}
+        if (coinsOptions.isSet("simulate")) {
+          isSimulate = true;
+        }
+    }
+}
+
+/// define constants.
+
+static final int REGWIDTH = 4;
+
+
+/// code building macros
+
+/* NB: Gas of MicroBlaze doesn't accept %-prefix of register */
+%defbuild(REG x) {
+  LirSymRef regvar = (LirSymRef)x;
+  Symbol reg = regvar.symbol;
+  return reg.name.substring(1);
+}
+
+%defbuild(SUBREG x) {
+  Symbol reg = ((LirSymRef)x.kid(0)).symbol;
+  return reg.name.substring(1);
+}
+
+/// code emission macros
+
+%defemit(line x) { return "# line " + x; }
+
+%defemit(genasm format =args) { return emitAsmCode(format, (ImList)args); }
+
+%defemit(delayslot) {
+  return "\tnop\t#unfilled delayslot";
+}
+
+%defemit(base reg1 reg2) {
+  return reg1 + "," + reg2;
+}
+
+%defemit(+ c1 c2) {
+  return c1 + "+" + c2;
+}
+%defemit(- c1 c2) {
+  return c1 + "-" + c2;
+}
+
+%defemit(toInt x) {
+  double value = Float.parseFloat(x);
+  long bits = Float.floatToIntBits((float)value);
+  return Long.toString(bits & 0xffffffffL, 10) + " # " + x;
+}
+
+%defemit(adjDisp x) {
+    MicroBlazeAttr attr = (MicroBlazeAttr) getFunctionAttr(func);
+    debug(" adjDisp " + x + " <- callee save " + attr.calleeSaves);
+    long off = Long.parseLong(x) + attr.calleeSaves + frameSize(func);
+    debug(" -> " + off);
+    return String.valueOf(off);
+}
+
+%defemit(prologue =f) {
+    Function func = (Function) f;
+    MicroBlazeAttr attr = (MicroBlazeAttr) getFunctionAttr(func);
+    SaveRegisters saveList = (SaveRegisters)func.require(SaveRegisters.analyzer);
+    if (!isSimulate) {
+      attr.calleeSaves = saveList.calleeSave.size() * REGWIDTH;
+    }
+    int adjustedSize = (frameSize(func) + 3) & -4;
+    attr.frameSize = attr.functionParameters + adjustedSize + attr.calleeSaves;
+
+    String seq = "";
+    if (attr.frameSize > 0) {
+	seq += "\n\taddik\tr1,r1,-" + attr.frameSize;
+    }
+    if (attr.functionParameters > 0) { // non leaf function
+	seq += "\n\tsw\tr15,r0,r1";
+    }
+
+    int off = attr.functionParameters + frameSize(func);
+    for (NumberSet.Iterator it = saveList.calleeSave.iterator(); it.hasNext(); ) {
+	int reg = it.next();
+	seq += "\n\tswi\t" + machineParams.registerToString(reg).substring(1) +",r1," + off;
+	off += REGWIDTH;
+    }
+    return "#prologue: callee save " + attr.calleeSaves +
+	"\n# function params. = " + attr.passedByStack +
+	"\n# frame vars. = " + frameSize(func) + seq;
+}
+
+%defemit(epilogue =f rettype) {
+  Function func = (Function)f;
+  MicroBlazeAttr attr = (MicroBlazeAttr) getFunctionAttr(func);
+  SaveRegisters saveList = (SaveRegisters)func.require(SaveRegisters.analyzer);
+  int off = attr.functionParameters + frameSize(func);
+
+  String seq = "";
+
+  if (attr.functionParameters > 0) { // non leaf function
+      seq += "\n\tlw\tr15,r0,r1";
+  }
+
+  // pop all callee save registers.
+  for (NumberSet.Iterator it = saveList.calleeSave.iterator(); it.hasNext(); ) {
+      int reg = it.next();
+      seq += "\n\tlwi\t" + machineParams.registerToString(reg).substring(1) + ",r1," + off;
+      off += 4;
+  }
+  seq += "\n\trtsd\tr15,8";
+  seq += (attr.frameSize > 0) ? "\n\taddik\tr1,r1," + attr.frameSize : "\n\tnop\t#unfilled delayslot";
+  return seq;
+}
+
+
+/// Emit data common
+void emitCommon(PrintWriter out, SymStatic symbol, int bytes) {
+    emitSegment(out, ".bss");
+    if (symbol.linkage == "LDEF")
+	out.println("\t.lcomm\t" + makeAsmSymbol(symbol.name)
+		    + "," + bytes);
+    else
+	out.println("\t.comm\t"  + makeAsmSymbol(symbol.name)
+		    + ","  + bytes /*+ "," + symbol.boundary*/);
+}
+
+
+/// LIR utilities
+
+private LirNode setExp(int type, LirNode op1, LirNode op2) {
+    return lir.node(Op.SET, type, op1, op2);
+}
+
+private LirNode memExp(int type, LirNode op1) {
+    return lir.node(Op.MEM, type, op1);
+}
+
+private LirNode memExp(int type, LirNode op1, int align) {
+    return lir.operator
+	(Op.MEM, type, op1,
+	 ImList.list("&align", String.valueOf(align)));
+}
+
+private LirNode setI32(LirNode op1, LirNode op2) {
+    return lir.node(Op.SET, I32, op1, op2);
+}
+
+private LirNode memI32(LirNode op1) {
+    return memExp(I32, op1);
+}
+
+private LirNode memI32(LirNode op1, int align) {
+    return memExp(I32, op1, align);
+}
+
+private LirNode memI32Base(LirNode base, int disp) {
+    return memI32(addI32(base, disp));
+}
+
+private LirNode memI32Base(LirNode base, int disp, int align) {
+    return memI32(addI32(base, disp), align);
+}
+
+private LirNode addI32(LirNode op1, int n) {
+    return lir.node(Op.ADD, I32, op1, lir.iconst(I32, n));
+}
+
+private LirNode regI32(int nth) {
+    return lir.symRef(module.globalSymtab.get("%r" + nth));
+}
+
+private LirNode callExp(LirNode callee, LirNode params, LirNode val)
+{
+    LirNode list = null;
+    try {
+	list = lir.node
+	    (Op.PARALLEL, Type.UNKNOWN, 
+	     noRescan(lir.operator(Op.CALL, Type.UNKNOWN, callee, params, val, ImList.list())), lir.decodeLir(new ImList("CLOBBER", regCallClobbers), func, module));
+    } catch (SyntaxError e) {
+	throw new CantHappenException();
+    }
+    return list;
+}
+
+///
+
+// check register constraint
+boolean eqReg(String reg, LirNode node)
+{
+    if (!(node instanceof LirSymRef)) {
+	return false;
+    }
+    return ((LirSymRef)node).symbol == func.module.globalSymtab.get(reg);
+}
+
+// check constant multiply
+boolean rewriteMul(LirNode node)
+{
+    if (!noUseMul) {		// hard mul
+	return false;
+    }
+    if (!(node instanceof LirIconst)) {	// soft mul, not const.
+    System.out.println("mul::: node is not const: " + node);
+	return true;
+    }
+    long n = ((LirIconst) node).signedValue();
+    return (n < 0 || n > 10);
+}
+
+/// tree rewriting
+private LirNode regnode(int type, String name) {
+    LirNode master = lir.symRef(module.globalSymtab.get(name));
+    type = castToInt(type);
+
+    switch (Type.tag(type)) {
+    case Type.INT:
+	if (type == I32)
+	    return master;
+	else if (type == I16)
+	    return lir.node
+		(Op.SUBREG, I16, master, lir.untaggedIconst(I32, 0));
+	else if (type == I8)
+	    return lir.node
+		(Op.SUBREG, I8, master, lir.untaggedIconst(I32, 0));
+    case Type.FLOAT:
+	/* Is it incorrect ? (because float is defined in SUBREG I32) */ //##74
+	if (type == F64)
+	    return master;
+	else if (type == F32)
+	    return lir.node
+		(Op.SUBREG, F32, master, lir.untaggedIconst(I32, 0));
+    default:
+	return null;
+    }
+}
+
+private boolean isAgg(int type) {
+    return Type.tag(type) == Type.AGGREGATE;
+}
+
+// cast aggregate to int.
+private int castToInt(int type) {
+    return isAgg(type) ? Type.type(Type.INT, Type.bytes(type) * 8) : type;
+}
+
+LirNode castToInt(LirNode src) {
+    if (src.opCode == Op.MEM) {
+	return memExp(castToInt(src.type), src.kid(0));
+    }
+    return src;
+}
+
+// Test the necessity of using work in case of loading from src to general register. //##74
+boolean needTempArea(LirNode src) {
+  // In case of ARM, can not be loaded from floating register directly. //##74
+  // Unnecessary in case of MicroBlaze.
+  return false;
+}
+
+boolean isMemNode(LirNode arg) {
+    return arg.opCode == Op.MEM;
+}
+
+class CallContext {
+    LirNode sp = lir.symRef(func.module.globalSymtab.get("%r1"));
+    int disp;			// disp. of first argument on stack
+    String[] regName = { "%r5",  "%r6",  "%r7",  "%r8",  "%r9",  "%r10" };
+    int regUsed;		// -1 -> no used reg.
+    int regMax;
+    BiList regAssign;
+    BiList stackAssign;
+    boolean prologue;
+    int base = 28;
+
+    CallContext(boolean isCallee) {
+	disp = 0;
+	regUsed = -1;
+	regMax = 5;
+	regAssign = new BiList();
+	stackAssign = new BiList();
+	prologue = isCallee;
+	if (prologue) {
+	    sp = lir.symRef(func.module.globalSymtab.get("%vsp"));
+	}
+    }
+
+    void adjDisp(int n) {
+	disp += ((n + 3) & -4);
+    }
+
+    int spDisp() {
+	if (prologue) {
+	    MicroBlazeAttr at = (MicroBlazeAttr)getFunctionAttr(func);
+	    return base + at.functionParameters + disp;
+	}
+	return base + disp;
+    }
+
+    boolean availReg() {
+	return regMax > regUsed;
+    }
+
+    LirNode copyNode(int type, LirNode op1, LirNode op2) {
+	if (prologue) {
+	    return setExp(type, op2, op1);
+	}
+	return setExp(type, op1, op2);
+    }
+
+    // todo: double treatment
+    LirNode getReg(int type) {
+	if (regUsed >= regMax) {
+	    return null;
+	}
+	regUsed++;
+	return regnode(type, regName[regUsed]);
+    }
+    void setReg(int type, LirNode src) {
+	regAssign.add(copyNode(castToInt(type), getReg(type), castToInt(src)));
+    }
+    void setArg(LirNode arg) {
+	int n = Type.bytes(arg.type);
+
+	if (regMax <= regUsed) { // all register is used.
+	    stackAssign.add(copyNode(arg.type, memExp(arg.type, addI32(sp, spDisp()), 4), arg));
+	    // Is there a possibility of unaligned but correct ? //##74
+	    adjDisp(n);
+	    return;
+	}
+	// THere is some item that can be set on a register.
+	if (needTempArea(arg)) {
+	    // Assign to temp. (In ARM, float register can not be copied to 
+            //  integer register.
+	    // In MicroBlaze, this processing is unnecessary.
+	    // Write to temp and replace arg by temp.  //##74
+	}
+	if (n <= REGWIDTH) {
+	    // If register is remaining and the size of src does not exceed 
+            // the size of register, then it can be copied by simple operation. //##74
+	    setReg(arg.type, arg);
+	    return;
+	}
+	
+	// Here, src is mem in any case.
+        // Expand the operation to (several) load operations of I32 length.
+        // It is not necessary to consider whether it is structure or not.
+        // If basic type is treated as special case, then the (generated) code
+        // will increase as the case of arm.tmd.  //##74
+	debug("*** arg is " + arg);
+	int i = 0;
+	for (/* empty */; i < n; i += REGWIDTH) {
+	    if (availReg()) {
+		LirNode split = memI32Base(arg.kid(0), i, REGWIDTH);
+		debug(" -> " + split);
+		setArg(split);
+	    } else {
+		// Remaining one is copy from mem to mem.
+		// Copy of small size items may not produce good code.
+                // It may be better to expand the operation.
+		LirNode split = memExp(Type.type(Type.AGGREGATE, (n - i) * 8), addI32(arg.kid(0), i), 4);
+		debug(" -> " + split);
+		setArg(split);
+		break;
+	    }
+	}
+    }
+
+    LirNode[] getNewArgv() {
+	// make new parameters (on register)
+	LirNode[] newargv = new LirNode[regUsed + 1];
+	for (int i = 0; i < regUsed + 1; i++) { // NB: regUsed starts -1.
+	    newargv[i] = regnode(I32, regName[i]);
+	}
+	return newargv;
+    }
+
+    BiList getRegAssign() {
+	return regAssign;
+    }
+    BiList getStackAssign() {
+	return stackAssign;
+    }
+    int stackSize() {
+	return disp + base;
+    }
+}
+
+
+LirNode rewriteCall(LirNode node, BiList pre, BiList post, boolean dry) {
+    LirNode callee = node.kid(0);
+    LirNode args = node.kid(1);
+
+    LirNode retreg = regI32(4);
+    LirNode fval = null;
+    CallContext cc = new CallContext(false);
+    boolean smallAggr = false;
+    MicroBlazeAttr at = (MicroBlazeAttr)getFunctionAttr(func);
+
+    if (node.kid(2).nKids() > 0) {
+	fval = node.kid(2).kid(0);
+        if (isAgg(fval.type)) {
+	    debug("size " + Type.bytes(fval.type));
+	    if (true /*Type.bytes(fval.type) > REGWIDTH*/) { // pass hidden pointer
+		cc.setReg(I32, fval.kid(0));
+	    } else {	// aggregate return by register
+		// arm only. mb returns always using pointer.
+		smallAggr = true;
+	    }
+	}
+    }
+
+    for (int i = 0; i < args.nKids(); i++) {
+	cc.setArg(args.kid(i));
+    }
+
+    if (at.passedByStack < cc.stackSize()) {
+	at.passedByStack = cc.stackSize();
+	if (at.passedByStack > 0) {
+	    at.functionParameters = at.passedByStack + 28;
+	}
+    }
+
+    if (dry) {
+	debug("dry run: pass-ed by Stack = " + at.passedByStack);
+	return node;
+    }
+    // insert setup code.
+    pre.addAllFirst(cc.getStackAssign());
+    pre.addAll(cc.getRegAssign());
+
+    // modified CALL node
+    LirNode list = callExp(node.kid(0), lir.node(Op.LIST, Type.UNKNOWN, cc.getNewArgv()), node.kid(2));
+    
+    // value returned
+    if (fval != null) {
+	int ftag = Type.tag(fval.type);
+	if (ftag == Type.INT || ftag == Type.FLOAT ||
+	    (ftag == Type.AGGREGATE && smallAggr)) {
+	    int rty = (ftag == Type.AGGREGATE) ? I32 : fval.type;
+	    LirNode reg = regnode(rty, ftag == Type.FLOAT ? "%r3" : "%r3");
+	    LirNode tmp = func.newTemp(rty);
+
+	    post.add(setExp(rty, tmp, reg));
+	    post.add(setExp(rty, (smallAggr) ? memI32(fval.kid(0)) : fval, tmp));
+	    list.kid(0).kid(2).setKid(0, reg);
+	}
+    }
+    debug("*** required space of function Parameters = " + at.passedByStack);
+    debug("*** -pre--> " + pre);
+    debug("*** ------> " + list);
+    debug("*** -post-> " + post);
+    return list;
+}
+
+
+LirNode rewritePrologue(LirNode node, BiList post) {
+    MicroBlazeAttr attr = (MicroBlazeAttr) getFunctionAttr(func);
+    CallContext cc = new CallContext(true);
+
+    debug("*** rewriting prologue " + node);
+    debug("*** node.nKids = " + node.nKids());
+
+    // Is first parameter a pointer to aggregate return-value ?
+    if (func.origEpilogue.nKids() > 1) {
+	int t = func.origEpilogue.kid(1).type;
+	if (Type.tag(t) == Type.AGGREGATE) {
+	    attr.hiddenPtr = func.newTemp(I32);
+	    cc.setArg(attr.hiddenPtr /*node.kid(i)*/);
+	}
+    }
+
+    for (int i = 1; i < node.nKids(); i++) {
+	cc.setArg(node.kid(i));
+    }
+
+/*
+  It may be better to check whether the stack size exceeds the limit. 
+    if (at.stackRequired < cc.stackSize()) {
+	at.stackRequired = cc.stackSize();
+    }
+*/
+
+    post.addAllFirst(cc.getStackAssign());
+    post.addAll(cc.getRegAssign());
+
+    // create new prologue
+    LirNode list = lir.node(Op.PROLOGUE, Type.UNKNOWN, cc.getNewArgv());
+
+    debug("*** ------> " + list);
+    debug("*** -post-> " + post);
+    return list;
+}
+
+
+LirNode rewriteEpilogue(LirNode node, BiList pre) {
+    debug("*** rewriting epilogue " + node);
+    if (node.nKids() < 2) {
+	debug(" -> no");
+	return node;
+    }
+    LirNode epilogue = null;
+    LirNode ret = node.kid(1);
+
+    switch (Type.tag(ret.type)) {
+    case Type.INT:
+    case Type.FLOAT:
+        LirNode r3 = regnode(ret.type, "%r3");
+	pre.add(setExp(ret.type, r3, ret));
+	epilogue = lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0), r3);
+	break;
+
+    case Type.AGGREGATE:
+	MicroBlazeAttr attr = (MicroBlazeAttr) getFunctionAttr(func);
+        r3 = regnode(I32, "%r3");
+	debug("*** reta = " + attr.hiddenPtr);
+	// checkme
+	pre.add(setExp(ret.type, memExp(ret.type, attr.hiddenPtr, 4), ret));
+	pre.add(setI32(r3, attr.hiddenPtr));
+	epilogue = lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0), r3);
+	break;
+    }
+    debug("*** -pre-> " + pre);
+    debug("*** -----> " + epilogue);
+    return epilogue;
+}
+
+
+LirNode rewriteFrame(LirNode node) {
+    Symbol fp = func.module.globalSymtab.get("%r1");
+    MicroBlazeAttr attr = (MicroBlazeAttr) getFunctionAttr(func);
+    int n = attr.functionParameters;
+    int off = ((SymAuto)((LirSymRef)node).symbol).offset();
+    int sz = Type.bytes(((SymAuto)((LirSymRef)node).symbol).type);
+    off = -off - sz; // first change sign, and shift down it's size. 
+    // debug("cur param size =" + n + ", rewriteing: " + node + ", off = " + off + ", size = " + sz);
+    return lir.node
+	(Op.ADD, node.type, lir.symRef(fp), lir.iconst(I32, n + (long)off));
+}
+
+
+// rewrite implicit runtime library call to explicit call-exp
+LirNode rewriteRtlCall(LirNode node, BiList pre, String rtl, int n) {
+    debug("rewriteRtlCall: $0 = " + node);
+
+    // make temporal
+    LirNode tmp = func.newTemp(node.type);
+    // resultant exp.
+    LirNode list;
+
+    // rewrite rtl-call to explicit call-exp.
+    LirNode rtl_func = lir.symRef(func.module.globalSymtab.get(rtl));
+
+    debug("op = " + node.opCode);
+    // setup parameter
+    LirNode[] args = new LirNode[n];
+    for (int i = 0; i < n; i++) {
+	args[i] = node.kid(i);
+    }
+    
+    list = lir.operator(Op.CALL, Type.UNKNOWN, rtl_func,
+			lir.node(Op.LIST, Type.UNKNOWN, args),
+			lir.node(Op.LIST, Type.UNKNOWN, tmp),
+			ImList.list());
+    pre.add(list);
+    return tmp;
+}
+
+
+// rewrite floating compare to asm-exp and integer compare
+LirNode rewriteJumpc(LirNode node, BiList pre, String rtl, int n) {
+    debug("rewriteJumpc: $0 = " + node);
+    LirNode tst = node.kid(0);
+
+    if (Type.tag(tst.kid(0).type) != Type.FLOAT) {
+	return node;
+    }
+
+    // make temporal
+    LirNode tmp = lir.symRef(func.module.globalSymtab.get("%r3"));
+    LirNode cc = lir.symRef(func.module.globalSymtab.get("%cc"));
+    // resultant exp.
+    LirNode list;
+
+    // setup parameter
+    LirNode[] in = new LirNode[n];
+    LirNode[] out = new LirNode[0];
+    LirNode[] io = new LirNode[0];
+
+    for (int i = 0; i < n; i++) {
+	in[i] = tst.kid(i);
+	// debug("kid = "  + in[i]);
+    }
+
+    LirNode body = lir.stringconst(
+"\n\taddik\tr19,r5,0\n\taddik\tr20,r6,0" +
+"\n\tbrlid\tr15," + rtl + "\n\tnop\t# unfilled delay slot" +
+"\n\taddik\tr5,r19,0\n\taddik\tr6,r20,0"
+);
+    // This delay slot can not be filled by scheduler. //##74
+
+    list = lir.operator(Op.ASM, Type.UNKNOWN,
+			new LirNode[] {
+			    body, 
+			    lir.node(Op.LIST, Type.UNKNOWN, in),
+			    lir.node(Op.LIST, Type.UNKNOWN, out),
+			    lir.node(Op.LIST, Type.UNKNOWN, io)
+			},
+			ImList.list("&argtype", 
+				    ImList.list("%r5-F32", "%r6-F32"), 
+				    "&clobber", new ImList("%r3", ImList.list("%r4", "%r7", "%r8", "%r9", "%r19", "%r20")))
+			    );
+    
+    debug("asm = " + list);
+    pre.add(list);
+
+    // return modified jumpc node 
+    LirNode[] src = new LirNode[3];
+    src[0] = lir.operator(tst.opCode, I32, tmp, cc, ImList.Empty);
+    src[1] = node.kid(2);
+    src[2] = node.kid(1);
+    return lir.operator(Op.JUMPC, Type.UNKNOWN, src, ImList.Empty);
+}

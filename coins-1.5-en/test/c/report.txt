@@ -1,0 +1,142 @@
+2003/7/30
+
+対応を確認したテスト
+  Array          変更あり
+  Assign         変更あり
+  Conv           変更あり
+  Decl           変更あり
+  Exp            変更あり
+  GotoLabel      変更あり
+  HirC           変更あり
+  If             変更あり
+  Jis            変更あり
+  KandR          変更あり
+  LangSpec       変更あり
+  Loop           変更あり
+  Mix1           変更あり
+  NonExecutable  変更あり
+  Opt            変更あり
+  OptPara        変更あり
+  Pointer        変更あり
+  PrePro         変更あり
+  Print          変更なし
+  Sample1        変更あり
+  Scope          変更あり
+  SemanticError  変更あり
+  Simple1        変更なし
+  String         変更あり
+  Struct         変更あり
+  SubpCall       変更あり
+  Switch         変更あり
+  SyntaxError    変更あり
+  TestBuna       変更あり
+  TestBuna/*     変更あり
+  TestEval       変更なし
+  TestFnami      変更あり
+  TestMri        変更あり (連続テストに向いていないものも含まれる)
+  TestNakata     変更なし
+  TestSassa      変更なし
+  TestSsa        変更なし
+  TpFront        変更あり
+  Type           変更あり
+  WhiteBox       変更あり
+
+削除したディレクトリ
+  Cfg            フロー解析用なので連続テストに向かない
+  TestAbe        基本的なテストなので連続テストに向いていない
+  TestSpecParts  SPEC の一部なのでテストに向いていない
+
+削除したファイル
+  Mix1/tpfulltest1.c          定義のない関数が使われている
+  Mix1/tptaruTest2.c          定義のない関数が使われている
+  PrePro/tppragma2.c          cpp-2.95.3 で処理できない
+  Scope/tpscope5-1.c          tpscope5.c とほぼ同じ
+  String/tpsizeof2E.c         テストのための一時ファイル
+  Struct/tpstruct1-hir-new.c  テストのための一時ファイル
+  Struct/tpstructAssign1.c    tpstruct2.c と重複
+  Struct/tpstructscope2.c     tpstructscope1.c とほぼ同じ
+  Switch/tpswitch3-hir-new.c  tpswitch3.c のテストのための一時ファイル
+  Switch/tpswitch3-lir-new.c  tpswitch3.c のテストのための一時ファイル
+  Switch/tpswitch6.c          正しい動作として無限ループする
+  TestBuna/arg1.c             argv を表示するプログラム。出力が一定でない。
+  TestBuna/loop/for_09.c      正しい動作として無限ループする
+  TestBuna/test0/printf03.c   出力はコンパイラ依存
+  TestBuna/test0/ptr01.c      出力は不定
+
+gccとは違う結果になるがエラーではないもの
+  Decl/tpinit6-1.c:5 excess initializer
+    括弧の数が合わないのでコンパイルエラーとする。
+  KandR/6-7.c:38 symbol 'strcmp' redeclared in different kind
+    このエラーメッセージは正しい。
+    gcc はグローバルシンボルとローカルシンボルの結合が甘い。
+  SemanticError/tpassign0-1.c 8: incompatible types in return
+    gcc ではワーニングだが CoinsCC ではコンパイルエラーとする。
+  SemanticError/tpextern1.c Illegal result
+    結合の不一致 (JIS 6.7.2) が生じた場合、CoinsCC は static を優先する。
+  TestEval/cpubench.c
+  TestEval/cpubench1.c
+  TestEval/fpbench.c
+  TestEval/fpbench1.c
+    出力はかかった秒数。
+  TestFnami/LLONG1.c
+    CoinsCC では int/long/long long は同じ精度。
+  TestFnami/SIZEOF2.c
+  TestFnami/SIZEOF5.c
+    CoinsCC での有効な型の大きさは 31 ビットまでとする。
+  LangSpec/tpSizeofFunc.c
+  SyntaxError/tpSizeofFunc.c
+    sizeof 演算子を関数に適用しているのでコンパイルエラーとする。
+
+見つかったエラー (と関係すると思われる部位)
+  TestBuna/func/char_func_spill01.c
+    char の演算の異常か。
+  TestBuna/pointer/ptroffset_double.c
+  TestBuna/pointer/ptroffset_float.c
+  TestBuna/pointer/ptroffset_int.c
+  TestBuna/pointer/ptroffset_int_01.c
+  TestBuna/pointer/ptroffset_uint.c
+    不正な出力。 (C to HIR)
+  Decl/tplonglong1.c
+  Decl/tplonglong2.c
+    printf("%lld... でエラー。long long を正しく表示できない。
+  Jis/jisInit1.c
+    配列の初期化ミス。 (C parser)
+  Jis/jisTypedef1.c:38
+    typedef int t; t f(t (t)); を正しく認識しない。 (C parser)
+  Jis/jisTypeName1.c:54 invalid lvalue in assignment
+    上とほぼ同じ。 (C parser)
+  Jis/jisTypeQual1.c Illegal result
+    構造体メンバの変位の計算の間違いか。
+  KandR/6-9.c
+    ビットフィールド未実装？
+  KandR/7-3.c
+  KandR/8-3.c
+    gcc の拡張構文を含む。
+  Pointer/tpfuncptr5.c:6 ) is missing.
+    C parser が int f(int(int)); というプロトタイプ宣言を認識しない。 (C parser)
+  Sizeof/tpsizeof3.c
+    wchar 未対応。 (C parser)
+  String/tpstring6.c Illegal result
+    エスケープシーケンスの扱いの違いか。
+  Struct/tpstructAlign2.c
+  Struct/tpstructAlign3.c
+    コアダンプ。構造体変位の計算の誤りか。
+  Struct/tpstructArray2.c Illegal result
+    不明。構造体変位の計算の誤りか。
+  SubpCall/tpcallFloat2.c
+  SubpCall/tpcallFloat3.c
+    引数受け渡しミスか。
+  TestBuna/longdouble_01.txt
+    printf("ld = %Lf... でバスエラー。
+  TestBuna/longlong_01.txt
+    printf("%lld... でエラー。long long を正しく表示できない。
+  TestFnami/LLONG2.c
+  TestFnami/LLONG5.c
+    CoinsCC では int/long/long long は同じ精度。
+  TestFnami/SWITCHL9.c
+  TestFnami/UCONST.c
+    不正な出力。 (C parser)
+  TestMri/tpListMri2.c
+    int a[3,2];  ローカル変数の初期化に問題。 (C parser)
+  TestNakata/tpStringNakata1.c
+    char *cPtr2 = "abc"+1;  グローバル変数の初期化に問題。

@@ -1,0 +1,62 @@
+Files:
+   README
+   jdk1.0/
+   jdk1.1/
+   mk
+   mkCup
+   mkDoc
+   mkParser
+   packages.src
+   postDoc
+   tree.src
+
+The shell scripts in this directory (mk, mkCup, mkDoc, postDoc) assume that
+the shell environmental variables:
+
+   JAVACUP
+   JAVAHOME
+   JDK
+
+are set and exported.  JAVACUP should point to the root directory of the
+JavaCup tool, which is available from:
+
+     http://www.cs.princeton.edu/~appel/modern/java/CUP/
+
+Although you may want to have the most up-to-date version of JavaCup, you
+really only need to get it if you wish to regenerate the parser and symbol
+java files from the parser cup file.  This source distribution comes with
+the JavaCup runtime files you would need to use Grappa.
+
+JAVAHOME should point to the root directory of the JDK distribution, which is
+available from:
+
+     http://java.sun.com/products/jdk/1.1/
+
+and JDK should be set to jdk1.1 unless you are working with the JDK 1.0 version
+of Grappa and then the value of the JDK variable should be jdk1.0 (and
+JAVAHOME should point to a 1.0.2 version of the JDK and you should use
+JavaCup 0.9e in the directory pointed to by JAVACUP).
+
+To compile Grappa, you may first need to run "mkParser" to have JavaCup generate
+the parser and symbol files from the source cup file (those files have already
+been generated, so you should not need to run "mkParser").  To run, "mkParser",
+simply type its name at the shell prompt.  No arguments are needed.
+
+To actually generate the Grappa class files, run "mk" without any arguments.
+By default, "mk" will put the class files under the root directory
+$HOME/java, but you can change that by setting and exporting the shell
+variable OUTROOT.
+
+You can use "mkCup" to generate the JavaCup runtime classes. They will be
+installed under the same root as the Grappa class files.
+
+You can use javadoc to generate html documentation by running "mkDoc" followed
+by "postDoc" if you wish to link to Sun JDK documentation and limit the
+class hierarchy to Grappa and related classes. The "postDoc" program uses the
+packages.src and tree.src files to replaced the "mkDoc" generated versions
+("postDoc" also uses "sed" on the generated files to change the hyperlink
+information for the JDK files).
+
+Bugs, etc. to: John Mocenigo
+               john@research.att.com
+

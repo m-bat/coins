@@ -1,0 +1,1421 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>	
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>Outline of High level Intermediate Representation HIR</title>
+
+  </head>
+  <body>
+
+<h1>2. Outline of High level Intermediate Representation HIR</h1>
+
+<h3 id='i-2-1'>2.1. Underlining concepts in the design of HIR</h3>
+
+<h4 id='i-2-1-1'>2.1.1. Abstraction of programming languages</h4>
+
+  The High level Intermediate Representation HIR is a language 
+derived from abstracting notions of currently prevailing imperative
+languages such as C, Fortran, Pascal, Java, etc.  There are some 
+notions common to these languages such as assign-statement, if-statement,
+arithmetic expressions, logical expressions, and so on if we focus on 
+operations to be performed. <br>
+  Their exact meaning and concrete representation differ from language 
+to language, but it is not necessary to worry about it.  Intermediate 
+representation of a compiler is an interface between processing modules 
+of the compiler which decomposes high level language notions to low level 
+operations step by step.  In this process, concrete representation is
+not important.  We should focus on abstract representations. 
+High level languages may have sophisticated notions and operations
+of their own.  However, if we expand them to machine instructions then 
+we can reach to language independent representations. <br>
+If we stop such expansion at some level, then we can get abstract 
+representations that have nearly one-to-one correspondence between
+those of actual individual imperative languages and also have 
+language independency.  This process is roughly schematized as follows:
+<pre>
+  source language          -- Notions peculiar to each language.
+      |                       Language dependent, machine independent.
+      V
+  high level intermediate  -- Elementary notions of imperative languages.
+    representation            Language independent, machine independent.
+      |
+      V
+  low level intermediate   -- Abstraction of actual machines.
+    representation            Language independent, 
+      |                       almost machine independent.
+      V
+  machine language         -- Operation sequence.
+                              Language independent, machine dependent.
+</pre>
+  There are many languages such as Fortran II having simple structure, 
+C having medium level of structure, and object oriented languages with
+complex structure.  It will be difficult to get an abstract language  
+covering basic notions of such languages.  But, if we focus on operations 
+to be described by these languages, then we can extract elementary 
+notions common to all of these languages. 
+
+<h4 id='i-2-1-2'>2.1.2. Level of abstraction</h4>
+
+  There are many ways of language abstraction such as <br>
+   (a) Define abstract syntax common to many languages and 
+    as for semantics, it is defined according to source languages,<br>
+   (b) Define syntax and semantics in greater detail without 
+    leaving ambiguity.<br>
+In the case (a), compiler modules may contain many language dependent 
+parts and addition of new language will cause modifications for many
+modules.  In the case (b), detailed specifications may cause unnecessary
+conversions and difficulties in adding new languages and machines.  For
+example, too much detailed specifications in character representation
+or floating point representation will cause complicated processing in 
+treating new representations.<br>
+  COINS should cover various cases such as generating C language program
+after parallelizing/optimizing given C program, highly optimizing compiler
+for scientific applications, and so on.  COINS should cover many languages
+amd machines that may appear in future.  For such purpose, it will be
+better neither so deeply decomposed as to machine language level nore
+too much rigid.  It is required to be able to build compiler modules
+such as program analyzers, optimizers and parallelizers
+applicable to various languages and machines.<br>
+  In order to answer to such requirements, the level of abstraction is 
+settled at the level where the result of analysis and transformation 
+can be represented in elementary high level language.  HIR should represent
+<ul>
+<li>abstract structure of source program</li>
+<li>elementary statements of high level languages </li>
+<li>execution order of operations</li>
+<li>elementary data structure of source language</li>
+</ul>
+
+  COINS has HIR and LIR so that optimizing/pasrallelizing transformation
+representable on source language level are to be performed on HIR
+and machine language level optimizations are to be performed on LIR.<br>
+  In HIR, representation of array elements and structure elements are not 
+decomposed to pointer expressions.  Analysis and transformation for optimization 
+and parallelization are more easily performed on the representation of array
+elements and structure elements than on the representation by pointer. 
+Of course there are optimizations that can be performed on the representation
+using pointer, but such optimizations should be done on LIR, not on HIR.<br> 
+
+<h4 id='i-2-1-3'>2.1.3. Parametrization of detailed specifications</h4>
+
+In defining the level of abstraction and the level of detailedness,
+how to make compiler modules to be common between languages and machines 
+was the main concern.  Some characteristics of languages and machines
+can be parametrized or can be treated by small functions.  For example,
+bit length of integers and alignment of elementary data can be
+parametrized, and how to represent the length of character strings
+can be represented by a small function.  HIR is open-ended in such
+details and represent them by parameters and functions corresponding
+to source languages and target machines.  Most modules can be written
+without bothering such items and only small number of modules
+handle such items refering corresponding parameters and functions. 
+
+
+<h3 id='i-2-2'>2.2. Overview of HIR </h3>
+
+<h4 id='i-2-2-1'>2.2.1. Elementary notions of programming languages</h4>
+
+  In general, a program is composed of several subprograms.  
+One subprogram is distinguished to be called as a main program that is 
+firstly invoked and invokes other subprograms.  When a subprogram is 
+invoked, it executes executable statements contained in it.  A subprogram
+that returns a value is called a function.  There are 
+assign-statement, if-statement, loop-statement, call-statement, 
+return-statement, etc.  Structured statements such as if-statement and 
+loop-statement require language facilities to treat a sequence of
+statements in the same way as one statement, hence block-statement
+is necessary.  In the execution process of these statements, expressions 
+may be evaluated. <br>
+  Arithmetic expression is a basic expression.  It represents 
+addition, subtraction, multiplication, division, etc.  
+The if-statement and loop-statement requires conditional
+expression such as comparison expression and logical expression. 
+The comparison expression represents greater than, less than, equal to,
+not equal to, etc.  The logical expression represents and-operation,
+or-operation, not-operation, etc. <br>
+  Operands of expressions are variables, constants, and expressions. 
+A variable may be either a scalar variable representing a single value,
+or an aggregate variable representing compound values such as 
+arrays, structures, and unions.  Arbitrary complex data structure
+can be composed using these elementary data structures. 
+A variable may take the form of simple variable, subscripted variable, 
+structure element reference, union element reference, and pointed object 
+reference. <br>
+  Data kind corresponding to variables and expressions can be 
+represented by data type.  Actual data representation may differ
+according to languages and machines.  In the process of compilation,
+source language analysis phase and machine code generation
+phase are deeply dependent on the concrete data representation. 
+In intermediate phases such as optimization and parallelization,
+most operations can be performed without seeing concrete data 
+representation except in some cases such as constant folding. <br>
+Thus, we can represent major part of operations 
+in language independent and machine independent form
+hiding detail of concrete data representation. 
+
+<h4 id='i-2-2-2'>2.2.2. Structure of HIR</h4>
+
+  Specifications of HIR are defined based on observations described above. 
+The process of HIR definition is similar to the process of
+defining a programming language whose abstraction level is 
+a little lower than prevailing imperative languages but
+significantly higher than actual machine languages.<br>
+  HIR may be represented either in text form or as tree structure. 
+The textual representation is used for displaying HIR or explaining
+HIR in sentences. It is not used for constructing HIR from text input.
+In view of tree structure, it is composed of nonleaves representing 
+operations and leaves representing symbols.  A nonleaf has operator, 
+attributes, and operands.  A leaf has symbol kind indication, type,
+and symbol.   A nonleaf node represents a subtree stemming from the node. 
+An expression is represented by a subtree whose root node corresponds to 
+the top-most operator.  A statement is represented by a subtree whose 
+root node represents what statement the subtree is.  Whole program is
+represented by a big tree.<br>
+  In text form, a nonleaf is represented as
+<pre>
+    ( operator  attributes  operand1  operand2 ... )
+</pre>
+and a leaf is represented as<br>
+<pre>
+    &lt; symbol-kind  type  symbol >
+</pre>
+  When the construction of HIR for given program is finished,
+consecutive node number is attached to each node in such way as
+<pre>
+    ( operator node-number attributes  operand1  operand2 ... )
+    &lt; symbol-kind node-number type  symbol >
+</pre>
+The node number may be used as index to tables etc. used in program
+analysis and transformation.  When HIR is under construction, its
+node number fields may have value 0. <br>
+  Empty node is represented by null.  Operand1, operand2, ... are
+either a nonleaf or a leaf or null.  The tree representation can be 
+transformed to the text form and the text form can be transformed to 
+the tree representation. <br>
+  The hight of tree corresponds to the nesting level of parenthesis. 
+In the text form, indentation showing the nesting level may be used 
+for ease of seeing overall structure. <br>
+  The operators are predefined name.  The attributes are type with some
+additional information.  The symbol-kind is one of predefined names.  
+The type is either a basic type or a type constructed by type constructor 
+as explained later.  All symbols such as variables, subprograms, types, labels,
+and constants are registered in the symbol table (SymTable).  Leaf nodes of HIR
+represent a symbol as a reference to the item registered in the symbol table. 
+  Thus, a program is represented by HIR and symbol table. <br>
+Roughly speaking, program structure and operations to be performed
+are represented by HIR tree structure (or HIR text representation 
+corresponding to the tree), and attributes and structure of symbols 
+declared by declaration statements are represented by the symbol table. 
+<pre>
+    program =  HIR              +  Symbol table
+               operations          attributes of symbols
+               program structure   data structure
+                                   correlation between symbols
+</pre>
+  In the process of translating source program to HIR, an intermediate 
+representation having dependence to the source language may be used and then
+it is translated to the common (language independent) HIR in some cases. 
+For example, in translating C program to HIR, a C-dependent intermediate 
+representation named HIR-C is used and then HIR-C is translated to the 
+common HIR.  Usually, the word HIR means the HIR common to many languages. 
+If it is necessary to make difference clearly, the HIR common to many
+languages is written as HIR-base.  Thus, in case of C language, translation
+takes following steps:
+<pre>
+    C language --> HIR-C --> HIR-base
+</pre>
+Examples and explanations that are specific for some language/machine 
+are enclosed with [[ ]] in this document. 
+
+<h4 id='i-2-2-3'>2.2.3. Type</h4>
+
+  Actual operations may differ according to the type of operands. 
+In machine languages, such difference is usually represented by
+the difference of operation code in such way as integer addition, 
+floating point addition, store byte, store word, and so on.  In HIR,
+we do not take such way because in most modules handling HIR,
+adding operations are treated in the same way for both integer and
+floating, and assignment statements are treated in the same way
+fo both character and integer, except for some small number of
+modules.  In HIR, the same operator can be applied to different
+types in order to make processing common between various
+types of operands, of course some modules may treat operands
+differently according to their type. <br>
+  Considering such treatments, each node of HIR have type attribute 
+that represents the type of value represented by the subtree corresponding 
+to the node.  here, the word subtree may represent either nonleaf with its 
+children or leaf treating the leaf as a subtree with no child. if the subtree 
+have no value then the corresponding node has void attribute as its type. <br>
+  A storage area to hold a value is called as an "object".  An expression
+representing object is called as "l-value".  The type of expression 
+represents the type of the value represented by the expression. <br>
+Thus, the type of a subtree is represented by the type attribute
+of the root node of the subtree. <br>
+
+[[<br>
+  Consider a sequence of C language statements
+<pre>
+  int i;
+  float x, y[10];
+  ...
+  x = y[i] + 1.0;
+</pre>
+The HIR representation corresponding to the assignment statement
+in the last line is as follows:
+<pre>
+  (assign float
+   &lt;var float x>
+   (conv float
+    (add double
+     (conv double
+      (subs float
+       &lt;var &lt;VECT 10 0 float> y>
+       &lt;var i int> ) )
+     &lt;const double 1.0> ) ) )
+</pre>
+here, &lt;VECT n lb t> represents a vector (array) type having n elements of
+type t and its lower bound of subscripts is lb, as it is explained 
+in the overview of type. <br>
+]]
+
+<h4 id='i-2-2-4'>2.2.4. Attached information</h4>
+
+  HIR nodes may have flags representing true/false for some attributes 
+(getFlag(), setFlag()). The kinds of flags available are defined in the 
+HIR interface.  For example, constant-flag indicates that the subtree 
+represents a constant expression.<br>
+  For statements of HIR, information showing the name of source 
+program file and line number can be attached (getFileName(), get LineNumber()). <br>
+  A statement named InfStmt shows information to control the process of 
+compilation such as #pragma in C language.  In some cases, it may represent 
+comment in the source program.  Information given by InfStmt may 
+be ignored in compiling process but it may gives information to improve
+the code to be generated or information to control parallelization, etc. 
+InfStmt is a kind of statement that can be given at the position
+where other statements can be written. <br>
+[[<br>
+  Current C parser does not include comment line as InfStmt.<br>
+]]<br>
+
+<h4 id='i-2-2-5'>2.2.5. Evaluation of statements and expressions</h4>
+
+  The order of execution of statements in a block-statement is the same
+as the order of arrangement of the statements in the block-statement. 
+In the evaluation/execution of a statement, firstly its child 1, child 2, ...
+are evaluated/executed in this order and then the operation indicated 
+by the statement is performed except for assign-statement, loop-statement,
+if-statement and switch-statement as it will be described in the explanation 
+of each statement.  In the evaluation of an expression, firstly its operand 1, 
+operand 2, ...  are evaluated in this order and then the operation indicated 
+by the expression is performed. <br>
+  In constructing HIR, compiler implementers should be careful to keep 
+consistency of evaluation order between the source language and HIR.  
+If the evaluation order of some expression is not defined in the specifications
+of source language, then the order may be defined by the implementer.  It is 
+not meant that the orders can not be altered at all, but they can only be 
+altered in a compiler when the alteration assures the sameness of the operation 
+results or is within the range arrowed by the language specifications.
+  In Fortran, transformation of expressions are permitted if the transformation
+is mathematically correct.  In mathematics, by associative law, <br>
+<pre>
+    a + (b + c)
+</pre>
+is the same to
+<pre>
+    (a + b) + c
+</pre>
+but because of such cases as rounding floating point with the finite precision, 
+calculation on a computer may end up with different results. To avoid this kind 
+of problem, the parentheses in the source programs may be given priorities and 
+an item within and an item outside of a pair of parentheses should not generally 
+be associated. There are some compilers which prepare an option to arrow 
+optimization involving changes of associative orders ignoring the parentheses. 
+In some cases, it is required to give parentheses the priority where the result 
+would be greatly affected by such treatment. An HIR operator "enclose" is 
+provided to suppress such changes of associative order in optimization.<br>
+  When an optimization is performed, changes of evaluation order or 
+eliminations of some operations may occur. It might be wished that these 
+transformations should not happen to a certain portion of an HIR. In HIR, it is 
+possible to restrain transformations for a subtree (expression or statement) 
+by applying 
+<pre>
+    setFlag(HIR.FLAG_NO_CHANGE, true)
+</pre>
+It is used to suppress the optimization transformation over the whole of the 
+subtrees underneath. While "enclose" allows optimizations except for changes 
+of associative order, FLAG_NO_CHANGE prohibits all optimizations performed 
+on the subtree.
+ 
+<h4 id='i-2-2-6'>2.2.6. Methods of HIR</h4>
+
+  There are many methods applicable to HIR in order to build, transform, 
+get/set information, and so on.  As for them, see the interface HIR0 and HIR. 
+The interface HIR0 is provided to support beginners.  It contains methods
+required to build simple compilers.  HIR extends HIR0 in order to supply
+methods required to build complicated compilers and highly optimized 
+compilers.  The interface IR is the super interface of HIR0 and HIR. <br>
+(IR is the super interface of HIR and old version of LIR.  The current
+version of LIR is not yet adjusted as the sub-interface of IR.)<br>
+  Instances of HIR should be constructed by using methods specified
+in HIR.  For example, to make an if-statement (IfStmt),
+<pre>
+   ifStmt( Exp pConditionExp, Stmt pThenPart, Stmt pElsePart)
+</pre>
+should be called.  Such methods are called a factory method.  It is not
+necessary to use "new" phrase in constructing HIR instances.  It is
+not prohibited to make an HIR instance by using constructor directly
+but it is not recommended because instances of HIR are interrelated
+with each other and keeping consistency will be difficult until
+users completely understand whole of HIR.  By using factory methods,
+compiler implementers are not bothered by such interrelations. 
+Another reason of using factory methods is to confine range of modifications
+when subclasses are added.  When a subclass is added to extend or improve
+some processing, then all statements issuing "new" should be examined to
+use new class or not, however, if a factory method is used, most modifications
+are confined within the factory methods. <br>
+  There are many interfaces extending HIR.  Users (compiler implementers)
+should read upper interface first and do not read from lower interface first, 
+because if they read lower interface before reading upper interface, they may
+misunderstand specifications or they may make nearly the same methods provided
+in upper interface and such methods made by the user may contain error if
+the user does not yet understand HIR completely. <br>
+  Usually, HIR is constructed from input program by a parser. It is also possible 
+to construct it not by the parser but by a program calling the factory methods 
+of HIR (see SimpleMain.java under examples directory in the archive file).<br>
+If it is desired to add or modify a part of HIR for experimentation, modify
+TestHir.java in coins.ir.hir package tentatively. TestHir is automatically 
+called after the construction of HIR by the parser and before doing optimizations
+and backend processing. 
+ 
+
+<h3 id='i-2-3'>2.3. Overview of interfaces and classes of HIR</h3>
+
+<h4 id='i-2-3-1'>2.3.1. Separation of interfaces and classes</h4>
+
+  In all packages related to HIR such as ir, hir, sym and flow, interface
+and implementation classes are separated so that implementations can be 
+improved without affecting modules using the corresponding interface. 
+For example, HIR is an interface and HIR_Impl is its implementation 
+class, Stmt is an interface and StmtImpl is its implementation class, 
+and so on. <br>
+
+  Major sub-interfaces of HIR are as follows:
+<pre>
+  HIR0.java 
+    HIR.java
+      Stmt.java          statement
+        AssignStmt.java  assign-statement
+        IfStmt.java      if-statement
+        LoopStmt.java    loop-statement
+      Exp.java           expression
+      SymNode.java       symbol node
+        VarNode.java     variable node
+</pre>
+
+  Corresponding to these interfaces, there are implementation classes
+<pre>
+    HIR_Impl.java
+      StmtImpl.java
+        AssignStmtImpl.java
+        IfStmtImpl.java
+        LoopStmtImpl.java
+      ExpImpl.java
+      SymNodeImpl.java
+        VarNodeImpl.java
+</pre>
+
+  The usage of all methods are explained in the interfaces and there is 
+no need to read implementation classes.  That is, detailed specifications
+are given in interfaces.  Other documents describe overview and do not give
+detailed specifications.<br>
+
+  Interfaces and classes for handling symbol are also designed in the same way. 
+Major sub-interfaces of symbol are as follows:
+<pre>
+  Sym0.java
+    Sym.java 
+      Type.java      type
+      Subp.java      subprogram
+      Var.java       variable
+      Const.java     constant
+  SymTable.java      symbol table
+</pre>
+
+  Classes corresponding to them are as follows:
+<pre>
+  SymImpl.java
+    TypeImpl.java
+    SubpImpl.java
+    VarImpl.java
+    ConstImpl.java
+  SymTableImpl.java
+</pre>
+
+<h4 id='i-2-3-2'>2.3.2. Transformations of HIR </h4>
+
+  Inside a compiler, HIR transformations for optimization and parallelization 
+are carried out. Methods below are provided to assist such transformations,
+<pre>
+    copyWithOperands:  copy a subtree including its children.
+    copyWithOperandsChangingLabels: copy a subtree and change labels contained
+                       in it to avoid duplication of label definition.
+    replaceThisNode: replace this subtree by new subtree.
+    deleteThisStmt:  delete this statement changing related links.
+</pre>
+It may happen a node is linked from multiple parents by careless coding and 
+cause erroneous processing. To avoid this sort of error to occur, instead of 
+changing links to children, first create a copy of the subtree, and then set 
+the new subtree to its parent.<br>
+  In HIR transformation, care should be taken so that control structures like 
+loop-statement and if-statement never become in conflict with their original 
+meanings in HIR. A loopstatement and if-statement must be compatible with the 
+execution models of LoopStmt and IfStmt, respectively. For example, a jump 
+from outside to the body of a loop and a jump out from the loop step part are 
+against the execution model of LoopStmt, and improper jumps to then-part and 
+else-part of an if structure are against the execution model of IfStmt. Such 
+operations should be avoided. Otherwise the processes that follow may cause 
+errors. It is recommended to use factory methods to avoid such errors. 
+
+<h4 id='i-2-3-3'>2.3.3. Hierarchy of interfaces and classes</h4>
+
+  In designing a program using object oriented language, one of major
+concerns is what should be represented as a class. In designing HIR,
+high level language concepts such as subprogram, statement, expression,
+etc. are selected as items to be represented as a class. Such classes 
+may not exactly correspond to source program construct in some languages
+but there are corresponding constructs in many languages.<br>
+The hierarchy of HIR interfaces are shown below. They are mirrored to
+the hierarchy of corresponding classes.
+<pre>
+ IR
+  |- IR_factory    // IR object creation factory.
+  |- IrList        // List of indefinite number of objects.
+  |   |- HirList   // IrList whose elements are HIR objects.
+  |
+  |- LIR           // Low level Intermediate Representation
+  |   |- ...
+  |
+  |- HIR // High level Intermediate Representation.
+      |  // Usual operations on HIR are done by using HIR methods.
+      |
+      |- Program         // Program definition node.
+      |- SubpDefinition  // Subprogram definition node.
+      |- HirSeq          // Sequence of definite number of
+      |                  // HIR objects.
+      |- HirList         // IrList whose elements are HIR objects.
+      |                  // (Multi-inheritance of interface)
+      |- Stmt            // Statement
+      |   |- LabeledStmt // Labeled statement.
+      |   |- AssignStmt  // Assignment statement.
+      |   |- IfStmt      // If-statement.
+      |   |- JumpStmt    // Jump (goto) statement.
+      |   |              //  (Jump unconditionally)
+      |   |- LoopStmt    // Loop statement.
+      |   |   |- ForLoop     // For-loop.
+      |   |   |- WhileLoop   // While-loop.
+      |   |   |- RepeatLoop  // Repeat-while-true loop.
+      |   |   |- IndexedLoop // Loop with index range
+      |   |                  // (such as Fortran DO loop).
+      |   |- ReturnStmt   // Return statement.
+      |   |- SwitchStmt   // Switch (case) statement.
+      |   |- BlockStmt    // Block representing a sequence
+      |   |               //   of statements.
+      |   |- ExpStmt      // Expression treated as a statement.
+      |   |               // Call statement is treated as an
+      |   |               // expression statement of function call.
+      |   |               // Loop start condition expression has
+      |   |               // label and treated as ExpStmt.
+      |   |- InfStmt      // An information node
+      |                   // which can be treated as a statement.
+      |                   //  (pragma, comment line, etc.)
+      |- LabelDef         // Label definition node.
+      |- Exp  // Expression
+          |- ConstNode // Constant node
+          |- SymNode   // Symbol node
+          |   |- VarNode   // Variable name node.
+          |   |- SubpNode  // Subprogram name node.
+          |   |- LabelNode // Label reference node.
+          |   |- TypeNode  // Type name node.
+          |
+          |- SubscriptedExp // Subscripted variable.
+          |- PointedExp     // Pointed object.
+          |- QualifiedExp   // Qualified variable.
+          |- FunctionExp    // Function call expression.
+          |- PhiExp    // Phi function used in SSA
+          |- ExpList_  // List of expressions
+          |            // (implemented as a kind of IrList).
+          |- NullNode  // Null (no-operation) node
+</pre>
+
+<h3 id='i-2-4'>2.4. Syntax of HIR</h3>
+
+  Syntax of HIR is described in this chapter.  Semantics of HIR is explained
+in the other document<br>
+<a href="HirSemanticsE-frame.html" target="_top">Semantics of HIR </a>.
+As it is said in previous chapter, HIR may be represented either as tree
+or as text. 
+
+<h4 id='i-2-4-1'>2.4.1. Tree representation of HIR</h4>
+
+  In HIR, whole of given compile unit is represented as a tree that is
+named as a program tree.  The program tree is composed of a subtree representing
+program initiation part and a sequence of subtrees each of which represents 
+a subprogram.  The subtree representing program initiation part is a block
+containing statements specifying initial values and InfStmt showing directives
+to the compiler.  The subtree corresponding to a subprogram (subprogram subtree)
+is composed of a subtree representing subprogram initiation part and a block 
+representing a sequence of statements.  A nonleaf node of a tree has operator 
+and operands which may be a subtree or a leaf.  A leaf node represents a symbol
+which takes the form of a reference to the symbol item in a symbol table. <br>
+  The program tree has a link to the symbol table containing global symbols 
+and the subprogram subtree has a link to a symbol table containing symbols 
+locally defined in the corresponding subprogram.  Both of nonleaf node and 
+leaf node may have some attributes.<br>
+  In the evaluation of a tree, as the default, child 1, child 2, ... are
+evaluated in this order and then the operation indicated by the operator
+of the tree is executed.  A block of statements is evaluated by executing
+statements contained in the block in the same order as the statements are
+arranged.  A list of HIR subtrees is evaluated by evaluating its elements
+in the same order as the elements are arranged.  As exceptional case,
+some kind of subtrees such as if-statement and loop-statement have
+their own evaluation order as it is explained for each of them. <br>
+  For the ease of traversing trees, several HIR iterators are provided. 
+HIR node iterator traverses all nodes of given subtree.  Statement iterator
+traverses all statements of given subtree.  Subprogram iterator traverses
+all subprograms defined in the compile unit. <br>
+In traversing HIR trees, instances of HIR are traversed and operation code,
+type attribute, symbol reference are not traversed but treated as information
+that can be seen during traversing operation. 
+
+<h4 id='i-2-4-2'>2.4.2. Text representation of HIR</h4>
+
+  A program is represented as a tree composed of HIR nodes all of which 
+have type attribute represented as a reference to type symbol registered in 
+the symbol table.  The type attribute is decided according to the language 
+specifications and attached to HIR nodes when the nodes are constructed. 
+For HIR node representing no value, void is to be attached as its type. 
+A leaf node with operation code op, type t, symbol s is represented as
+<pre>
+    &lt;op t s>.
+</pre>
+A nonleaf node with operation code op, type t, operands child_1, child_2, ...,
+child_n is represented as
+<pre>
+    (op t child_1 child_2 ... child_n).
+</pre>
+When HIR of a program or subprogram is completed, then its nodes are
+numbered by node index (see the method finishHir of HIR interface).
+Precisely speaking, above nodes have the form
+<pre>
+    &lt;op  number  t s>
+    (op  number  t child_1 child_2 ... child_n)
+</pre>
+but sometimes the node number is omitted in writing HIR in this document.
+HIR is usually written with indentation
+<pre>
+    (op t 
+     child_1
+     child_2
+     ....
+     child_n)
+</pre>
+Thus, the HIR subtree corresponding to C statement
+<pre>
+    a = b + 1; 
+</pre>
+is represented as
+<pre>
+    (assign  int
+     &lt;var  int  a>
+     (add  int
+      &lt;var  int  b>
+      &lt;const  int  1>))
+</pre>
+if a and b are integer variable.<br>
+  The textual representatnion of HIR is used for displaying HIR.  At present,
+features to construct HIR tree structure from textual representation are
+not provided.
+
+<h4 id='i-2-4-3'>2.4.3. Notations for writing the syntax of HIR</h4>
+
+  In writing the syntax of HIR, it is necessary to make difference between
+terminal, nonterminal, operation code, operands represented as child, and 
+attribute.  In this document, following notations are used. 
+<pre>
+    identifier beginning with lower case letter 
+      -- terminal
+    identifier beginning with upper case letter 
+      -- nonterminal
+    nonterminal name not ending with underscore (_)
+      -- nonterminal name representing some interface
+    nonterminal name ending with underscore (_)
+      -- nonterminal name that does not represents interface
+         but is a name introduced to make BNF easy to understand
+    IrList of xxx
+      -- IrList composed of elements xxx
+    HirList of xxx
+      -- HirList composed of elements xxx
+    List_of_xxx
+      -- java.util.List with elements xxxx.
+    intConstValue
+      -- integer constant (not a symbol table entry but value itself).
+    stringConstValue
+      -- string  constant (not a symbol table entry but value itself).
+    null       
+      -- empty
+    NullNode   
+      -- a leaf node with operation code null. NullNode is not null.
+</pre>
+       
+  In order to make difference between HIR instance and attribute,
+grammatical word representing HIR instance is postfixed with character @
+while attribute word is not postfixed with @ in BNF productions. 
+The character @ does not represent any grammatical item but it is 
+used merely to distinguish HIR instances. <br>
+
+  Following items does not represent HIR instances but represent
+operation code and attributes. 
+<pre>
+    xxxCode      -- operation code xxx
+                    e.g., addCode, assignCode, ...
+    xxxSym       -- symbol of kind xxx
+    xxxConst     -- constant of kind xxx
+    xxxSymTable_ -- symbol table of kind xxx 
+    attr         -- attribute
+</pre>
+ 
+For example,
+<pre>
+    progSym : program name symbol
+    subpSym : subprogram name symbol
+    varSym  : variable name symbol
+              (including array/struct/union name symbol)
+    paramSym: formal parameter name symbol
+    elemSym : struct/union element name symbol
+    labelSym: label name symbol
+    typeSym : type name symbol
+    intConst   : integer constant
+                 (int/short/long/unsigned int/ ...)
+    floatConst : floating constant (float/double/ ...)
+    charConst  : character constant (signed/unsigned)
+    stringConst: character string constant
+    boolConst  : boolean constant
+                 (true is 1, false is 0 in integer)
+    GlobalSymTable_ : global symbol table
+    LocalSymTable_  : local symbol table
+</pre>
+
+  There is one to one correspondence between interface name, class name,
+operation code in BNF, operation code in textual representation as follows:
+<pre>
+    interface       operation     textual   class
+      name            code        operation   name
+                                   code
+    ------------------------------------------------------------
+    Program         progCode      prog      ProgramImpl
+    SubpDefinition  pubpDefCode   subpDef   SubpDefinitionImpl
+    AssignStmt      assignCode    assign    AssignImpl
+    IfStmt          ifCode        if        IfStmtImpl
+    VarNode         symCode       var       VarNodeImpl
+    LabelNode       symCode       label     LabelNodeImpl
+    ConstNode       constCode     const     ConstNodeImpl
+    Exp             addCode       add       ExpImpl
+    Exp             multCode      mult      ExpImpl
+     ...             ...          ...        ...
+</pre>
+As for actual coding form of operation code, see the interface HIR0.
+
+<h4 id='i-2-4-4'>2.4.4. Syntax of HIR written in BNF</h4>
+
+  The syntax of HIR is shown below.  Here, type attributes and node number
+are not shown.   "//" shows the beginning of a line comment.  
+Parenthesis is not a syntactic component but a delimiter in the following
+BNF description.  <br>
+One subtree begins with left parenthesis and end with right parenthesis.  
+The rules commented as "HIR-C only" are not included in HIR-base but
+included only in HIR-C.  
+<pre>
+   Program   ->             // Program represents a compile unit.
+      ( progCode attr       //
+        GlobalSymTable_     // Global symbols of the program
+        ProgSym_ @          // Program name (may be null).
+        InitiationPart_ @   // Initial value specification.
+        SubpList_ @ )       // Subprogram definition list.
+   ProgSym_  ->
+      ( symCode attr progSym )   // Program name symbol.
+    | null
+   GlobalSymTable_  ->   // Global symbol table of the program.
+      SymTable           // As for SymTable, see Sym and SymTable.
+    | null
+   InitiationPart_ ->    // Initial value specification 
+      InitiationBlock_
+    | NullNode
+   InitiationBlock_ ->   // Block containing initiation statements.
+      ( blockCode attr
+        InitiationStmtSeq_ @ )
+   InitiationStmtSeq_ -> // Sequence of initiation statements
+      InitiationStmt_ @ InitiationStmtSeq_ @
+    | null
+   InitiationStmt_ ->    // Initiation statement
+      ( setDataCode attr         // with Exp_l_: l-value
+         Exp_l_ @ ValueSpec_ @ ) // ValueSpec_: constant Exp.
+    | InfStmt
+    | AssignStmt
+   ValueSpec_ ->
+       ConstExp_         // Constant expression
+    | ( explistCode attr // ExpListExp of ValueSpec_
+        List_of_ValueSpec_ @ )
+    | ( exprepeatCode attr        // Expression to represent repeating
+        ValueSpec_ @ intConst @ ) //   ValueSpec_ intConst-times.
+   ConstExp_ -> 
+      ConstNode          // Constant value
+    | Exp                // Exp whose operands are all ConstNode
+   SubpList_ ->
+      ( listCode attr     // Subprogram definition list
+        List_of_SubpDefinition @ )
+   SubpDefinition ->      // Subprogram definition
+      ( subpDefCode attr
+        LocalSymTable_    // SymTable local in the subprogram.
+        SubpNode @        // Subprogram name.
+        InitiationPart_ @ // Subprogram initiation.
+        SubpBody_ @ )     // HIR subprogram body
+                          // (Control flow should be ended by return).
+   SubpNode  ->      // Subprogram name node.
+      ( symCode attr
+        subpSym )
+   LocalSymTable_ -> // Local symbol table (for subprogram, block, etc.)
+      SymTable
+    | null
+   SubpBody_ ->      // HIR subprogram body is
+      BlockStmt                 // block statement or
+    | ( labeledStmtCode attr    // BlockStmt with Label.
+         LabelDefinitionList_ @ // List of label definitions.
+         BlockStmt @ )          // Statement body
+     // BlockStmt of SubpBody should have LocalSymTable.
+   BlockStmt ->
+      ( blockCode attr
+        LocalSymTable_  // Define symbols local in the block.
+        StmtSeq_ @ )    // Block makes a sequence of statements
+                        // to be treated as one statement.
+             // Statements in StmtSeq_ can be get
+             // by getFirstStmt() and successive getNextStmt().
+   StmtSeq_  ->
+      Stmt @ StmtSeq_ @  // Statement sequence is a statement
+    | null               // followed by statements or empty.
+   Stmt      ->          // Statement is
+      LabeledStmt        // a statement with label definitions or
+    | StmtBody_          // a statement without label definition.
+   LabeledStmt ->        // Statement with label definition.
+      ( labeledStmtCode attr
+         LabelDefinitionList_ @ // List of label definitions.
+         StmtBody_ @ )          // Statement body (statement that is
+                                // peeled label off).
+   LabelDefinitionList_ ->   // List of LabelDef nodes.
+      ( listCode attr
+        List_of_LabelDef @ )
+   LabelDef   ->             // Label definition node.
+      ( labelDefCode attr
+        labelSym )
+   StmtBody_  ->     // Statement body.
+      AssignStmt     // Assignment statement.
+    | IfStmt         // If statement.
+    | JumpStmt       // Jump (goto) statement.
+    | LoopStmt       // Loop statement.
+    | CallStmt_      // Subprogram call statement.
+    | ReturnStmt     // Return statement.
+    | SwitchStmt     // Switch (case selection) statement.
+    | BlockStmt      // Block statement.
+    | ExpStmt        // Expression treated as a statement.
+    | SetDataStmt    // Set initial data statement.
+ 
+   AssignStmt ->     // Assign statement.
+      ( assignCode attr
+        Exp_l_ @     // l_value expression.
+        Exp @ )      // Expression whose value is to be assigned.
+                     // Exp_l_ and Exp should have the same type.
+                     // Exp may be any scalar expression
+                     // or struct/union expression.
+                     // (Array expression will be permitted in future.)
+    | ( CompoundAssignOperator_ attr  // HIR-C only
+        Exp_l_ @
+        Exp @ )
+    | ( IncrDecrOperator_ attr        // HIR-C only
+        Exp_l_ @ )
+   Exp_l_  ->              // l-value expression is
+      Exp                  // an expression representing an object
+                           // (memory area to contain data).
+   IfStmt    ->            // If statement
+     ( ifCode attr
+        ConditionalExp_ @  // Conditional expression.
+        ThenPart_ @        // Then-part
+        ElsePart_ @        // Else-part.
+        LabeledStmt0_ @ )  // Statement with end-of-if label.
+   ThenPart  ->
+      LabeledStmt   // Executed if ConditionalExp is true.
+    | null          //
+   ElsePart  ->
+      LabeledStmt   // Executed if ConditionalExp is false.
+    | null          //
+   LabeledStmt0_    ->         // LabeledStmt0_ is a labeled
+      ( labeledStmtCode attr   // statement whose statement body
+        LabelDefinitionList_ @ // may be null at first but it may become
+        NullOrStmt_ @ )        // non-null by code optimization, etc.
+                               // LabeledStmt0_ may be called labeled null.
+   JumpStmt  ->
+      ( jumpCode attr  // Jump to the statement with
+        LabelNode @ )  // specified label.
+   LoopStmt ->  // Loop statement is either for-loop, while-loop,
+                // repeat-loop, indexed-loop, or other general loop.
+                // All of them are implemented as a general loop
+                // with some restriction depending on the loop type.
+                // Compiler components (other than front part) should
+                // treat general loop, that is, do not assume some child
+                // is null without checking whether the child is null
+                // or not. For example, a while-loop may be changed
+                // to a loop with LoopInitPart_ and LoopStepPart_
+                // by code optimizer. isSimpleForLoop(), isSimpleWhileLoop(),
+                // isSimpleRepeatLoop() of LoopStmt interface check
+                // whether the loop can be treated pure for-loop,
+                // pure while-loop, etc.
+                // There may be some cases where processing become
+                // simple if the loop is either simple for-loop,
+                // while-loop, repeat-loop, etc.
+     ( LoopCode_ attr     // Loop kind code.
+       LoopInitPart_ @    // Loop initiation part to be executed
+                          // before repetition. It may be null.
+                          // LoopInitPart_ should not contain
+                          // control statements except for the one
+                          // generated by addToConditionalInitPart
+                          // of LoopStmt interface.
+                          // As for expressions to be executed
+                          // only once (loop invariant expressions, etc.),
+                          // see addToConditionalInitPart of LoopStmt.
+       StartConditionPart_ @  // Loop start conditional expression
+                          // with loopBackLabel.
+                          // If true, pass through to LoopBody_,
+                          // otherwise transfer to LoopEndPart_
+                          // to terminate the loop execution.
+                          // If loop start condition part is null,
+                          //  pass through to LoopBody_.
+       LoopBody_ @        // Loop body repetitively executed.
+                          // Pass through to EndCondition_.
+                          // It is a block statement (BlockStmt)
+                          // with loop start label and the blcok
+                          // statement contains a labeled statement
+                          // with loopStepLabel as its last statement.
+                          // This should not be null but the block may
+                          // have no executable statement and contains
+                          // only a labeled statement with loopStepLabel.
+                          // "continue" jumps to the loopStepLabel.
+                          // The loopStepLabel may be omitted if
+                          // there is no "jump loopStepLabel".
+      EndCondition_ @     // Loop end condition expression.
+                          // If false, transfer to LoopEndPart_
+                          // to terminate the loop execution,
+                          // otherwise pass through to
+                          // LoopStepPart_.
+      LoopStepPart_ @     // Loop step part that is to be executed
+                          // before jumping to loopBackLabel.
+                          // LoopStepPart_ should not contain
+                          // control statements.
+      LoopEndPart_ @ )    // Loop end part
+                          // with loopEndLabel.
+                          // "exit" (break in C) jumps to here.
+      IndexedLoop_ attr   // Attributes for IndexedLoop.
+                          // Not given for other loops.
+   LoopCode_ attr ->
+      whileCode attr      // while-loop
+    | forCode attr        // for-loop
+    | repeatCode attr     // repeat-while-true--loop
+    | indexedLoopCode attr// indexed-loop
+    | loopCode attr       // general loop other than above loops.
+   LoopInitPart_   ->     // Loop initiation part.
+      Stmt
+    | null
+   ConditionalInitPart_ ->  // This item is deleted. Give null for this item
+      null                  // but use addToConditionalInitPart method
+                            // of LoopStmt to move loop invariant expressions
+                            // etc. from loop body so that they are executed
+                            // only once.
+   StartConditionPart_ ->      // Show start condition with
+      ( labeledStmtCode attr   // loopBacklabel.
+        LabelDefinitionList_ @
+        BooleanExpStmtOrNull_ @ ) // loopStartConditionExpression.
+   LoopBody_  ->               // Block statement with loopBodyLabel.
+      ( labeledStmtCode attr   // The last statement of the block
+        LabelDefinitionList_ @ // is a LabeledStmt0_ statement with
+        BlockStmt_ @ )         // loopStepLabel.
+   EndCondition_ ->            // ExpStmt showing loop end condition.
+      BooleanExpStmtOrNull_
+   LoopStepPart_  ->    // Statement to be executed before jumping
+      Stmt              // to loopBackLabel.
+    | null              // LoopStepPart_ should not contain
+                        // statements that change control flow.
+   LoopEndPart_  ->     // LabeledStmt0_ statement with loopEndLabel.
+      LabeledStmt0_
+   NullOrStmt_ ->       // Usually null but it may be
+      null              // a statement (created during
+    | Stmt              // HIR transformation).
+   BooleanExpStmtOrNull_ ->    // Boolean expression statement or null.
+      ExpStmt           // ExpStmt whose Exp part is a boolean expression.
+    | null
+   IndexedLoop_ attr  -> // Attributes for IndexedLoop.
+      loopIndex attr     // Loop index (induction variable).
+                         // See getLoopIndex().
+      startValue attr    // Start value of the loop index.
+                         // See getStartValue().
+      endValue attr      // End value of the loop index.
+                         // See getEndValue().
+      stepValue attr     // Step value for the loop index.
+                         // See getStepValue().
+ 
+   // Note. LoopInf may contain goto-loop that is difficult or
+   //   impossible to be represent by above LoopStmt.
+   //   (goto-loop is not implemented by LoopStmt.)
+
+   // LoopStmt is executed as follows:
+   //   LoopInitPart_;
+   //   if (loopStartConditionExpression == null) {
+   //     Sequence of statements added by addToConditionalInitPart();
+   //   }else {
+   //     if (loopStartConditionExpression == false) {
+   //       jump to loopEndLabel;
+   //     }else { // ConditionalInitBlock
+   //       Sequence of statements added by addToConditionalInitPart().
+   //       jump to loopBodyLabel;
+   //     }
+   //   }
+   //   loopBackLabel:
+   //     if ((loopStartConditionExpression != null)&amp;&amp;
+   //         (loopStartConditionExpression == false))
+   //       jump to loopEndLabel;
+   //   loopBodyLabel:
+   //     Start of BlockStmt of LoopBody_
+   //       Stastement sequence of the BlockStmt;
+   //       (break statement jumps to loopEndLabel;)
+   //       (continue statement jumps to loopStepLabel;)
+   //       Rest of stastement sequence of the LoopBody_;
+   //       loopStepLabel:;
+   //     End of BlockStmt of LoopBody_
+   //     if ((loopEndConditionExpression != null)&amp;&amp;
+   //         (loopEndConditionExpression == false))
+   //       jump to loopEndLabel;
+   //     LoopStepPart;
+   //     jump to loopBackLabel;
+   //   loopEndLabel:
+   //     Loop end part;
+ 
+   // ForStmt is created as a general loop where contents of
+   //   ConditionalInitPart_, EndCondition_, LoopEndPart_
+   //   are labeled null at first (but their statement body may
+   //   become not null by some optimizing transformation).
+   //   See isSimpleForLoop().
+   // WhileStmt is created as a general loop where contents of
+   //   LoopInitPart_, ConditionalInitPart_, EndCondition_,
+   //   LoopStepPart_, LoopEndPart_
+   //   are labeled null at first (but their statement body may
+   //   become not null by some optimizing transformation).
+   //   See isSimpleWhileLoop().
+   // RepeatStmt is created as a general loop where contents of
+   //   LoopInitPart, ConditionalInitPart_, StartCondition_,
+   //   LoopStepPart_, LoopEndPart_
+   //   are labeled null at first (but their statement body may
+   //   become not null by some optimizing transformation).
+   //   See isSimpleUntilLoop().
+   // IndexedLoopStmt is created as a general loop where contents of
+   //   ConditionalInitPart_, EndCondition_, LoopEndPart_
+   //   are labeled null at first (but their statement body may
+   //   become not null by some optimizing transformation).
+   //   See isSimpleIndexedLoop().
+   // IndexedLoopStmt represents a Fortran type loop where
+   //   value of loop index is incremented or decremented by loop
+   //   step value starting from loop start value and stops
+   //   to loop before crossing the barrier of loop end value.
+   //   (See IndexedLoopStmt interface.)
+   // Indexed loop attributes (IndexedLoopAttr_) are available
+   // only for IndexedLoopStmt.
+ 
+   CallStmt_   ->         // Subprogram call statement.
+      ( expStmtCode attr  // Expression statement
+        FunctionExp @ )   // with FunctionExp.
+   FunctionExp ->         // Subprogram call expression.
+      ( callCode attr
+        Exp @             // Expression specifying subprogram
+                          // to be called. It may be
+                          // SubpNode or (addr SubpNode), etc.
+        HirList @ )       // Actual parameter list.
+   ReturnStmt ->          // Return statement.
+      ( returnCode attr
+        ReturnValue_ @ )  // Return value.
+   ReturnValue_ ->
+      Exp
+    | null
+   SwitchStmt ->          // Switch statement.
+      ( switchCode attr
+        Exp @             // Case selection expression.
+        JumpTable_ @      // List of constants and statement labels.
+        Stmt @            // Collection of statements to be selected.
+        LabeledStmt0_ @ )  // Indicate end of case statement.
+   JumpTable_ ->          // Jump table.
+      ( seqCode attr
+        JumpList_ @       // List of constant-label pairs.
+        LabelNode @ )     // Default label.
+   JumpList_ ->                 // Jump list.
+      ( listCode attr           // Correlate Exp value
+        List_of_SwitchCase @ )  // and list of SwitchCase_ pairs.
+   SwitchCase_ ->       // List of SwitchCase_ pairs.
+      ( seqCode attr
+        ConstNode @     // Correlate Exp value and
+        LabelNode @ )   // switch statement label.
+   ExpStmt   ->         // Expression statement.
+      ( expStmtCode attr
+        Exp @ )         // Expression treated as a Stmt.
+   NullNode  ->
+      ( nullCode attr ) // NullNode is a terminal
+                        // that is not null.
+   InfStmt   ->
+      ( infCode attr    // Information statement.
+        InfKind_        // Information kind identifier.
+        InfObject_  )   // Information.
+                        // (InfKind_ and InfObject_ are not
+                        // traversed by HIR traverse operations.)
+   InfKind_  ->
+      stringConst // String constant showing the kind of
+                  // information such as pragma, comment, etc.
+   InfObject_  -> // Information.
+      Object      // Object such as Sym, Exp, etc. or
+                  // a list of Objects. It may or may not be HIR.
+   ConditionalExp_ ->     // boolean expression
+      Exp
+   Exp ->                 // Expression.
+      Factor_
+    | UnaryExp_
+    | BinaryExp_
+    | ExpListExp
+    | TernaryExp_
+    | NullNode
+   Factor_  ->
+      ConstNode
+    | SymNode
+    | CompoundVar_
+    | FunctionExp
+    | PhiExp
+  //| AssignStmt          // HIR-C
+    | ExpListExp
+    | HirSeq              // Sequence of objects
+   UnaryExp_ ->           // Unary expression.
+      ( UnaryOperator_ attr
+        Exp @ )
+    | ( sizeofCode attr  // size of the type of Exp
+         Exp @ )
+    | ( sizeofCode attr  // size of the type
+        TypeNode @ )     // represented by TypeNode.
+   BinaryExp_ ->         // Binary expression.
+      ( BinaryOperator_ attr
+        Exp @
+        Exp @ )
+   TernaryExp_ ->        // Ternary expression.
+       SelectExp          // HIR-C only
+   CompoundVar_ ->    // Compound variable.
+      SubscriptedExp  // Subscripted variable.
+    | PointedExp      // Pointed variable.
+    | QualifiedExp    // Qualified variable.
+   SubscriptedExp ->  Subscripted variable.
+      ( subsCode attr // Array with subscript expression.
+        Exp @       // Expression indicating the array.
+        Exp @ )     // Subscript expression.
+//   | ( subsCode attr
+//       Exp @       // Expression indicating an array.
+//       ExpList @ ) // List of Subscripts.
+//                   // (1st subscript, 2nd subscript,
+//                   //  etc. for rectangular array.)
+   ElemSize_    ->    // Element size.
+      Exp
+   QualifiedExp ->    // Qualified expression.
+      ( qualCode attr // Qualified variable
+        Exp @         // Should represent a structure or union.
+        ElemNode @ )  // struct/union element.
+   PointedExp ->       // Pointed expression.
+      ( arrowCode attr // Pointed variable
+        Exp @          // Expression representing a variable
+        PointedElem_ @ ) // Pointed element.
+   PointedElem_ ->
+      ElemNode  // Pointed element (with displacement).
+    | null      // Pointed location (0 displacement).
+   ConstNode ->                      // Constant symbol.
+      ( constCode attr intConst )    // integer   constant
+    | ( constCode attr floatConst )  // float     constant
+    | ( constCode attr charConst )   // character constant
+    | ( constCode attr stringConst ) // string    constant
+    | ( constCode attr boolConst )   // boolean   constant
+   SymNode   ->        // Symbol node.
+      (symCode Sym )   // Program name, etc.
+    | VarNode
+    | SubpNode
+    | LabelNode
+    | ElemNode   not DELETED
+    | TypeNode
+   VarNode   ->
+      ( symCode attr varSym )   // Variable name node
+   SubpNode  ->
+      ( symCode attr subpSym )  // Subprogram name node
+   LabelNode ->
+      ( symCode attr labelSym ) // Label reference node
+   ElemNode  ->
+      ( symCode attr elemSym )  // structure/union element
+                                     // name node.
+   TypeNode  ->
+      ( symCode attr typeSym )  // Type name node
+   FunctionExp ->     // Function expression.
+      ( callCode attr
+        Exp @         // Expression specifying function
+                      // to be called (SubpNode, (addr SubpNode), etc.).
+        HirList @ )   // Actual parameter list.
+                      // It is an HirList whose elements are Exp.
+   IrList     ->
+      ( listCode attr    // A List that can be treated as IR.
+        List_of_Objects_ @ ) // Its elements may be Sym, String and IR object.
+   HirList        ->
+      ( listCode attr    // A List of HIR elements. It can be treated as HIR.
+        List_of_HIR_Objects_ @ ) // Its elements should be HIR object.
+   ExpListExp  ->        // Expression representing
+      ( expListCode attr // a list of
+        List_of_Exp @ )  // expressions in HIR form.
+   HirSeq  ->
+      ( seqCode attr HIR @ )  // Sequence of some definite
+    | ( seqCode HIR @  HIR @ ) // number of HIR nodes.
+    | ( seqCode HIR @  HIR @  HIR @ )
+    | ( seqCode HIR @  HIR @  HIR @  HIR @ )
+   PhiExp         ->
+      (phiCode attr FlowVarList_ @ )  // phi function
+   FlowVarList_   ->
+      ( listCode attr
+        List_of_VarLabelPair @ )
+                                // List of (Var Label) pairs.
+   VarLabelPair   ->
+      ( listCode attr VarNode @  Label @)
+   UnaryOperator_ ->
+      notCode      // bitwise not (~) one's complement
+                   // logical not (boolean not) (!)
+    | negCode      // negate (unary minus)
+    | addrCode     // get address (&amp;)
+    | contentsCode // get contents of pointed memory
+    | convCode     // type conversion for basic type
+    | decayCode    // convert array to pointer
+    | sizeofCode   // sizeof operator
+    | encloseCode  // honor parenthesis
+    | IncrDecrOperator_  // Increment/decrement. HIR-C only.
+   BinaryOperator_ ->
+    | addCode      // add                 (+)
+    | subCode      // subtract            (-)
+    | offsetCode   // Offset between pointers (HIR-C only)
+    | multCode     // multiply            (*)
+    | divCode      // divide              (/)
+    | modCode      // modulo              (%)
+    | andCode      // bitwise and, logical and for bool (&amp;)
+    | orCode       // bitwise or,  logical or for bool  (|)
+    | xorCode      // bitwise exclusive or, logical exclusive or (^)
+    | shiftLLCode  // shift left  logical    (&lt;&lt;) //
+    | shiftRCode   // shift right arithmetic (>>)
+    | shiftRLCode  // shift right logical    (>>) //
+    | undecayCode  // convert pointer to array
+    | expRepeatCode   // Repeat constant values (operand 1)
+                      //   count (operand 2) times.
+    | CompareOperator_
+    | CompareZeroOperator_            // HIR-C only
+    | ShortCircuitOperator_           // HIR-C only
+    | commaCode    // comma operator  // HIR-C only
+   CompareOperator_ ->
+      cmpEqCode    // equal
+    | cmpNeCode    // not equal
+    | cmpGtCode    // greater than
+    | cmpGeCode    // greater or equal
+    | cmpLtCode    // less than
+    | cmpLeCode    // less or equal
+   CompareZeroOperator_ ->                // HIR-C only
+      eqZeroCode   // equal zero          // HIR-C only
+   ShortCircuitOperator_ ->               // HIR-C only
+      lgAndCode    // logical and (&amp;&amp;)    // HIR-C only
+    | lgOrCode     // logical or  (||)    // HIR-C only
+   IncrDeclOperator_ ->                             // HIR-C only
+      preIncrCode  // pre-increment  (++) // HIR-C only
+    | preDecrCode  // pre-decrement  (--) // HIR-C only
+    | postIncrCode // post-increment (++) // HIR-C only
+    | postDecrCode // post-decrement (--) // HIR-C only
+   CompoundAssignmentOperator_ ->         // HIR-C only
+      multAssignCode   // *=    // HIR-C only
+    | divAssignCode    // /=    // HIR-C only
+    | modAssignCode    // %=    // HIR-C only
+    | addAssignCode    // +=    // HIR-C only
+    | subAssignCode    // -=    // HIR-C only
+    | shiftLAssignCode // &lt;&lt;=   // HIR-C only
+    | shiftRAssignCode // >>=   // HIR-C only
+    | andAssignCode    // &amp;=    // HIR-C only
+    | xorAssignCode    // ^=    // HIR-C only
+    | orAssignCode     // |=    // HIR-C only
+   SelectExp ->        //  (Exp ? Exp : Exp) // HIR-C only
+      ( selectCode attr
+        ConditionalExp @   Exp @  Exp @ )
+ 
+   attr ->             // Attribute attached to the HIR node
+      typeSym          // Shows the type of HIR subtree.
+      OptionalAttrSeq_ // Sequence of optional attributes
+                       // that are not inevitable at the first stage
+                       // of HIR generation. The optional attributes
+                       // may be attached to give information used
+                       // in some specific compiler modules or
+                       // to help compiling processes.
+   OptionalAttrSeq_ ->
+      OptionalAttr_ OptionalAttrSeq_
+    | null
+   OptionalAttr_ ->
+      StmtAttr_      // Attributes for statements
+    | IndexNumber_   // Index number to identify the HIR node.
+    | Flag_          // true/false flag.
+    | InfItem_       // Node-wise information.
+    | ExpId          // Expression identifier used in flow analysis.
+    | Work_          // Phase-wise information.
+   StmtAttr_ ->      // Attributes attached to statement subtrees.
+      FileName_      // Source program file containing the statement.
+      LineNumber_    // Line number of the line in which the
+                     // statement started.
+   FileName_ ->
+      stringConstValue
+   LineNumber_
+      intConstvalue
+   IndexNumber_ ->
+      intConstValue
+   Flag_ ->
+      FlagNumber_
+      FlagValue_
+   FlagNumber_ ->
+      intConstValue   // Such as  FLAG_NOCHANGE, FLAG_C_PTR,
+                      // FLAG_CONST_EXP
+   FlagValue_ ->
+      true
+    | false
+   InfItem_ ->
+      InfKind_ InfObject_
+</pre>
+  
+<h3 id='i-2-5'>2.5. Example of HIR</h3>
+
+  Let's show an example of HIR generated from a C program.
+
+<h4 id='i-2-5-1'>2.5.1. Source program</h4>
+
+<pre>
+/* tpsum1.c -- Summation */
+
+  int  printf(char*, ...);
+  void getData(int x[100]);
+  int a[100];
+  int sum, i;
+
+int main()
+{
+  getData(a);
+  sum = 0;
+  for (i = 0; i &lt; 100; i++) {
+    sum = sum + a[i];
+  }
+  printf("sum = %d\n", sum);
+  return 0;
+}
+
+void getData(int x[100])
+{
+  ....
+}
+</pre>
+
+<h4 id='i-2-5-2'>2.5.2. HIR corresponding to the above C program</h4>
+
+<pre>
+ (prog     1
+  &lt;null 0 void>
+  &lt;nullNode 2>
+  (subpDef  3 void
+   &lt;subp     4 &lt;SUBP &lt;( )> false false int> main>
+  &lt;null 0 void>
+   (labeldSt 5 void
+    (list 6
+     &lt;labelDef 7 _lab1>)
+    (block    8 void line 8
+     (expStmt  9 void line 10
+      (call     10 void
+       (addr     11 &lt;PTR &lt;SUBP &lt;( &lt;PTR int> )> false false void>>
+        &lt;subp     12 &lt;SUBP &lt;( &lt;PTR int> )> false false void> getData>)
+       (list 13
+        (decay    14 &lt;PTR int>
+         &lt;var      15 &lt;VECT 100 0 int> a>))))
+     (assign   16 int line 11
+      &lt;var      17 int sum>
+      &lt;const    18 int 0>)
+     (for      19 void line 12
+      (block    20 void
+       (assign   21 int
+        &lt;var      22 int i>
+        &lt;const    23 int 0>))
+     &lt;null 0 void>
+      (labeldSt 24 bool
+       (list 25
+        &lt;labelDef 26 _lab5>)
+       (expStmt  27 bool
+        (cmpLt    28 bool
+         &lt;var      29 int i>
+         &lt;const    30 int 100>)))
+      (labeldSt 31 void
+       (list 32
+        &lt;labelDef 33 _lab6>)
+       (block    34 void
+        (assign   35 int line 13
+         &lt;var      36 int sum>
+         (add      37 int
+          &lt;var      38 int sum>
+          (subs     39 int
+           &lt;var      40 &lt;VECT 100 0 int> a>
+           &lt;var      41 int i>)))
+        (labeldSt 42 void
+         (list 43
+          &lt;labelDef 44 _lab3>)
+        &lt;null 0 void>)))
+      (expStmt  45 int
+      &lt;null 0 void>)
+      (block    46 void
+       (assign   47 int
+        &lt;var      48 int i>
+        (add      49 int
+         &lt;var      50 int i>
+         &lt;const    51 int 1>)))
+      (labeldSt 52 void
+       (list 53
+        &lt;labelDef 54 _lab4>)
+      &lt;null 0 void>))
+     (expStmt  55 int line 15
+      (call     56 int
+       (addr     57 &lt;PTR &lt;SUBP &lt;( &lt;PTR char> )> true false int>>
+        &lt;subp     58 &lt;SUBP &lt;( &lt;PTR char> )> true false int> printf>)
+       (list 59
+        (decay    60 &lt;PTR char>
+         &lt;const    61 &lt;VECT 10 0 char> "sum = %d\n">)
+        &lt;var      62 int sum>)))
+     (return   63 int line 16
+      &lt;const    64 int 0>))))
+  (subpDef  65 void
+   &lt;subp     66 &lt;SUBP &lt;( &lt;PTR int> )> false false void> getData>
+  &lt;null 0 void>
+   (labeldSt 67 void
+    (list 68
+     &lt;labelDef 69 _lab7>)
+    (block    70 void line 19
+      ....
+    )))
+ )
+</pre>
+
+</body>
+</html>

@@ -1,0 +1,95 @@
+<?xml version="1.0"?>
+<!-- ==========================================================  -->
+<!--   Copyright (C) 2005 The Coins Project Group                -->
+<!--       (Read COPYING for detailed information.)              -->
+<!-- ==========================================================  -->
+<project name="CoVis" default="run" basedir=".">
+
+  <property name="Name" value="CoVis"/>
+  <property name="src.dir" value="${basedir}/src"/>
+  <property name="class.dir" value="${basedir}/classes"/>
+  <property name="doc.dir" value="${basedir}/doc"/>
+  <property name="xmlParser.dir" value="/usr/local/src/xerces-2_6_2"/>
+
+
+  <!-- =================================================================== -->
+  <!-- Compile                                                             -->
+  <!-- =================================================================== -->
+  <target name="compile" description="compile java sources">
+    <mkdir dir="${class.dir}"/>
+    <depend srcdir="${src.dir}"
+        destdir="${class.dir}"
+        closure="yes"/>
+    <javac srcdir="${src.dir}"
+        source="1.4"
+        compiler="javac1.4"
+        destdir="${class.dir}" >
+    </javac>
+  </target>
+
+  <!-- =================================================================== -->
+  <!-- Run                                                                 -->
+  <!-- =================================================================== -->
+  <target name = "run" depends="compile" description = "run CoVis">
+    <java classname="covis.CoVis"
+          fork="true" >
+      <classpath>
+        <pathelement path="${class.dir}"/>
+        <pathelement location="${xmlParser.dir}/xmlParserAPIs.jar"/>
+        <pathelement location="${xmlParser.dir}/xercesImpl.jar"/>
+      </classpath>
+    </java>
+
+  </target>
+
+  <!-- =================================================================== -->
+  <!-- Run                                                                 -->
+  <!-- =================================================================== -->
+  <target name = "sample" depends="compile" description = "run CoVis">
+    <java classname="covis.CoVis"
+          fork="true" >
+      <classpath>
+        <pathelement path="${class.dir}"/>
+        <pathelement location="${xmlParser.dir}/xmlParserAPIs.jar"/>
+        <pathelement location="${xmlParser.dir}/xercesImpl.jar"/>
+      </classpath>
+      <arg line="matmul-func.xml"/>
+    </java>
+
+  </target>
+
+  <!-- =================================================================== -->
+  <!-- Document                                                            -->
+  <!-- =================================================================== -->
+  <target name = "doc" description = "generate API">
+    <delete dir="${doc.dir}" />
+    <mkdir  dir="${doc.dir}" />
+    <javadoc sourcepath="${src.dir}" destdir="${doc.dir}"
+        packagenames="covis"
+        author="false"
+        version="true"
+        access="private"
+        windowtitle="${Name} API"
+        doctitle="${Namr}"
+        bottom="Copyright (C) 2005 The Coins Project Group"
+    />
+  </target>
+
+  <!-- =================================================================== -->
+  <!-- Clean                                                               -->
+  <!-- =================================================================== -->
+  <target name="clean"  description="removes all files from build tree">
+    <delete>
+       <fileset dir="${class.dir}" includes="**/*.class"/>
+       <fileset dir="${doc.dir}" includes="**/*"/>
+    </delete>
+    <delete dir="${class.dir}"/>
+    <delete dir="${doc.dir}"/>
+  </target>
+
+  <!-- =================================================================== -->
+  <!--  Build all                                                          -->
+  <!-- =================================================================== -->
+  <target name="buildall" depends="compile" description="build all">
+  </target>
+</project>

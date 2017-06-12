@@ -1,0 +1,6 @@
+sub enter
+ipf
+ifunc
+ifuncuv
+sub exit x 3 y 10 z 9
+v= 22

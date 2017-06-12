@@ -1,0 +1,6 @@
+strcmp -1 fptr1 -1 fptr2 -1 fptr3 -1
+Error null range 
+Error minus range 
+ 0 1 2 7 8 9 
+ 8 2 9 4 5 0 
+ abc abdd abea dba eab efg 

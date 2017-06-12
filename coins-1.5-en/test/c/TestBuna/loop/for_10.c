@@ -1,0 +1,11 @@
+/* for_10 simple for statement */
+/* no statement */
+int printf(char *s, ...);
+
+int main() {
+        int i;
+
+        for (i= 0; i < 10;printf("i = %d\n", i),i++)		
+                ;
+	return 0;
+}

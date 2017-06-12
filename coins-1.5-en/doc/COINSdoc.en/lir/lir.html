@@ -1,0 +1,783 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>	
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>Design and Structure of LIR</title>
+
+  </head>
+  <body>
+	<h1>7. Design and Structure of LIR</h1>
+
+<h3 id='i-7-1'>7.1. Design of LIR</h3>
+
+A compiler intermediate language is usually introduced as a private language
+that is specific to a certain compiler, and is known only to the
+compiler writers.
+However, many compiler bugs are caused by ambiguities in the specification of a
+compiler's intermediate language. 
+Moreover, the COINS compiler is an open source program that can be freely
+modified and extended by any users.
+Thus, LIR is
+defined as an independent
+and self-contained programming language that has the constructs of a
+high-level language, such as variable declarations,
+and their formal semantics are defined by the ordinary denotational semantics.<p>
+
+All compiler back-end passes, including instruction selection by our
+code generator and register allocation, are regarded as program
+transformations in LIR, which preserve the formal semantics of LIR
+programs.<p>
+Consequently, LIR provides a concise interface
+for interaction with the compiler for users who want to replace part
+of the compiler with their own code.<p>
+
+A retargetable code generator is one that can produce object code for
+various target machines without any modification to the generator. In
+such a code generator, the characteristics of a target machine are
+described in the machine description language of the generator, which
+is independent of any target machine. Most recently developed
+retargetable code generators, such as Twig, Burg, etc., are based on
+the DP (Dynamic Programming) matching method. Their machine description language consists of
+rewriting rules with code generation actions.  Theoretically, this
+method gives the best results. However, the rules that are used to
+describe a machine do not correspond directly to any of the existing
+instructions of the machine owing to the characteristics and theory of
+the DP method. This mismatch often makes the work of describing a
+machine a lengthy and somewhat onerous process.<p>
+ On the other hand, the
+code generator that is used by GCC, one of the most widely
+used retargetable compilers, employs a unique method that differs
+considerably from the DP method.  Its description
+language consists of descriptive statements that correspond to each of
+the target's existing machine instructions.  However, GCC code
+generator still has some limitations that prevent it from producing
+optimal code.<p>
+ Our code generator takes advantage of the good points of
+both the DP and GCC methods by translating the GCC descriptive
+statements into rewriting rules that are suitable for use by the DP
+matching method.<p>
+Furthermore, DP matching is also implemented as a kind of
+transformation of an LIR program, and later transformations such as
+register allocation are applied to the resulting LIR program.
+The description language of our code generator has a simple
+macro feature to improve expressiveness.<p>
+
+<h3 id='i-7-2'>7.2. Structure of LIR</h3>
+
+In this subsection, LIR is described by using examples to explain its overall structure. The 
+examples are written in C, since it, like LIR, is a low-level language that is close to the actual 
+hardware. <p>
+The program listings in Fig.7-1 are two C programs,
+<tt>main.c</tt>, and <tt>sub.c</tt>, in which the function
+<tt>prodv</tt> returns the product of all the elements of the array
+<tt>v</tt> using the function <tt>fold1</tt>.
+<pre><tt>main.c :   extern float fold1(float f(float,float), float v[], int n);
+           static float v[] = {1, 2.5, 3};
+           static int n = sizeof v / sizeof v[0];
+           static float fmul(float x, float y){float r=x*y; return r;};
+           float prodv(){return fold1(fmul,v,n);};
+
+sub.c :    float fold1(float f(float,float), float v[], int n)
+           {
+             int i; float r;
+             for (r=v[0], i=1; i&lt;n; i++) r = f(r,v[i]);
+             return r;
+           }</tt>
+</pre>
+<center>
+Fig.7-1 A sample C program
+</center>
+<br>
+The first C program `<tt>main.c</tt>' is translated into the
+LIR code shown in Fig.7-2, which is called an L-module.
+This information is produced as the file <tt>main.lir</tt> when the 
+following options are specified.
+<pre><tt>-S -coins:suffixoption=out-newlir</tt></pre>
+The translation assumes that an <tt>int</tt>, a <tt>pointer</tt>, 
+and a <tt>float</tt> are all 32 bits long. It also 
+assumes that their required alignments are in the same four-byte boundary. 
+Machine instructions 
+and data are stored in the segments <tt>text</tt> and <tt>data</tt>, 
+respectively.
+
+<pre><tt> 1 (MODULE "main.c"
+ 2   (SYMTAB
+ 3    <font color=blue> ;; name  class  L-type align segment linkage</font>
+ 4     ("prodv" STATIC UNKNOWN  4   ".text" XDEF)
+ 5     ("fmul"  STATIC UNKNOWN  4   ".text" LDEF)
+ 6     ("n"     STATIC I32      4   ".data" LDEF)
+ 7     ("v"     STATIC A96      4   ".data" LDEF)
+ 8     ("fold1" STATIC UNKNOWN  4   ".text" XREF))
+ 9  <font color=blue> ;; definition of the function fmul</font>
+10   (FUNCTION "fmul"
+11     (SYMTAB
+12       ("x.1" FRAME F32 4 0)
+13       ("y.2" FRAME F32 4 0)
+14       ("r.3" FRAME F32 4 0)
+15       ("returnvalue.4" FRAME F32 4 0))<font color=blue>  ; generated by the translator
+16     ;; L-sequence</font>
+17     (PROLOGUE (0 0) (MEM F32 (FRAME I32 "x.1")) (MEM F32 (FRAME I32 "y.2")))
+18    (DEFLABEL "_lab1")
+19     (SET F32 (MEM F32 (FRAME I32 "r.3")) <font color=blue>    ; r = x*y</font>
+20              (MUL F32 (MEM F32 (FRAME I32 "x.1"))
+21                       (MEM F32 (FRAME I32 "y.2"))))
+22     (SET F32 (MEM F32 (FRAME I32 "returnvalue.4")) (MEM F32 (FRAME I32 "r.3")))
+23     (JUMP (LABEL I32 "_epilogue"))
+24    (DEFLABEL "_epilogue")
+25     (EPILOGUE (0 0) (MEM F32 (FRAME I32 "returnvalue.4"))))
+26   ;; definition of the function prodv
+27   (FUNCTION "prodv"
+28     (SYMTAB
+29       ("returnvalue.5" FRAME F32 4 0)    <font color=blue> ; generated by the translator</font>
+30       ("functionvalue.6" FRAME F32 4 0)) <font color=blue> ; generated by the translator</font>
+31     (PROLOGUE (0 0))
+32    (DEFLABEL "_lab3")
+33     (CALL (STATIC I32 "fold1")   <font color=blue>  ; functionvalue.6=fold1(fmul,v,n)</font>
+34           ((STATIC I32 "fmul") (STATIC I32 "v") (MEM I32 (STATIC I32 "n")))
+35           ((MEM F32 (FRAME I32 "functionvalue.6"))))
+36     (SET F32 (MEM F32 (FRAME I32 "returnvalue.5")) (MEM F32 (FRAME I32 "functionvalue.6")))
+37     (JUMP (LABEL I32 "_epilogue"))
+38    (DEFLABEL "_epilogue")
+39     (EPILOGUE (0 0) (MEM F32 (FRAME I32 "returnvalue.5"))))
+40 <font color=blue>  ;; definition of the data v and n</font>
+41   (DATA "v" (F32 (FLOATCONST F32 1.0) (FLOATCONST F32 2.5) (FLOATCONST F32 3.0)))
+42   (DATA "n" (I32 3)))</tt></pre>
+<center>
+Fig.7-2 The LIR code for <tt>main.c</tt>
+</center>
+<br>
+
+The syntax of LIR is built on top of S-expressions. A semicolon is
+used to indicate a comment. All of the characters following it in the
+same line are part of a comment. Also, the numbers that appear on the
+left side of the LIR listing are not part of LIR; they are used
+only as line references in the following explanation. <p>
+The
+listing in Fig.7-2
+is an example of an L-module. An L-module consists of its
+module name, its symbol table, and the definitions of
+L-functions and L-data. An L-function definition consists of its
+name, its local symbol table, and its L-sequence. An
+L-sequence is a list of L-expressions beginning with a <tt>PROLOGUE</tt>
+expression and ending with an <tt>EPILOGUE</tt> expression. An L-data
+definition consists of its name and a list of its contents (line 41 and 42).<p>
+
+An symbol table, beginning with the keyword <tt>SYMTAB</tt>,
+consists of several entries. The first element of each entry is a name that is 
+defined by the rest of the elements of the entry. The second element of each entry is called a class, 
+which is used to dictate the syntax for the rest of the entry. It also determines how the entry's 
+remaining definitions are to be interpreted. Names declared in symbol tables are referred to by 
+L-expressions in L-functions that follow the same static scope rules as those that are found in the C 
+programming language.<p>
+ A name with the class <tt>STATIC</tt> represents a statically allocated object. 
+A name with the class <tt>FRAME</tt> represents an object that is allocated on the stack frame. For 
+example, in line 6 of the L-module <tt>main</tt> above, the name <tt>n</tt> is declared to be a 
+statically allocated object having the L-type <tt>I32</tt> (a 32-bit integer) along with its alignment, 
+segment, and linkage information. An object's linkage information will always be one of three 
+symbols, <tt>LDEF</tt>, <tt>XDEF</tt>, and <tt>XREF</tt>, which respectively mean that the name is locally 
+defined, globally defined, or that the name is an external reference.<p>
+
+The declaration of <tt>x.1</tt> (local symbol <tt>x</tt> is renamed to the unique name <tt>x.1</tt>) in line 12 is an example of a frame variable and another kind of L-type. 
+<tt>F32</tt> is the L-type that is used to designate 32-bit floating point numbers. The last 0 has no meaning
+when the LIR codes are generated. In the later phase of the backend process this field will be replaced by the 
+offset of the frame variable from the frame pointer. Although we assume the existence of a frame pointer, we treat it 
+implicitly. In line 7 of the module, the L-type of the name <tt>v</tt> is A96. 
+It means the type of an object has 96-bits (12-bytes). 
+We have introduced three kinds of L-types; namely, <i>n</i>-bit integers <tt>I</tt><i>n</i>, <i>n</i>-bit floats 
+<tt>F</tt><i>n</i>, and just <i>n</i>-bits. These comprise all of the kinds of L-types that we use. The symbol 
+<tt>UNKNOWN</tt> is used to indicate a type whose size is unknown to the compiler. 
+<tt>UNKNOWN</tt> is not an L-type.<p>
+
+Line 10 shows an example of a function definition. Two L-expressions, <tt>PROLOGUE</tt> and 
+<tt>EPILOGUE</tt>, are used to specify the interface of the L-function. They are collectively called 
+interface expressions. The second element of the <tt>PROLOGUE</tt> expression in line 17 (and the second element of <tt>EPILOGUE</tt>), <tt>(0 0)</tt>, was used in the older version of LIR to designate the size of the frame and the 
+register frame to be allocated. In the current version It has no 
+meaning.
+The remaining elements of the 
+<tt>PROLOGUE</tt> expression specify the arguments of the L-function. The remaining elements of the 
+<tt>EPILOGUE</tt> expression specify the list of expressions to be returned as multiple return values.<p>
+
+Line 19 shows a typical example of an L-expression. Unlike the corresponding C code <tt>r=x*y</tt>, 
+it explicitly represents memory accesses using the expression (<tt>MEM</tt> <i>type address</i>), which 
+refers to the object with the specified type and address.
+The frame expression <tt>(FRAME I32 "x.1")</tt> represents the address of the variable <tt>x.1</tt> that 
+was declared in line 12. <tt>I32</tt> is the type of type address.<p>
+
+Line 33 shows an example of a function call. Its syntax has the form:
+<pre>
+  (<tt>CALL</tt> <i>addr</i> (<i>args</i> ... ) (<i>results</i> ...))
+</pre>
+where <i>addr</i> is the address of the function to be called, <i>args</i> are the L-expressions to be passed 
+to the function, and <i>results</i> are the variables to which the multiple return values of the function 
+will be assigned. As the CALL expression cannot be part of any other L-expression, the temporary 
+variable `<tt>functionvalue.6</tt>' is introduced by the translator.<p>
+
+Line 34 shows an example of accessing a global (as in the C language)
+variable, where the L-expression <tt>(MEM I32 (STATIC I32
+"n"))</tt> represents the address of the variable <tt>n</tt> that was
+declared in line 6.<p>
+
+This L-module does not have any examples of registers. In LIR, a
+register is expressed as (<tt>REG</tt> <i>type name</i>) and the <i>name</i> is
+declared in a symbol table as (<i>name</i> <tt>REG</tt> <i>type 
+offset</i>), where <i>type</i> is the type of the register.  
+There is no
+syntactic distinction between virtual and real registers.<p>
+
+As we have seen, our
+expressions for a calling convention are at a much higher level than
+the corresponding GCC expressions in RTL.
+To realize a calling convention with existing instructions is often called
+calling convention expansion.<p>
+
+GCC expands all of its calling
+conventions and designates some real registers at an early stage of
+its compilation process.
+The advantage of GCC's approach is that optimizers can achieve
+various machine specific optimizations.
+For example, as the stack pointer is a pre-allocated
+register, it explicitly exists throughout compiler passes;
+this enables optimizers to do some stack related optimizations,
+such as defer pop.<p>
+The disadvantage is that the approach makes optimizers
+so complex since function interface codes are already expanded.
+Code optimizers can hardly 
+recover them from a given code; this disables optimizers to
+do some higher-level optimizations, such as inline expansion,
+tail recursion elimination, and partial evaluation.<p>
+
+The constructs of LIR for a (multiple-valued) function consisting of
+<tt>PROLOGUE</tt>, <tt>EPILOGUE</tt>, and <tt>CALL</tt> expressions enable the code
+optimizer to handle registers by making the following assumptions:
+<ol>
+<li> Arbitrariness of register names:<br>
+                Renaming registers local to a function
+                does not change the meaning of the function.
+</li>
+<li> Independence of registers:<br>
+                Assigning a register local to a function
+                does not alter any other registers.
+</li>
+</ol>
+
+As the parameters of a function are specified in an interface
+expression, renaming them does not change the meaning of the function. 
+Designating real registers before code optimization clearly makes the
+above assumptions impossible, as the registers will now have unique
+names that sometimes partly overlap.<p>
+
+The register must, of course, know everything about the real
+registers. Our intention in introducing such higher constructs was to
+clarify and simplify code optimizers by separating and delaying the
+designation of real registers.<p>
+
+We can describe all of the passes of a compiler including code optimization,
+instruction pattern matching, register allocation, and peephole
+optimization in terms of program transformations using LIR. With
+this in mind, the task of instruction selection that is based on a
+machine's description can be formalized as a program transformation
+that reforms each L-expression into one that expresses a real
+instruction of a real machine. The task of register allocation can
+also be formalized as a transformation to change local registers to
+global ones. 
+<p>
+
+The translated L-module for <tt>sub.c</tt> is shown in Fig.7-3.
+Note that this example includes control structures. 
+
+<pre><tt> 1 (MODULE "sub.c"
+ 2   (SYMTAB
+ 3     ("fold1" STATIC UNKNOWN 4 ".text" XDEF))
+ 4   (FUNCTION "fold1"
+ 5     (SYMTAB
+ 6       ("f.1" FRAME I32 4 0)
+ 7       ("v.2" FRAME I32 4 0)
+ 8       ("n.3" FRAME I32 4 0)
+ 9       ("i.4" FRAME I32 4 0)
+10       ("r.5" FRAME F32 4 0)
+11       ("returnvalue.6" FRAME F32 4 0))
+12     (PROLOGUE (0 0) (MEM I32 (FRAME I32 "f.1")) 
+13                     (MEM I32 (FRAME I32 "v.2"))
+14                     (MEM I32 (FRAME I32 "n.3")))
+15    (DEFLABEL "_lab1")
+16     (SET F32 (MEM F32 (FRAME I32 "r.5"))   <font color=blue>   ; r = v[0]</font>
+17              (MEM F32 (ADD I32 (MEM I32 (FRAME I32 "v.2")) 
+18                                (MUL I32 (INTCONST I32 4) (INTCONST I32 0)))))
+19     (SET I32 (MEM I32 (FRAME I32 "i.4"))   <font color=blue>   ; i = 1</font>
+20              (INTCONST I32 1))    
+21    (DEFLABEL "_lab5")
+22    (JUMPC (TSTLTS I32 (MEM I32 (FRAME I32 "i.4")) <font color=blue>  ; if (i&lt;n) goto _lab6; else goto _lab4</font>
+23                       (MEM I32 (FRAME I32 "n.3"))) (LABEL I32 "_lab6") (LABEL I32 "_lab4"))
+24   (DEFLABEL "_lab6")
+25    (CALL (MEM I32 (FRAME I32 "f.1"))      <font color=blue>    ; r = f(r,v[i])</font>
+26          ((MEM F32 (FRAME I32 "r.5"))
+27           (MEM F32 (ADD I32 (MEM I32 (FRAME I32 "v.2"))
+28                             (MUL I32 (INTCONST I32 4)
+29                                      (MEM I32 (FRAME I32 "i.4"))))))
+30          ((MEM F32 (FRAME I32 "r.5"))))
+31   (DEFLABEL "_lab3")
+32    (SET I32 (MEM I32 (FRAME I32 "i.4"))   <font color=blue>    ; i++</font>
+33             (ADD I32 (MEM I32 (FRAME I32 "i.4"))
+34                      (INTCONST I32 1)))
+35    (JUMP (LABEL I32 "_lab5"))
+36   (DEFLABEL "_lab4")
+37    (SET F32 (MEM F32 (FRAME I32 "returnvalue.6")) (MEM F32 (FRAME I32 "r.5")))
+38    (JUMP (LABEL I32 "_epilogue"))
+39   (DEFLABEL "_epilogue")
+40    (EPILOGUE (0 0) (MEM F32 (FRAME I32 "returnvalue.6")))))
+</tt></pre>
+<center>
+Fig.7-3 The LIR code for <tt>sub.c</tt>
+</center>
+<br>
+
+We never introduce `structured'
+control constructs such as if and while. The expression (<tt>DEFLABEL</tt> <i>label</i>) defines a 
+label <i>label</i> which is referenced by jump expressions such as an unconditional jump as shown in 
+line 35, a conditional jump as shown in line 22, and a multiway jump.
+An example of an indirect call is shown in line 25. The address expression in the <tt>CALL</tt> expression 
+must evaluate to the address of an L-function. In our model, program memory is not an arbitrary 
+list of L-expressions. Rather, it is a list of L-functions that can be invoked only by <tt>CALL</tt> expressions. 
+At the same time, the targets of any jump expression are limited to those 
+targets that are within the function to which the jump belongs. <p>
+
+<h3 id='i-7-3'>7.3. Syntax and Semantics of LIR</h3>
+<h4 id='i-7-3-1'>7.3.1. Syntax of LIR</h4>
+The Syntax of L-module and the syntax of L-expression are shown in Fig.7-4.
+
+<pre>
+Syntax of L-module
+
+&lt;Lmod&gt;          ::= (MODULE &lt;Name&gt; &lt;GlobalSymtab&gt; { &lt;Ldata&gt; | &lt;Lfunc&gt; })
+&lt;Name&gt;          ::= &lt;QuotedString&gt;
+&lt;GlobalSymtab&gt;  ::= (SYMTAB { &lt;StaticSymbol&gt; | &lt;RegSymbol&gt; })
+
+&lt;StaticSymbol&gt;  ::= (&lt;Name&gt; STATIC &lt;Ltype&gt; &lt;Align&gt; &lt;Segment&gt; &lt;Linkage&gt;)
+&lt;RegSymbol&gt;     ::= (&lt;Name&gt; REG    &lt;Ltype&gt; &lt;Align&gt; &lt;Offset&gt;)
+&lt;FrameSymbol&gt;   ::= (&lt;Name&gt; FRAME  &lt;Ltype&gt; &lt;Align&gt; &lt;Offset&gt;)
+&lt;Align&gt;         ::= &lt;Fixnum&gt;
+&lt;Offset&gt;        ::= &lt;Fixnum&gt;
+&lt;Segment&gt;       ::= &lt;QuotedString&gt;
+&lt;Linkage&gt;       ::= LDEF | XDEF | XREF
+
+&lt;Ldata&gt;         ::= (DATA &lt;Name&gt; { &lt;DataSeq&gt; | &lt;ZeroSeq&gt; | &lt;SpaceSeq&gt; })
+&lt;DataSeq&gt;       ::= (&lt;Ltype&gt; { &lt;Fixnum&gt; | &lt;Flonum&gt; | &lt;Lexp&gt; })
+&lt;ZeroSeq&gt;       ::= (ZEROS &lt;Fixnum&gt;)
+&lt;SpaceSeq&gt;      ::= (SPACE &lt;Fixnum&gt;)
+
+&lt;Lfunc&gt;         ::= (FUNCTION &lt;Name&gt; &lt;LocalSymtab&gt; &lt;Lseq&gt;)
+&lt;LocalSymtab&gt;   ::= (SYMTAB { &lt;FrameSymbol&gt; | &lt;RegSymbol&gt; })
+&lt;Lseq&gt;          ::= { &lt;Lexp&gt; }
+
+
+Syntax of L-expression:
+
+&lt;Lexp&gt;         ::= &lt;TypedExp&gt; | &lt;UntypedExp&gt;
+
+&lt;TypedExp&gt;     ::= &lt;AtomicTypedExp&gt; | &lt;NonAtomicTypedExp&gt;
+&lt;AtomicTypedExp&gt; ::= &lt;ConstExp&gt; | &lt;AddrExp&gt; | &lt;RegExp&gt;
+&lt;NonAtomixTypedExp&gt; ::= &lt;PureExp&gt; | &lt;MemExp&gt; | &lt;SetExp&gt;
+&lt;UntypedExp&gt;   ::= &lt;JumpExp&gt; | &lt;DefLabelExp&gt; | &lt;CallExp&gt;
+                 | &lt;InterfaceExp&gt; | &lt;SpecialExp&gt; | &lt;LineExp&gt;
+&lt;Ltype&gt;        ::= &lt;Itype&gt; | &lt;Ftype&gt; | &lt;Atype&gt;
+&lt;Itype&gt;        ::= I8 | I16 | I32 | I64 | I128
+&lt;Ftype&gt;        ::= F32 | F64 | F128
+&lt;Atype&gt;        ::= A&lt;Fixnum&gt;
+
+&lt;ConstExp&gt;     ::= (INTCONST &lt;Itype&gt; &lt;Fixnum&gt;)
+                 | (FLOATCONST &lt;Ftype&gt; &lt;Flonum&gt;)
+
+&lt;AddrExp&gt;      ::= &lt;StaticExp&gt; | &lt;FrameExp&gt; | &lt;LabelExp&gt;
+&lt;StaticExp&gt;    ::= (STATIC &lt;Ltype&gt; &lt;name&gt;)
+&lt;FrameExp&gt;     ::= (FRAME &lt;Ltype&gt; &lt;name&gt;)
+&lt;LabelExp&gt;     ::= (LABEL &lt;Ltype&gt; &lt;name&gt;)
+
+&lt;RegExp&gt;       ::= &lt;SimpleRegExp&gt; | &lt;SubregExp&gt;
+
+&lt;SimpleRegExp&gt; ::= (REG &lt;Ltype&gt; &lt;name&gt;)
+&lt;SubregExp&gt;    ::= (SUBREG &lt;Ltype&gt; &lt;SimpleRegExp&gt; &lt;Fixnum&gt;)
+&lt;PureExp&gt;      ::= (&lt;PureOp&gt; &lt;Ltype&gt; &lt;TypedExp&gt; { &lt;TypedExp&gt; })
+
+&lt;PureOp&gt;       ::= NEG | ADD | SUB | MUL | DIVS | DIVU | MODS | MODU
+                 | BAND | BOR | BXOR | BNOT
+                 | LSHS | LSHU | RSHS | RSHU
+                 | CONVSX | CONVZX | CONVIT
+                 | CONVFX | CONVFT | CONVFI | CONVSF | CONVUF
+                 | TSTEQ | TSTNE | TSTLTS | TSTLES | TSTGTS
+                 | TSTGES | TSTLTU | TSTLEU | TSTGTU | TSTGEU
+
+&lt;MemExp&gt;       ::= (MEM &lt;Ltype&gt; &lt;TypedExp&gt; [&amp;&lt;MemModifier&gt;])
+&lt;MemModifier&gt;  ::= V | N
+&lt;SetExp&gt;       ::= (SET &lt;Ltype&gt; &lt;LvalueExp&gt; &lt;TypedExp&gt;)
+&lt;LvalueExp&gt;    ::= &lt;MemExp&gt; | &lt;RegExp&gt;
+&lt;JumpExp&gt;      ::= (JUMP &lt;LabelExp&gt;)
+                 | (JUMPC &lt;TypedExp&gt; &lt;LabelExp&gt; &lt;LabelExp&gt;)
+                 | (JUMPN &lt;TypedExp&gt; ( { (&lt;Fixnum&gt; &lt;LabelExp&gt;) } ))
+
+&lt;DefLabelExp&gt;  ::= (DEFLABEL &lt;label&gt;)
+&lt;label&gt;        ::= &lt;QuotedString&gt;
+
+&lt;CallExp&gt;      ::= (CALL &lt;Callee&gt; &lt;Arguments&gt; &lt;Receivers&gt;)
+&lt;Arguments&gt;    ::= ( { &lt;TypedExp&gt; } )
+&lt;Receivers&gt;    ::= ( { &lt;LvalueExp&gt; } )
+
+&lt;InterfaceExp&gt; ::= &lt;PrologueExp&gt; | &lt;EpilogueExp&gt;
+&lt;PrologueExp&gt;  ::= (PROLOGUE (&lt;Fixnum&gt; &lt;Fixnum&gt;) { &lt;LvalueExp&gt; })
+&lt;EpilogueExp&gt;  ::= (EPILOGUE (&lt;Fixnum&gt; &lt;Fixnum&gt;) { &lt;TypedExp&gt; })
+
+&lt;SpecialExp&gt;   ::= &lt;ParallelExp&gt; | &lt;UseExp&gt; | &lt;ClobberExp&gt;
+&lt;ParallelExp&gt;  ::= (PARALLEL { &lt;SetExp&gt; | &lt;CallExp&gt; | &lt;UseExp&gt; | &lt;ClobberExp&gt; })
+&lt;UseExp&gt;       ::= (USE { &lt;RegExp&gt; })
+&lt;ClobberExp&gt;   ::= (CLOBBER { &lt;RegExp&gt; })
+
+&lt;LineExp&gt;      ::= (LINE &lt;Fixnum&gt;)
+</pre><center>
+Fig.7-4 Syntax of LIR
+</center>
+
+<h4 id='i-7-3-2'>7.3.2. Semantics of LIR</h4>
+
+<h5>Const-expression</h5>
+
+<dl>
+<dt>
+(INTCONST t z)&emsp; t&#8712;Itype
+<dd>
+Integer value of z&#8712;Z in type t
+<dt>
+(FLOATCONST t r) &emsp;t&#8712;Ftype
+<dd>
+Float value of r&#8712;R in typw t</dl>
+
+
+<h5>Addr-expression</h5>
+
+<p>STATIC-expression represents the address of a global variable.
+FRAME-expression represents the address of a local vaariable.
+LABEL-expression represents the location of a L-function.
+</p>
+
+<dl>
+<dt>
+(STATIC t s)&emsp; t&#8712;Itype
+<dd>
+Address of the program memory or the data memory pointed by s&#8712;String
+<dt>
+(FRAME t s)&emsp; t&#8712;Itype
+<dd>
+Address of the data memory pointed by the sum of the offset indicated by s&#8712;String
+and the frame pointer.
+<dt>
+(LABEL t s)&emsp; t&#8712;Itype
+<dd>
+Location indicated by s&#8712;String</dl>
+
+
+<h5>Reg-expression</h5>
+
+<dl>
+<dt>
+(REG t s)
+<dd>
+Value of the register indicated by s&#8712;String
+<dt>
+(SUBREG t x n)
+<dd>
+<p>Value of the n-th sub-register of the register x</p>
+<p>For example, (SUBREG I8 (REG I32 &quot;x&quot;) 2) is the sub-register (bit16-bit23)
+of the register x, and (SUBREG I10 (REG I32 &quot;x&quot;) 1)
+is the sub-register (bit10-bit19)
+of the register x.</p>
+</dl>
+
+
+<h5>Pure-expression</h5>
+
+<dl>
+<dt>
+(NEG t x) &emsp;t = t<sub>x</sub>&emsp; (the same type)
+<dd>
+Negation
+<dt>
+(ADD t x y)&emsp; t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Addition
+<dt>
+(SUB t x y)&emsp; t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Subtraction
+<dt>
+(MUL t x y)&emsp; t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Multiplication
+<dt>
+(DIVS t x y)&emsp; t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Signed division
+<dt>
+(DIVU t x y)&emsp; t&#8712;Itype&#8743;t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Unsigned division
+<dt>
+(MODS t x y)&emsp; t&#8712;Itype&#8743;t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Signed remainder
+<dt>
+(MODU t x y) &emsp;t&#8712;Itype&#8743;t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Unsigned remainder
+<dt>
+(CONVSX t x)&emsp; t,t<sub>x</sub>&#8712;Itype
+<dd>
+Sign extension
+<dt>
+(CONVZX t x) &emsp;t,t<sub>x</sub>&#8712;Itype
+<dd>
+Zero extension
+<dt>
+(CONVIT t x)&emsp; t,t<sub>x</sub>&#8712;Itype
+<dd>
+Conversion to shorter integer
+<dt>
+(CONVFX t x) &emsp;t,t<sub>x</sub>&#8712;Ftype
+<dd>
+Conversion to higher precision floating point number
+<dt>
+(CONVFT t x)&emsp; t,t<sub>x</sub>&#8712;Ftype
+<dd>
+Conversion to lower precision floating point number
+<dt>
+(CONVFI t x) &emsp;t&#8712;Itype&#8743;t<sub>x</sub>&#8712;Ftype
+<dd>
+Conversion from floating point number to integer
+<dt>
+(CONVSF t x) &emsp;t&#8712;Ftype&#8743;t<sub>x</sub>&#8712;Itype
+<dd>
+Conversion from signed integer to floating point number
+<dt>
+(CONVUF t x) &emsp;t&#8712;Ftype&#8743;t<sub>x</sub>&#8712;Itype
+<dd>
+Conversion from unsigned integer to floating point number
+<dt>
+(BAND t x y)&emsp; t&#8712;Itype&#8743;t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Logical and
+<dt>
+(BOR t x y)&emsp; t&#8712;Itype&#8743;t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Logical or
+<dt>
+(BXOR t x y)&emsp; t&#8712;Itype&#8743;t = t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Exclusive or
+<dt>
+(BNOT t x)&emsp; t&#8712;Itype&#8743;t = t<sub>x</sub>
+<dd>
+Logical complement
+<dt>
+(LSHS t x y) &emsp;t,t<sub>y</sub>&#8712;Itype&#8743;t = t<sub>x</sub>
+<dd>
+<p>Signed left shift</p>
+
+<dt>
+(LSHU t x y)&emsp; t,t<sub>y</sub>&#8712;Itype&#8743;t = t<sub>x</sub>
+<dd>
+Unsigned left shift
+<dt>
+(RSHS t x y)&emsp; t,t<sub>y</sub>&#8712;Itype&#8743;t = t<sub>x</sub>
+<dd>
+Signed right shift
+<dt>
+(RSHU t x y)&emsp; t,t<sub>y</sub>&#8712;Itype&#8743;t = t<sub>x</sub>
+<dd>
+Unsigned right shift
+<dt>
+(TSTEQ t x y)&emsp; t&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Comparison (x = y)
+<dt>
+(TSTNE t x y)&emsp; t&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Comparison (x&#8800;y)
+<dt>
+(TSTLTS t x y)&emsp; t&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Signed comparison (x &lt; y)
+<dt>
+(TSTLES t x y) &emsp;t&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Signed comparison (x&#8804;y)
+<dt>
+(TSTGTS t x y)&emsp; t&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Signed comparison (x &gt; y)
+<dt>
+(TSTGES t x y)&emsp; t&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Signed comparison (x&#8805;y)
+<dt>
+(TSTLTU t x y) &emsp;t,t<sub>x</sub>&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Unsigned comparison (x &lt; y)
+<dt>
+(TSTLEU t x y) &emsp;t,t<sub>x</sub>&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Unsigned comparison (x&#8804;y)
+<dt>
+(TSTGTU t x y) &emsp;t,t<sub>x</sub>&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Unsigned comparison (x &gt; y)
+<dt>
+(TSTGEU t x y)&emsp; t,t<sub>x</sub>&#8712;Itype&#8743;t<sub>x</sub> = t<sub>y</sub>
+<dd>
+Unsigned comparison (x&#8805;y)
+<dt>
+(ASMCONST t x)&emsp; t = t<sub>x</sub>&#8743;isasmconst x
+<dd>
+Same as x (Currently unsupported)
+<dt>
+(PURE t x)&emsp; x&#8712;IntConstExp
+<dd>
+Any operation without side effect (Currently unsupported)
+</dl>
+
+
+<h5>Mem-expression</h5>
+
+<dl>
+<dt>
+(MEM t x)&emsp; t<sub>x</sub>&#8712;Itype
+<dd>
+Value of the object in the address x of the data memory
+</dl>
+
+
+<h5>Set-expression</h5>
+
+<dl>
+<dt>
+(SET t (MEM t' x) y) &emsp;t=t'=t<sub>y</sub>
+<dd>
+Assign the value of y to the object in the address x
+<dt>
+(SET t (REG t' s) x)&emsp; t=t'=t<sub>x</sub>
+<dd>
+Assign the value of x to the register indicated by s
+<dt>
+(SET t (SUBREG t' (REG t<sub>x</sub> s) n) x)&emsp; t=t'=t<sub>x</sub>
+<dd>
+Assign the value of x to the n-th sub-register of s
+</dl>
+
+
+<h5>Jump-expression</h5>
+
+<dl>
+<dt>
+(JUMP l)
+<dd>
+Jump to the location indicated by the label-expression l
+<dt>
+(JUMPC x l<sub>1</sub> l<sub>2</sub>) &emsp;x.code&#8712;TstOps
+<dd>
+Jump to l<sub>1</sub> if the value of x is equal to 1, and
+jump to l<sub>2</sub> if equal to 0
+<dt>
+(JUMPN x ((c<sub>1</sub> l<sub>1</sub>)...(c<sub>n</sub> l<sub>n</sub>)) l<sub>0</sub>)&emsp; t<sub>x</sub>&#8712;Itype&#8743;i&#8800;j &#8658; c<sub>i</sub>&#8800;c<sub>j</sub>
+<dd>
+Jump to l<sub>i</sub> if the value of integer x is equal to c<sub>i</sub>,
+otherwise jump to l<sub>0</sub>
+</dl>
+
+
+<h5>DefLabel-expression</h5>
+
+
+<dl>
+<dt>
+(DEFLABEL s)
+<dd>
+Define label s</dl>
+
+
+<h5>Call-expression</h5>
+
+<dl>
+<dt>
+(CALL x<sub>1</sub> (x<sub>2</sub>...x<sub>n</sub>) (y<sub>1</sub>...y<sub>m</sub>))
+<dd>
+Call the L-function pointed by x<sub>1</sub> with the actual parameter
+x<sub>2</sub>...x<sub>n</sub>. The return values are assigned to y<sub>1</sub>...y<sub>m</sub>
+</dl>
+
+
+<h5>Interface-expression</h5>
+
+<dl>
+<dt>
+(PROLOGUE (w<sub>f</sub> w<sub>r</sub>) x<sub>1</sub>...x<sub>n</sub>)
+<dd>
+<p>w<sub>f</sub> is the size of the frame, and w<sub>r</sub>
+is the size of the register fram (currently unsupported).
+x<sub>i</sub>is a formal parameter</p>
+<dt>
+(EPILOGUE (w<sub>f</sub> w<sub>r</sub>) x<sub>1</sub>...x<sub>n</sub>)
+<dd>
+<p>w<sub>f</sub> is the size of the frame, and w<sub>r</sub>
+is the size of the register fram (currently unsupported).
+x<sub>i</sub>is a return value.</p>
+
+</dl>
+
+
+<h5>Special-expression</h5>
+
+<dl>
+<dt>
+(PARALLEL x<sub>1</sub>...x<sub>n</sub>)
+<dd>
+Parallel execution of x<sub>1</sub>,...,x<sub>n</sub>.<br>
+x<sub>i</sub> is a SET-expression, a USE-expression, or a CLOBBER-expression.
+<dt>
+(USE r<sub>1</sub>...r<sub>n</sub>)
+<dd>
+Indicates that the registers r<sub>1</sub>,...,r<sub>n</sub> may be used.
+<dt>
+(CLOBBER x<sub>1</sub>...x<sub>n</sub>)
+<dd>
+Indicates that the registers x<sub>1</sub>,...,x<sub>n</sub> may be modified.
+<dt>
+(PHI x (x<sub>1</sub> l<sub>1</sub>)...(x<sub>n</sub> l<sub>n</sub>))
+<dd>
+<p>&#934; function( x = &#934;(x<sub>1</sub>,..., x<sub>n</sub>) )</p>
+<p>Assign the value of x<sub>i</sub> to x if the preceeding basic block 
+has label l<sub>i</sub>
+</p></dl>
+
+
+<h5>IF-expression</h5>
+
+
+<dl>
+<dt>
+(IF t cond then else) &emsp;t = t<sub>then</sub> = t<sub>else</sub>
+<dd>
+If the value of cond-expression is true, return the value of then-expression,
+otherwise return the value of else-expression.
+</dl>
+
+
+<h5>LINE-expression</h5>
+
+<dl>
+<dt>
+(LINE <i>N</i>)
+<dd>
+Indicates that the following L-expressions are generated from
+the line <i>N</i> of the source program.
+</dl>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+graph "ER" {
+	node [	label = "\N",
+		shape = box ];
+	graph [label= "\n\nEntity Relation Diagram\ndrawn by NEATO"];
+	graph [fontsize= 20];
+	graph [lp= "359,44"];
+	graph [bb= "0,0,719,224"];
+	edge [ style = "linewidth(1)" ];
+	{
+		graph [label= ""];
+		graph [fontsize= ""];
+		graph [lp= ""];
+		graph [bb= ""];
+		node [label= name];
+		node [shape= ellipse];
+		node [style= ""];
+		node [color= ""];
+		name0 [pos="27,112", width="0.75", height="0.50"];
+		name1 [pos="306,112", width="0.75", height="0.50"];
+		name2 [pos="692,112", width="0.75", height="0.50"];
+	}
+	course [pos="122,206", width="0.75", height="0.50", tip="some course or other"];
+	institute [pos="308,206", width="0.81", height="0.50", tip="National Institute of Mental Health"];
+	student [pos="536,206", width="0.75", height="0.50"];
+	code [shape=ellipse, pos="99,112", width="0.75", height="0.50"];
+	grade [shape=ellipse, pos="536,112", width="0.75", height="0.50"];
+	number [shape=ellipse, pos="614,112", width="0.92", height="0.50"];
+	"C-I" [shape=diamond, style=filled, color=lightgrey, pos="203,112", width="0.83", height="0.67"];
+	"S-C" [shape=diamond, style=filled, color=lightgrey, pos="383,112", width="0.89", height="0.67"];
+	"S-I" [shape=diamond, style=filled, color=lightgrey, pos="462,112", width="0.81", height="0.67"];
+	course -- name0 [pos="104,188 86,170 59,144 42,127",style="dotted,linewidth(1)"];
+	course -- code [pos="118,188 114,171 108,147 103,130", style="dashed,linewidth(1)"];
+	course -- "C-I" [label=n, len="1.00", pos="132,188 139,176 149,162 156,154 163,145 177,133 188,124", lp="167,162"];
+	institute -- "C-I" [label=1, len="1.00", pos="288,188 267,170 235,141 217,125", lp="278,162"];
+	institute -- name1 [pos="308,188 307,172 307,147 306,130"];
+	institute -- "S-I" [label=1, len="1.00", pos="337,189 364,173 403,150 427,136 432,133 439,128 446,123", lp="407,162"];
+	student -- "S-I" [label=n, len="1.00", pos="522,188 508,170 486,143 474,127", lp="518,162"];
+	student -- grade [pos="536,188 536,172 536,147 536,130"];
+	student -- name2 [pos="563,191 591,175 633,151 659,136 663,133 668,129 674,125"];
+	student -- number [pos="551,188 565,171 587,145 600,129"];
+	student -- "S-C" [label=m, len="1.00", pos="509,194 493,186 475,177 463,170 444,158 416,138 399,124", lp="475,162"];
+	course -- "S-C" [label=n, len="1.00", pos="149,191 174,176 210,157 221,154 260,141 304,146 345,136 351,134 360,129 367,124", lp="232,162"];
+}

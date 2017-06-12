@@ -1,0 +1,1852 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+<html>
+  <head>	
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title>Semantics of High level Intermediate Representation HIR</title>
+
+  </head>
+  <body>
+	<h1>3. Semantics of High level Intermediate Representation HIR</h1>
+
+<h3 id='i-3-0'>Preface</h3>
+
+  This document describes the semantics of HIR, such as the meaning of type 
+and operations corresponding to each HIR representation. The operation of
+an expression will be defined according to the type of the expression and types 
+of its operands. And so, explanation of types is given before explanation
+of operations.  As for the overview and syntax of HIR, see <br>
+<a href='HirOutlineE-frame.html' target="_top">Outline of the High level Intermediate Representation HIR</a>.<br>
+  HIR is almost independent of source languages or target machines, however, 
+some detailed items may be specified by language parameters in SourceLanguage
+class and machine parameters in MachineParam class. The SourceLanguage
+class may have a subclass corresponding to each source language. The 
+MachineParam class may have a subclass corresponding to each target machine 
+architecture.
+
+<h3 id='i-3-1'>3.1. HIR-base and Transformations from source language to HIR</h3>
+
+  In some explanations, it is preferable to mention about a particular 
+source language or a particular target machine to draw clear images. 
+When that is the case, the portion of the explanation with language/machine 
+dependencies is enclosed with double brackets [[ ]] in this document. <br>
+  In the course of transformation from source language to HIR, it may be
+convenient to use some intermediate representation with some dependencies
+to the source language.  To distinctly address the HIR free of this kind of 
+dependencies, a term "HIR-base" is used. <br>
+<br>
+[[<br>
+  Transformation of a C program into HIR goes through an intermediate 
+representation named HIR-C having some items specific to C before generating
+HIR-base, that is,
+<pre>
+   C  -->  HIR-C  -->  HIR-base
+</pre>
+HIR-C is introduced to lessen, by the above decomposition, the complexity of 
+the single step transformation from C to HIR, and to prepare intermediate 
+representations close to C source program so that software engineering tools 
+and alike, which handle languages close to C in representations, can be 
+developed with ease. When mentioned simply as HIR, that always means HIR-base.<br>
+  HIR-C is an intermediate representation which covers HIR. The notations 
+present in HIR-C but not in HIR are:
+<pre>
+      Short circuit conditional expression (&amp;&amp;, ||)
+      Ternary operator (?:)
+      Embedded assign statement (assign statement as a factor of an expression)
+      Comma operator (,)
+      Increment, decrement (++, --)
+      Operators combined with assignment
+          ( +=, -+, *=, /*, %=, &lt;&lt;=, >>=, &amp;=, ^=, |=) 
+      Addition and subtraction operations on pointers    
+</pre>      
+Among the types in HIR-C, there are some which are decomposed further when 
+transformed to HIR-base. For example, "int" in HIR-C is broken down to "int",
+ "char" and "enum" in HIR-base. Pointer subtraction operations in HIR-C and in 
+HIR-base share the same notation but differ in meanings. If a flag named 
+HIR.FLAG_C_PTR is attached to a pointer operation node, then the operator has 
+the meaning of the pointer operation in C, and if the flag is not attached, 
+then the operator has the meaning of pointer operation in HIR-base. When 
+input program is transformed to complete HIR-base, then no node has 
+HIR.FLAG_C_PTR flag.<br>
+]]<br>
+
+
+<h3 id='i-3-2'>3.2. Types of HIR-base</h3>
+
+<h4 id='i-3-2-1'>3.2.1. Notations of types</h4>
+
+<h5 id='i-3-2-1-1'>3.2.1.1. Nodes and types</h5>
+  HIR is represented as a tree structure, and the tree structure has a 
+corresponding text representation. A tree structure consists of nodes. 
+Each node is either a leaf with no child or a non-leaf with children. 
+Each node has a type as its attribute. A leaf represents one symbol among 
+symbol for variable name, constant, subprogram name or others, which appear 
+in the source program. The type of a leaf node for a symbol "s" is the same 
+as the type of the symbol "s" (as explained in "The outline of the symbol 
+table", a symbol is given its type). A non-leaf has one or more child nodes 
+and an operator. The child nodes are operands of the operator.<br>
+  A node, 
+regardless of leaf or non-leaf, is given a coded operator which indicates what 
+the node is. A leaf node is presented with an operator which does not have 
+operands. In text representation, a leaf node is enclosed by angular 
+brackets &lt; >, and a non-leaf node is enclosed in parentheses, and a constructed 
+type (non basic type) is also enclosed in angular brackets. <br>
+  The type of a non-leaf node of an operator "op" shows the type of resulting 
+expression which is obtained by applying "op" to its operands. The type is in 
+most cases decided by the combination of the operands and the operator at the 
+time of HIR generation. The resulting type of the type conversion operator 
+"conv" is decided by the context of the upper level syntax and "conv" node
+has that type. The context decides which type must be given to the node. 
+If a node does not need a specific type, then the node has "void" type.<br>
+  In general, a non-leaf represents an expression, a statement, a subprogram 
+and so forth, and a leaf represents a simple variable, a constant, a label 
+and so forth.  Both non-leaves and leaves, as a whole, may be assumed as 
+expressions in a broader sense. The type of a node in the HIR tree is the 
+one decided for each of the expression in that broad sense upon HIR generation.
+
+<h5 id='i-3-2-1-2'>3.2.1.2. Objects</h5>
+  A storage area where a value is stored is called an object in this document. 
+The size of an object is denoted in bytes. An expression other than of 
+void type has a value. Once a value is stored in an object which is specified 
+by the first child of an assignment operator (assign), it is retained there 
+until another new value is assigned to that object, and the values of 
+expressions which refer to that storage area are equal to the value last 
+stored there. (As mentioned later, though, if a "volatile" qualifier is attached, 
+this is not always the case.) <br>
+  An expression which represents an object to store a value is called an 
+"l-value".  The type of an object is the type of the value which it stores. 
+Generally, a variable represents a storage area to which a value can be assigned. 
+If a storage area has "const" qualifier, its value can not be reassigned 
+but such storage area may be represented by a variable. Later, aggregate types 
+named array or structure or union will be explained. A storage areas which 
+stores array, structure, or union is also treated as a variable of the sort 
+and is called array variable, structure variable and union variable, 
+respectively. <br>
+  Thus, all variables represent objects. But there are objects which are 
+represented by expressions of non variables. An array, a structure, and a union 
+are called an aggregate and they are objects, and the expressions which 
+represent them are l-values. If an l-value has the qualifier "const", then its
+value can not be reassigned, that is it can not be used as the first operand 
+of assignment statement (AssignStmt). A scalar constant is not always an object, 
+but an aggregate constant is always an object.<br>
+  Objects are generated not only in accordance to the declarations in a source 
+program, but also during the execution of the program. A part of an object 
+may be used as another object. In such case, which storage area is to be used 
+for which object should be decided according to the semantics of the aggregates. 
+
+<h5 id='i-3-2-1-3'>3.2.1.3. Basic types</h5>
+The basic types in HIR are:
+<pre>
+    short int                short integer
+    int                      integer
+    long int                 long integer
+    long long int            long long integer
+    float                    floating point number
+    double                   double precision floating point number
+    long double              long double precision floating point number
+    char                     character
+    bool                     similar to "enum" type, with values of false and true
+    unsigned short int       unsigned short integer
+    unsigned int             unsigned integer 
+    unsigned long int        unsigned long integer 
+    unsigned long long int   unsigned long long integer 
+    unsigned char            unsigned character
+    offset                   offset of an element of a structure or an array, or
+                             number to show size in bytes of an object
+    void                     type without value (empty set)
+</pre>
+  The types short int, int, long int and long long int are given a generic name 
+of signed integer type. The types unsigned short int, unsigned int, unsigned long 
+int and unsigned long long int are given a generic name of unsigned integer type. 
+Signed integer and unsigned integer again have a generic name of integer type. 
+The generic name for float, double and long double is floating point type. 
+The generic name of char and unsigned char is character type. As it is mentioned
+later, char can be converted to integer type, but the conversion is an 
+implementation defined operation. How many bytes are used to represent each of
+these basic types is target machine dependent, and it is represented by 
+a parameter corresponding to it in the MachineParam class.<br>
+<br>
+  Note: The term "implementation defined" means that a compiler developer 
+who uses this compiler infrastructure can decide how to implement it, but 
+the details in which way it is decided have to be documented. <br>
+<br>
+  Constants have their types and values. The internal representations of 
+the values are implementation defined. The values also have their notational 
+forms as their external representations. The notations in HIR may differ 
+from those of the source language. The notations for values of HIR are used 
+to put an intermediate representation on display and so forth. Such methods 
+as makeIntConstString, makeFloatConstString, makeStringBody in the 
+SourceLanguage class can be used to convert the notation of a constant 
+from that of the source language's to that of HIR's.<br>
+  In HIR, an integer constant is textually represented by a sequence of digits.
+A sequence of digits followed by a letter L represents a "long int" constant, 
+and a "long long int" constant is followed by LL at the end. An "unsigned int" 
+constant is textually represented by a sequence of digits with trailing U, 
+and an "unsigned long int" constant and an "unsigned long long int" constant 
+are with trailing UL and ULL, respectively. For example, a constant 1 takes 
+forms of 1, 1L, 1LL, 1U, 1UL or 1ULL according to its type. 
+  The notation for a floating point number constant is basically the same as 
+that of C language's, but to make different types distinct, trailing F, D and 
+L are added for "float", "double" and "long double", respectively.<br>
+  A string of characters is represented as a character array. Constants of 
+string of characters are called "string" in HIR. In some source languages, 
+a string constant may have additional marks to show its start and end, or escape 
+characters. A term named "pure sequence of characters" means the array of 
+characters that is obtained by disregarding these additional marks and escape 
+characters. In textual representation, a string constant in HIR is represented 
+by its pure sequence of characters enclosed with quotation marks ("). Since a 
+pure sequence of characters may include unprintable characters, an escape 
+character \ is supplemented at print out, in compliance with the notation in Java
+which is the compiler description language. The notation for a null string 
+is "" that has no pure sequence of characters. Methods in SourceLanguage class 
+are to be prepared to handle notational changes between the source program 
+and HIR reciprocally. <br>
+  To the value of a "char", there corresponds a character code of "int" type. <br>
+To the value of an "unsigned char", there corresponds a character code of 
+"unsigned int" type. The value of a "bool" is either "true" or "false". To the
+value of "bool", there corresponds an integer called ordinal number. The 
+ordinal number corresponding to "true" is 1 and that of "false" is 0. An 
+"offset" represents the offset of an element of a structure or of an array, 
+or the size of an object. <br>
+To the value of an offset, there corresponds an integer value of either 
+"int", "long int" or "long long int". The selection of one of these integer 
+types corresponding to the offset depends on the target machine and the
+corresponding integer type is called as origin-type of the "offset" as it is 
+described later.<br>
+  A label is not an object holding a value, and its type should be set to "void".<br>
+  Many languages have matching types to some of the basic types mentioned above. 
+The correspondence between the matching types of an individual source language 
+to the types of HIR is decided at HIR generation (by the parser of its compiler). <br>
+<br>
+[[<br>
+  "int", "short int", and "long int" types of C's are converted to "int", 
+"short int", and "long int" types of HIR's, respectively. "signed int", 
+"signed short int", and "signed long int" types of C's are converted to "int", 
+"short int", and "long int" types of HIR's, respectively. To convert "char" of 
+C's to "char" or "unsigned char" of HIR's is implementation defined (see 
+SourceLanguage class). HIR-base "char", "bool" and "offset" can be treated, as 
+elaborated later, as integer type in HIR-C. A "\0" is added at the end of a 
+string in C, and is not to be included in the pure sequence of characters of 
+a string.<br>
+]]<br>
+
+<h5 id='i-3-2-1-4'>3.2.1.4. Type constructors and origin-types</h5>
+  A type constructor constructs a new type from basic and other types. 
+Listed below are type constructors in HIR.
+<pre>
+    pointer      pointer (a type which points to an object) 
+    vector       one dimensional array
+    struct       structure
+    union        union
+    enum         enumeration
+    subprogram   subprogram
+    typedef      type name definition
+</pre>
+  The enumeration "enum" constructs a scalar type giving a name to a set of
+elements named enumerators each of which has corresponding ordinal number 
+of integer type as its attribute. The basic type "bool" has many in common with 
+"enum" such as ordinal number but it is different from "enum". The value of 
+"pointer" is the address of an object pointed by the pointer, where the address 
+is represented as integer.<br>
+  The type qualifiers "const" and "volatile" may be attached to types. If a 
+type t1 is a type t with a qualifier, then t1 and t are different types, but
+they are treated just the same way as far as the operations are concerned, and 
+no explicit type conversion is required. No assignment operations (operations 
+by assign operator) should be performed on a variable of a type qualified with 
+"const". As for variables of a type qualified with "volatile", eliminations of 
+assignments or references to them or rearrangement of their operation order 
+should not be done during the course of code optimizations. <br>
+  Type constructors introduce a new type based on some underlining type and 
+define a new type name for the introduced type. The underlining type used to 
+define a new type t is called the "origin-type" of t. The "origin-type" should 
+be a basic type or a defined type that is already defined at the type of
+construction. Origin-types are explained in detailed for each type constructor. 
+Operations on introduced types are carried out by going back to the origin-type, 
+but application of the operations of the origin-type's on the introduced type 
+may be under certain constraints. These constraints will be elaborated 
+individually. Unless otherwise specified, the basic types do not have 
+origin-types, however, some source languages permit giving origin-types to some 
+basic types. The origin-type of "offset" can be selected, using a target 
+machines parameter, to be "long", "long long" and so forth (see MachineParam 
+class).   <br>
+[[<br>
+  When the source language is C, specify "int" as the origin-type of "char" and 
+"bool" (see SourceLanguag class).<br>
+]]<br>
+<br>
+  When an operator requires of its operands to be the same type, a type 
+conversion of one to the other should take place in compliance with the 
+conversion rules, even among types which share the same origin-type, with some 
+exceptions later described. In the case where operands type t1 and type t2 are 
+of the same origin-type, though their value rages may differ, their values 
+within the intersection of the value ranges of t1 and t2 stay unchanged before 
+and after the type conversions, but are simply looked at from different angles
+after the conversion. It is quite often the case when types with different names 
+are introduced by type name definition "typedef"s based on the same origin-type.
+In such cases, practically there is no need of value conversion among two types.<br> 
+  A type with a type qualifier and an introduced type whose range of value is 
+the same as that of the origin-type inherit the operations of their respective 
+origin-types. In these cases, either the introduced type or the origin-type may 
+be used in HIR representations. The choice is implementation defined. The same 
+operation may have different meanings among a type and its introduced type 
+whose ranges of value are not the same.<br>
+  If we go back the chain of origin-types starting from an introduced type, 
+we will reach to a basic type at the end of this backward chain, and can not go 
+back any further. This basic type is called the ultimate origin-type of the 
+introduced type.
+
+<h5 id='i-3-2-1-5'>3.2.1.5. Notations of types</h5>
+  In the text representation of HIR, types are also represented in text. A set 
+of notations for basic types in short forms are defined as follows.
+<pre>
+    Notation     basic type         explanation
+     int           int              (integer)
+     short         short int        (short integer)
+     long          long int         (long integer)
+     long_long     long long int
+     u_int         unsigned int
+     u_short       unsigned short
+     u_long        unsigned long int
+     u_long_long   unsigned long long int
+     char          char             (character)
+     u_char        unsigned char
+     float         float            (floating point number)
+     double        double           (double floating point number)
+     long_double   long double
+     bool          bool             (Boolean type, similar to enum)
+     void          void             (has no value)
+     offset        offset           (structure element offset, 
+                                     vector element offset, 
+                                     object size, pointer difference)
+</pre>
+  A set of notations for type constructors in short forms are also defined.
+<pre> 
+    Notation     type constructor   
+     ENUM         enum
+     PTR          pointer
+     VECT         vector
+     STRUCT       struct
+     UNION        union
+     SUBP         subprogram
+     TYPEDEF      typedef
+</pre>
+In textual representation of HIR, compound types (non basic type) are enclosed 
+with angular brackets &lt; > to avoid confusions.<br>
+  Integer, float, character, pointer, enum, bool, and offset types are 
+collectively called scalar types, and vector, struct, and union are collectively 
+called aggregates. An introduced type belongs to the same type group as its 
+ultimate origin-type. The groupings of types are shown below:
+<pre>
+  basic types
+    integer types
+      signed integer
+        int, short int, long int, long long int
+      unsigned integer
+         unsigned int, unsigned short,
+         unsigned long int, unsigned long long int
+    character types
+       char, unsigned char
+    floating point types
+        float, double, long double
+    bool
+    void
+    offset
+  type constructors
+    ENUM, PTR, VECT, STRUCT, UNION, SUBP, TYPEDEF
+
+  scalar types
+    int, short int, long int, long long int,
+    unsigned int, unsigned short,
+    unsigned long int, unsigned long long int
+    char, unsigned char,
+    float, double, long double,
+    bool,
+    offset,
+    ENUM, PTR
+  aggregates
+    VECT, STRUCT, UNION
+</pre>
+
+<h5 id='i-3-2-1-6'>3.2.1.6. Introduction of types</h5>
+  An introduced type belongs to the same type group to which its origin-type 
+belongs. A type introduced from an integer type also is an integer type. A type 
+introduced from a scalar type also is a scalar type. The criteria, such as 
+structural equivalence, name equivalence, and so forth, to decide whether or not 
+two introduced types are of the same type differ among languages, therefore 
+it is advisable to prepare a method in SourceLanguage class to make the judgment. 
+As mentioned later, there are some cases for which the equality relation is 
+defined. <br>
+  An object represented as a storage location is often represented as a variable, 
+but it is also represented by a pointer expression. The type of a pointer which 
+points to an object of type T is denoted by 
+<pre>
+     &lt;PTR T>
+</pre>
+An object is of type T, if it is pointed by a pointer of &lt;PTR T> type. A pointer 
+of the type shown below can be converted to and from any type of pointers:
+<pre>
+     &lt;PTR void>
+</pre>
+<h6 id='i-3-2-1-6-1'>3.2.1.6.1. Arrays</h6>
+  An array is an ordered sequence of elements of the same type. The size of an 
+array is the size of an element multiplied by the number of elements. The type 
+of an array which consists of n elements of type T and its smallest subscript 
+is lb is denoted by 
+<pre>
+     &lt;VECT n lb T>
+</pre>
+The type of elements of an array of type &lt;VECT n lb T> is T. One dimensional 
+array is also called vector.<br>
+  A type of a multi dimensional array would take such form as
+<pre>
+     &lt;VECT 10 0 &lt;VECT 20 0 int>>
+</pre>
+This shows a type of an array of arrays. The number of elements and the 
+smallest subscript of an array may take forms of integer expressions as well 
+as integer constants. An array type is an incomplete type if its number of 
+elements or its smallest subscript is not specified at the time of compilation 
+and it takes such forms as 
+<pre>
+     &lt;VECT null null int>, and 
+     &lt;VECT null 0 char>
+</pre>
+As mentioned earlier, the term "null" is put in places for the number of elements 
+and the smallest subscript. An incomplete array type does not need a type 
+conversion at operation involving an array type with the same element type.<br>
+ [[<br>
+  All elements of an array are usually placed in consecutive storage locations, 
+but the specification of HIR does not request it to be as compulsory. 
+Therefore, they do not have to be placed in ascending order of subscripts. 
+In which way elements of an array are arranged and are accessed are 
+implementation defined.<br>
+]]<br>
+
+<h6 id='i-3-2-1-6-2'>3.2.1.6.2. TYPEDEF</h6>
+  A declaration  
+<pre>
+     (typedef T name)
+</pre>
+declares that a type T is called "name" which can be used instead of T, and 
+introduces a new type in the form of
+<pre>
+     &lt;TYPEDEF name>
+</pre>
+or in some other form defined according to the source language. That is, 
+"name" is another representation of T and the type of "name" is &lt;TYPEDEF name>.
+Here, type T is called the origin-type of the introduced type &lt;TYPEDEF name>, 
+and the introduced type is treated in the same way as the origin-type T in
+evaluating HIR expressions.<br>
+  Once this declaration has been done, the introduced type in the form of
+"name" can be used instead of T. (How to define an introduced type whose range 
+of values differs from that of its origin-type is elaborated later). The 
+"name" here is usually an identifier, but other exceptional representations 
+may be allowed for some source languages.<br>
+  An operation which involves expressions using an introduced type follows 
+the rules applicable to the origin-type. If the origin-type is also an 
+introduce type, the rules for the ultimate origin-type apply. Where their 
+ranges of value differ, the operation might partially takes different courses.<br>
+[[<br>
+  In C language, statements
+<pre>
+    typedef int cm;
+    typedef cm Length;
+    Length leng1;
+</pre>
+introduce types &lt;TYPEDEF cm> and &lt;TYPEDEF Length>, and the type of leng1 is 
+&lt;TYPEDEF Length>. The origin-type of &lt;TYPEDEF Length> is &lt;TYPEDEF cm>, and 
+that of &lt;TYPEDEF cm> is "int". Operations on leng1 are carried out as "int" 
+type. (As is mentioned later, &lt;STRUCT identifier>, &lt;UNION identifier> 
+and &lt;ENUM identifier> are accepted as names of introduced types).<br>
+  A declaration in Pascal;
+<pre>
+     type price = integer;
+</pre>
+corresponds to
+<pre>
+     (typedef int price)
+</pre>
+in HIR and allows to use "price" instead of "integer". Here, the declaration 
+introduces a new type
+<pre>
+     &lt;TYPEDEF price>
+</pre>
+and its origin-type is "int".<br>
+]]<br>
+ (Note1:<br>
+  It is an acceptable implementation to replace an introduced type with its 
+origin-type at HIR generation, in stead of making use of type constructor TYPDEF.
+Current C parser takes that approach. The way with current C parser does not suit 
+to some languages which make distinctions between types with different names. 
+It also is not well prepared for the cases, such as a debugger, which requests 
+the notations in the source language. In the case of C, since it does not 
+make distinctions among type names, as long as the problem with debuggers can 
+be put aside, replacing an introduced type with its origin type at HIR 
+generation can be an acceptable choice.)<br>
+
+<h6 id='i-3-2-1-6-3'>3.2.1.6.3. Enumeration</h6>
+  The notation for an enumeration in HIR is 
+<pre>
+     &lt;ENUM &lt;enumerator-specification enumerator-specification ...>>
+</pre>
+where an enumerator-specification is a pair of an enumerator and its ordinal 
+number:
+<pre>
+    &lt;enumerator ordinal number>
+</pre>
+An ordinal number is an integer constant. The ordinal numbers corresponding to 
+the enumerators often are 0, 1, 2, 3, ...  in accordance with the order of 
+the enumerators, but they do not have to be consecutive numbers, and a notation
+<pre>
+     &lt;ENUM &lt;LOW 3> &lt;MEDIUM 5> &lt;HIGH 8>>
+</pre>
+can be accepted as valid. The type of an enumerator is "enum", its origin-type 
+is integer, and its value is the corresponding ordinal number. (Which one of 
+the integer types is the origin type of "enum" is to be specified in MachineParam 
+class).<br>
+
+[[<br>
+  If an enumeration in C is attached with an identifier t as its tag, a type 
+&lt;ENUM t> is assumed to be introduced, and the notation &lt;ENUM t> is used for 
+that enumeration type. If a tag is absent, a tag (e.g., named t1) is generated 
+at the time of transformation to HIR, and introduction of type &lt;ENUM t1> is 
+assumed. The notation &lt;ENUM t1> is used for this enumeration type. This means 
+that the notation &lt;ENUM identifier> is a valid form of introduced type name. 
+The origin-type of &lt;ENUM t> is the enumeration declaration itself taking off 
+its tag.<br>
+  For example, consider a declaration for s1 in C
+<pre>
+     enum signal {RED, YELLOW, GREEN} s1;
+</pre>
+This declaration is to be translated that the type of s1 is &lt;ENUM signal> 
+whose origin-type is &lt;ENUM &lt;&lt;RED 0> &lt;YELLOW 1> &lt;GREEN 2>>>.
+In other words, it is assumed that this declares, as well as variable s1,
+    (typedef &lt;ENUM &lt;&lt;RED 0> &lt;YELLOW 1> &lt;GREEN 2>>> &lt;ENUM signal>)
+and thus declares two types,
+<pre>
+    &lt;ENUM signal> and 
+    &lt;ENUM &lt;&lt;RED 0> &lt;YELLOW 1> &lt;GREEN 2>>
+</pre>
+  Consider another example in C
+<pre>
+     enum {OFF, ON} flag;
+</pre>
+Assuming t1 to be the tag name generated by the compiler for this declaration,
+the declared type is denoted by
+<pre>
+     &lt;ENUM t1>
+</pre>
+and its origin-type is
+<pre>
+     &lt;ENUM &lt;&lt;OFF 0> &lt;ON 1>>>
+</pre>
+]]<br>
+
+<h6 id='i-3-2-1-6-4'>3.2.1.6.4. Structures and unions</h6>
+  A structure is an ordered list of its elements. How to calculate the size 
+of a structure is implementation defined. A union is an aggregate whose 
+elements share an overlapping storage location, and how to calculate its size 
+is implementation defined, but its size is no less than the size of the element
+largest in size. How to access to elements of a structure or of a union is 
+also implementation defined.  <br>
+  A structure and a union take respective forms of 
+<pre>
+     &lt;STRUCT &lt;Type_1 Name_1> &lt;Type_2 Name_2> ... &lt;Type_n Name_n>>
+and
+     &lt;UNION  &lt;Type_1 Name_1> &lt;Type_2 Name_2> ... &lt;Type_n Name_n>>
+</pre>
+Here, "STRUCT" or "UNION" is followed by a list of element specifications 
+which are in compliance with the notational conventions of types described in 
+this section. The notations above show a structure or a union whose elements, 
+Name_1, Name_2, ..., and Name_n are of types Type_1, Type_2, ..., and Type_n, 
+respectively. As for the elements of the union above, Name_1, Name_2, ... , and 
+Name_n are stored in storage areas which start at the same address.<br>
+  To define a type of structure or union having element refering the type 
+to be defined, an incomplete type 
+<pre>
+    (typedef null introduced-type-name) 
+</pre>
+may be defined to start with, in preparation of the introduced type of structure 
+or union type. The incomplete type thus introduced may be redefined later by 
+<pre>
+    (typedef structure introduced-type-name) 
+or 
+    (typedef union introduced-type-name) 
+</pre>
+so as to make it a complete type. An incomplete type can be specified as the 
+type of a target of a pointer reference and so forth.<br>
+ [[<br>
+  Consider a declaration in C
+<pre>
+     struct point { int x; int y; } s1;
+</pre>
+having the tag named "point". It is assumed that an introduced type name 
+&lt;STRUCT tag-name> (&lt;STRUCT point> in this case) is declared and it is then used 
+to declare the type of structure s1. If a tag name is not given in the source 
+program, the compiler generates a tag name at transformation to HIR, and it 
+appears in the notation likewise. In the case of unions, similarly, 
+&lt;UNION tag-name> is assumed to be introduced and declared. Thus, 
+&lt;STRUCT identifier> and &lt;UNION identifier> are now included in the valid 
+forms of introduced types. <br>
+  Consider following declarations in C
+<pre>
+     struct point { int x; int y; } s1;
+     union value { int iValue; float fValue; } u1;
+     struct { char* name; int price; } b1;
+</pre>
+Introduced types and their origin types are
+<pre>
+     type of s1:  &lt;STRUCT point>
+     type of u1:  &lt;UNION value>
+     type of b1:  &lt;STRUCT t2>
+     origin-type of &lt;STRUCT point>: &lt;STRUCT &lt;int x> &lt;int y>>
+     origin-type of &lt;UNION value>:  &lt;UNION &lt;int iValue> &lt;float fValue>>
+     origin-type of &lt;STRUCT t2>:    &lt;STRUCT &lt;&lt;PTR char> name> &lt;int price>>
+</pre>
+where t2 is the generated tag from the declaration of b1.<br>
+  In the following example of C 
+<pre>
+     typedef struct tnode *TreePtr;
+     typedef struct tnode {
+       char *name;
+       TreePtr left;
+       TreePtr right;
+     } TreeNode;
+     TreeNode root;
+</pre>
+the types of root and left are
+<pre>
+     type of root: &lt;TYPEDEF TreeNode>
+     type of left: &lt;TYPEDEF TreePtr>
+     origin-type of &lt;TYPEDEF TreeNode>: &lt;STRUCT tnode>
+     origin-type of &lt;TYPEDEF TreePtr>:  &lt;PTR &lt;STRUCT tnode>>
+</pre>
+where &lt;STRUCT tnode> is first defined as an incomplete type, and then it is 
+redefined as a complete type later. <br>
+  Another example of C follows.
+<pre>
+     typedef int Int;
+     typedef Int *IntP;
+     IntP p;
+</pre>
+Here, the introduced types are:
+<pre>
+     &lt;TYPEDEF Int>
+     &lt;TYPEDEF &lt;PTR Int>>
+     &lt;TYPEDEF IntP>
+</pre>
+The type of p is &lt;TYPEDEF IntP>, the origin type of &lt;TYPEDEF IntP> is 
+&lt;TYPEDEF &lt;PTR &lt;TYPEDEF Int>>>, and the origin type of &lt;TYPEDEF Int> is int.<br>
+]]<br>
+
+<h6 id='i-3-2-1-6-5'>3.2.1.6.5. Subprograms</h6>
+  The subprogram type is formed with, apart from the type name SUBP as the 
+first item, a list of types of arguments enclosed with angular brackets &lt; > 
+at the second place, a bool constant indicating whether or not a variable 
+number of arguments are expected at the third, and the type of return value 
+at the forth in such way 
+<pre>
+   &lt;SUBP &lt;type-of-argument-1 type-of-argument-2...> bool type-of-return-value>
+</pre>
+For a subprogram with no argument, the second item is an empty list &lt;>. 
+If a variable number of arguments are expected, the third item is true, 
+otherwise it is false. For a subprogram without a return value, a void is 
+set to the forth item.<br>
+[[<br>
+  For the following example in C,
+<pre>
+     int (*comp)(void *, void *);
+</pre>
+the type of comp is
+<pre>
+     &lt;PTR &lt;SUBP &lt;&lt;PTR void> &lt;PTR void>> false int> > >
+</pre>
+In C, if an expression representing a subprogram appears at a place other 
+than an operand of "&amp;" or "sizeof", the expression is taken to be a pointer 
+to the subprogram. According to this rule, in the subprogram call expressions 
+<pre>
+     comp(i, j), and (*comp)(i, j) 
+</pre>
+the type of the subprogram specification part of either expression is
+<pre>
+     &lt;PTR &lt;SUBP &lt;&lt;PTR void> &lt;PTR void>> false int> > >
+</pre>
+  Consider slightly more complicated example
+<pre>
+     int *fpi();          /* A function returning a pointer to int. */
+     int  *(*pfpi)();     /* A pointer to a function returning
+                             a pointer to int. */
+     int  *(*fpfpi())()   /* A function returning a pointer to a function */
+     {                    /* returning a pointer to int. */
+       return pfpi;
+     }
+        ...
+       pfpi = fpi;
+       pi1  = pfpi();
+       i5   = (*fpfi())();
+</pre>
+The types of subprograms or subprogram expressions for the statements above are: 
+<pre>
+     int *fpi();          &lt;SUBP &lt;> false &lt;PTR int>>
+     int  *(*pfpi)();     &lt;PTR &lt;SUBP &lt;> false &lt;PTR int>>>
+     int  *(*fpfpi())()   &lt;SUBP &lt;> false
+                            &lt;PTR &lt;SUBP &lt;> false &lt;PTR int>>>>
+     {  return pfpi;      &lt;PTR &lt;SUBP &lt;> false &lt;PTR int>>>
+     }
+        ...
+       pfpi = fpi;        &lt;PTR &lt;SUBP &lt;> false &lt;PTR int>>>
+       pi1  = pfpi();     &lt;PTR &lt;SUBP &lt;> false &lt;PTR int>>>
+       i5   = (*fpfi())();  &lt;PTR &lt;SUBP &lt;> false
+                                 &lt;PTR &lt;SUBP &lt;> false &lt;PTR int>>>>>
+</pre>
+]]<br>
+
+<h6 id='i-3-2-1-6-6'>3.2.1.6.6. Qualified type</h6>
+  A type t with type qualifier takes the form of &lt;t qualifier>, such as
+<pre>
+    &lt;float const>
+    &lt;int volatile>
+</pre>
+Operations for the qualified type are carried out in the same way as the 
+origin-type t. For expressions that request operands of the same type, if 
+types of two operands are the same except for their qualifiers, no insertions 
+of type conversion operations are needed. 
+
+<h4 id='i-3-2-2'>3.2.2. Types of operational expressions</h4>
+
+  The type of an operational expression is in most cases decided from the 
+combination of the type of its operands and its operator, but there are some 
+operators, like "conv", whose type is to be decided at the time of 
+transformation to HIR-base following the specifications of the source language. 
+Since each operator requests operands of certain types to suit it, explicit 
+conversions of operands should be inserted by the parser of the source language,
+that is, all operand conversions should be explicitly represented in HIR.
+In this section, explanation of type is given for each of operational expressions.<br>
+  The syntax of HIR-base is common to multiple languages and machines, but some
+instances may have some items whose values are language/machine dependent. 
+That is to say, the interface of HIR is common to multiple languages/machines, 
+but there are some fields in its real implementation (instance) which hold 
+language/machine dependent values. Since a real compiler is for a specific 
+source language and for a specific target machine, the dependencies of this kind 
+do not cause serious problems. Compiler modules processing HIR can be built
+to be commonly applicable to multiple languages and machines because
+language/machine dependent values of HIR instances can be get from
+SourceLanguage class or MachineParam class.<br>
+
+<h5 id='i-3-2-2-1'>3.2.2.1. Constants</h5>
+  HIR has integer constants and floating point constants. The integer constants 
+are constants of either int, long int, long long int, unsigned int, unsigned 
+long int and unsigned long long int. The floating type constants are constants 
+of either float, double and long double. Which constant in source language 
+corresponds to which one in HIR is decided by the parser of the source language.<br>
+[[<br>
+  Among constants in C language, the types signed integer, unsigned integer and 
+floating point have corresponding constant types in HIR-base. The result of 
+sizeof operator is a constant of offset type (, but its values may differ from 
+one target machine to another, even if the source program is the same). 
+  In HIR-base, not like in C, a character constant is of char type rather than 
+int, and an enumerator, which is a named constant defined by enum, is of enum 
+type rather than int. Though there is a notational form for a character string 
+as a constant, in view of types, a character string is handled as an array of 
+characters. Therefore, when decomposing a character string constant 
+to its elemental letters, they are treated as a char array. <br>
+]]<br>
+<br>
+  A constant of integer, offset or enum type generally has internal value 
+(in binary representation). If the value is beyond the rage of representation 
+defined for integer of Java, isOutOfValueRange() method returns true, and 
+the constant does not have a valid internal value. Transformations (such as
+constant folding) operated on the intermediate representation are carried out 
+only within the range where an internal value can be represented as an integer 
+of Java. Also, a constant of floating point type generally has internal value. 
+If the value is beyond the rage of representation as a floating point of Java, 
+isOutOfValueRange() method returns true, and the constant does not have a 
+valid internal value. The internal value of a character constant is that of 
+the corresponding int, or that of an int obtained by a type conversion from 
+unsigned char to int.<br>
+  The internal representation of a string constant takes form of the pure 
+sequence of characters enclosed with quotation marks (""). <br>
+[[<br>
+  In the case of C language, the pure sequence of characters is a string 
+whose quotation marks (") at the both ends are stripped off, escape characters 
+(say, with leading \) in the middle are translated, and 0x00 at the end of 
+the string is eliminated.<br>
+]]<br>
+<br>
+  An HIR node for a constant whose type is T and value is v takes the form of 
+<pre>
+     &lt;const T v>
+</pre>
+For example, the node for an integer constant 123 is
+<pre>
+     &lt;const int 123>
+</pre>
+Nodes for bool constants are either one of 
+<pre>
+     &lt;const bool true>, or &lt;const bool false>
+</pre>
+[[<br>
+  A node for a character string constant of C language, counting 0x00 at 
+the end as an element of the character array, takes the form of 
+<pre>
+     &lt;const &lt;VECT 4 0 u_char> "abc">
+</pre>
+]] <br>
+<br>
+  The symbol null shows the absence of an expression. (NullNode in a tree 
+structure shows a leaf which does nothing, and is not null. The type of 
+NullNode is void.) 
+
+<h5 id='i-3-2-2-2'>3.2.2.2. Variables</h5>
+  If a type T in the source language corresponds to a type t in HIR, a variable 
+of T type in the source language becomes a variable of t type in HIR. If t is 
+scalar type, the variable is a scalar variable, and if t is aggregate type, 
+the variable is an aggregate variable.<br>
+[[<br>
+  Variables of short int, int, long int, char, float, double, long double, 
+unsigned short int, unsigned int, unsigned long int, and unsigned char in 
+C language have variables of corresponding types in HIR-base. <br>
+  In C language, let T be a type specification and D a declarator, then 
+<pre>
+     T  D[n]
+</pre>
+declares that the type of D is an array of n elements of type T, 
+<pre>
+     &lt;VECT n 0 T>
+</pre>
+where n is an unsigned integer constant.
+<pre>
+     T D[ ]
+</pre>
+declares that the type of D is an arrary of undefined number of elements 
+of type T
+<pre>
+     &lt;VECT null 0 T>
+</pre>
+The declaration
+<pre>
+     T *D
+</pre>
+declares that the type of D is a pointer which points to an object of type T,
+that is
+<pre>
+     &lt;PTR T>
+</pre>
+For example,  
+<pre>
+     char *s;
+</pre>
+declares that the type of s is a pointer 
+<pre>
+     &lt;PTR char>
+</pre>
+that points to a char. <br>
+  The types defined by declarations for enum, struct, union, and function are 
+already explained.<br>
+]]<br>
+<br>
+
+  A leaf node for a variable v of type T is represented in textual form
+<pre>
+     &lt;var T v> 
+</pre>
+The i-th element of an array whose element type is T is is represented as 
+<pre>
+     (subs T aa' i')
+</pre>
+where aa' and i' stand for the respective notations in HIR for aa and i.
+The type of aa' is &lt;VECT n lb T>, where n is the number of elements of the array, 
+and lb is the lower bound of its subscript. If aa and i are leaf nodes for 
+variables, the above notation becomes 
+<pre>
+     (subs T
+       &lt;var &lt;VECT n lb T> aa>
+       &lt;var int i> )
+</pre>
+To calculate the location of i-th element of the array aa from this notation, 
+information such as the difference of displacement in memory address for each 
+increment of the subscript is required. The size of an element and the word 
+boundary, which are used to obtain the information, are target machine dependent.
+As elaborated later, aa' can be a pointer expression pointing to the array aa, 
+or to the top of the array aa. A multi-dimensional array is expressed as an 
+array whose elements are arrays.<br>
+    An element x of a structure s is
+<pre>
+     (qual T
+       s'
+       &lt;elem T x> )
+</pre>
+where T is the type of x, and s' stands for the notation in HIR for s.<br>
+The example earlier mentioned is thus
+<pre>
+     (qual int
+       &lt;var &lt;STRUCT &lt;int x> &lt;int y>> s>
+       &lt;elem int x> )
+</pre>
+For unions, except for replacing STRUCT with UNION, the rest is the same. 
+To obtain the offset of the element x, use evaluateDisp method in Elem interface
+<pre>
+     x.evaluateDisp()
+</pre>
+Usually this value is a constant, but a constant expression may be the case. 
+Whether it is a constant value or not can be confirmed using isDispEvaluable.<br>
+  A type T element x of a structure or a union which is pointed by a pointer p is
+<pre>
+     (arrow T  p'  x')
+</pre>
+where p' and x' stand for the respective notations in HIR for p and x. <br>
+When p and x are leaf nodes, the expression becomes
+<pre>
+     (arrow T
+       &lt;var &lt;PTR T> p>
+       &lt;elem T x> )
+</pre>
+and the value of the object (of scalar type) to which the pointer p points is
+<pre>
+     (contents T
+       (p' &lt;PTR T> )
+</pre>
+  If a pointer p points to the top of an array aa and it is used only to 
+point to an i-th element of the array, as shown below,
+<pre>
+     (contents int
+      (add      &lt;PTR int>
+       &lt;var      &lt;PTR int> p>
+       (mult     offset
+        &lt;const    offset 4>
+        (conv     offset
+         &lt;var      int i>))))
+</pre>
+then the i-th array element to which the expression including p points 
+can be represented by an array element expression using "subs" after 
+"undecay"ing the pointer to an array in such way as 
+<pre>
+    (subs T
+      (undecay &lt;VECT n lb T>
+        &lt;var &lt;PTR T> p>
+        &lt;const int n> 
+        &lt;const int lb> )
+      (i' int) )
+</pre>
+where i', n and lb stand for the notation in HIR for i, the number of 
+elements and the lower bound of the subscript of the array to which p points, 
+respectively. If p points to the array itself, then either
+<pre>
+     (subs T 
+       (contents &lt;VECT n lb T> 
+         &lt;var &lt;PTR &lt;VECT n lb T>> p> )
+       (i' int) ) 
+</pre>
+or
+<pre>
+    (subs T
+      (undecay &lt;VECT n lb T>
+        &lt;var &lt;PTR &lt;VECT n lb T>> p>
+        &lt;const int n>
+        &lt;const int lb> )
+      (i' int) )
+</pre>
+can be used instead of above pointer expression. In many cases, it is easier 
+to optimize or to parallelize an array element expression than a pointer 
+expression. <br>
+[[<br>
+  If a formal parameter of a function in C declared to be an array satisfies 
+the conditions above, the elements of the array may be expressed using subs. 
+For example, if a function declaration
+<pre>
+   void f(int aa[10], int bb[3][5]) { ... }
+</pre>
+is given, aa[i], and bb[j][k] may be expressed as follows:
+<pre>
+     (subs int
+       (undecay &lt;VECT 10 0 int>
+         &lt;var &lt;PTR int> aa> )
+       &lt;var i int> )
+     (subs int
+       (subs &lt;VECT 5 0 int>
+         (undecay &lt;VECT 3 0 &lt;VECT 5 0 int>)
+           &lt;var &lt;PTR &lt;VECT 5 0 int>> bb>
+           &lt;const int 3>
+           &lt;const int 0> )
+         &lt;var j int> )
+       &lt;var k int> )
+</pre>
+  According to the C language specifications, an array formal parameter in C 
+means a pointer that points to the top element of an array. Therefore, the 10 
+in "int aa[10]" and the 3 in "int bb[3][5]" do not assure that they are the 
+respective number of elements of aa and bb. Even so, as long as an array formal
+parameter is used in a straightforward way for an array, and is judged to 
+satisfy the conditions above, it is possible to express a formal parameter 
+using an array rather than a pointer. The former is preferable because array 
+elements are important targets in optimization and parallelization. But 
+whether or not a real argument has the number of elements as declared for 
+the corresponding formal parameter can not usually be tested in C. So, use of 
+this assumption at optimization and parallelization should be restricted 
+by a compilation time option to that effect. <br>
+  There is a pragma available to declare that array element expression can be 
+safely used instead of pointer expression. For pointer p,
+<pre>
+    #pragma optControl safeArray p
+</pre>
+declares that the pointer p is used to represent array element. For array aa,
+<pre>
+    #pragma optControl safeArray aa
+</pre>
+declares that subscript values for the array aa never exceeds the range
+of safely accessing the storage area allocated to the array aa. Although
+the above pragma gives information to the compiler, it does not certify 
+to detect violations. Incidentally, in the following example:
+<pre>
+     int f(int (*p)[10], (*q)[4][5]) {
+     #pragma optControl safeArray p q
+       int i, j, k, x;
+       ....
+       x = (*p)[i] + (*q)[j][k];
+       ....
+     }
+</pre>
+(*p) can be treated to be an array with number of elements 10, and (*q) 
+a 2-dimensional array with [4][5] elements. <br>
+]]<br>
+
+<h5 id='i-3-2-2-3'>3.2.2.3. Arithmetic expressions</h5>
+  Arithmetic operators add, sub, mult, div and mod stand for the four 
+basic rules of arithmetic and modulo arithmetic. They handle all types of 
+integer and floating point, and generate a computed result from their 2 operands
+of the same type and the type of the computed result is the same to the type of
+operands. <br>
+  In general, the two operands of arithmetic operators must be of the same type, 
+unless specifically explained otherwise. The distinction of operations among 
+signed and unsigned, and short, long, double and so fourth are decided by the 
+type of the operands, that is, the type of the computed result is the same to 
+the type of operands, unless explained otherwise.<br>
+  When applying an arithmetic operator to two operands of different types, 
+type conversion has to be explicitly made before the arithmetic operation. 
+The type conversion should be towards the type with richer power of expression 
+among the two. No type conversion is needed between a qualified type and its 
+origin-type. Such conversion should be inserted at the time of HIR-base 
+generation in compliance with the specifications of the source language.<br>
+  When unary minus operator "neg" is applied to an operand whose type is either 
+signed integer, offset, or floating point number type, it generates the result 
+of the same type with reversed sign. If "neg" is to be applied to an operand 
+of other type, such as unsigned integer and character, the operand should be 
+explicitly converted to a signed integer at the time of HIR-base generation.
+
+<h5 id='i-3-2-2-4'>3.2.2.4. Pointer expressions</h5>
+  There are two groups of arithmetic operations on pointers in HIR-base. 
+The first group includes addition and subtraction using a pointer as the 
+first operand and an offset as the second operand. The second group is 
+subtraction between two operands of the same pointer type. <br>
+  The type of the result of an operation from the first group is the same 
+pointer type of its first operand. The "add" operator adds the value of its 
+second offset operand to the memory address to which its first pointer 
+operand points, the address thus obtained is made the address to which the 
+resulting pointer points. The "sub" operator subtracts the value of its 
+second operand (of offset type) from the address to which its first operand 
+points, the address thus obtained is the address to which the resulting pointer 
+points.<br>
+  The type of the result of an operation from the second group is offset. 
+Subtraction between pointers here means the address represented by the second 
+pointer operand is subtracted from the address represented by the first pointer 
+operand, generating the result of offset type. <br>
+  In HIR-base, an addition or a subtraction between two offsets generates the 
+result of offset type. An offset added, subtracted or multiplied by an integer 
+generates the result of offset type. A division between two offsets generates 
+the result of integer type. The division between offsets is used, for example, 
+to obtain the number of elements of an array by utilizing the offset generated 
+by sizeof operator.<br>
+
+[[<br>
+  In HIR-C, addition and subtraction of a pointer, "add" and "sub", take two 
+operands. One of them is a pointer p which points to an object of type T, and 
+the other is integer i. Addition adds sizeof(T)*i to p, and subtraction 
+subtracts the same from p. In HIR-base, both "add" and "sub" operators also take 
+two operands, but their types are pointer and offset. The value obtained from 
+sizeof(T) multiplied by i must be given as the offset operand. This means that 
+HIR-base requires explicit insertion of such multiplication. <br>
+  Similarly, in C, a difference of two pointers is expressed in terms of 
+the number of objects which they point. In HIR-base, where a difference in 
+terms of memory address is obtained by the "sub" operator, an operation to 
+divide that difference by sizeof(T) has to be explicitly inserted if desired 
+result is the difference in terms of the number of objects. The operator 
+"offset" is available only in HIR-C, which expresses differences between 
+pointers in terms of number of elements. Since HIR-C is an extension of 
+HIR-base, if differences of pointers are to be expressed by "sub" operator 
+rather than "offset" operator, division by sizeof(T) aught to be explicitly 
+inserted, just like in HIR-base. If a pair of a pointer and an offset type 
+rather than a pair of a pointer and an integer type is used in HIR-C, 
+the meaning of the expression is the same as in HIR-base.<br>
+]]<br>
+<br>
+  Below is the summary of the pointer related operations in HIR-base.
+<pre>
+  Operator  first    second  result
+            operand  operand
+    add     pointer  offset   pointer
+    sub     pointer  offset   pointer
+    sub     pointer  pointer  offset   (not a number of elements) 
+    add     offset   offset   offset
+    add     offset   integer  offset
+    sub     offset   offset   offset
+    sub     offset   integer  offset
+    mult    offset   integer  offset
+    div     offset   offset   long
+    neg     offset            offset
+    offset  pointer  pointer  long   (number of elements) available 
+                                            in HIR-C only
+</pre>
+[[<br>
+  In HIR-C, in addition to listed above, those pairs which are accepted in C, 
+such as a pointer and an integer, an integer and a pointer, and so forth, are 
+acceptable, as a pair of operands of pointer related arithmetic. For operators
+"add", "sub" that have different meaning between HIR-base and HIR-C, a flag
+HIR.FLAG_C_PTR should be attached to the pointer expression if it is used 
+in the meaning of C language, otherwise operation of HIR-base is assumed.<br>
+]]<br>
+<br>
+  Address operator "addr" takes an operand of an l-value or a subprogram type. 
+Assuming that the type of operand is T, a pointer to T, &lt;PTR T>, is the type 
+of the result. <br>
+  The indirect operator "contents" takes a pointer operand p, and its result 
+is the value of the object to which p points. Assuming that p points to an 
+object of type T, the resultant type of "contents" is T.<br>
+  The operator "decay" takes as its operand an array, its result is the 
+pointer which points to the top element of the array. The type of the result 
+is, assuming that the type of the element of the array is T, a pointer to 
+T, &lt;PTR T>. If "decay" is applied on a character string constant, a pointer of 
+type &lt;PTR char> pointing to the top of the character string is obtained.<br>
+  The operator "undecay" takes three operands. The first operand is a pointer, 
+the second is an integer expression showing a number of elements of an array, 
+and the third is an integer expression showing the lower bound value of the 
+subscripts of the array. Let &lt;PTR T>, n and lb be the type of the first, 
+the second and the third operands, respectively, the result of undecay is 
+an array with n elements of type T, and the type of the result is
+<pre>
+    &lt;VECT n lb T>
+</pre>
+The second and third operands of undecay may be null, meaning the corresponding 
+information about the array are indefinite, and the type of the array is 
+expressed putting a null in respective places in such way as
+<pre>
+    &lt;VECT null null T>
+</pre>
+  The differences between "addr", "decay", "contents" and "undecay" focused 
+on types are as follows:
+<pre>
+    addr:     T --> &lt;PTR T>
+    decay:    &lt;VECT n lb T> --> &lt;PTR T>
+              string --> &lt;PTR char>  or  &lt;PTR u_char>
+              i.e. applicable only to arrays and character strings.
+              Never apply decay to a subprogram.
+    contents: &lt;PTR T> --> T
+    undecay:  &lt;PTR T> --> &lt;VECT n lb T>
+              i.e. "undecay" converts a pointer expression 
+              to an array expression.
+</pre>
+here, the left hand side of "-->" is operand type and the right hand side
+is the resultant type.
+
+<h5 id='i-3-2-2-5'>3.2.2.5. Comparison expressions</h5>
+  Comparison operators, "cmpGt", "cmpGe", "cmpLt" and "cmpLe", take two operands 
+of the same type which is either integer, floating point, enumeration, bool, 
+offset or pointer type. The operators compare if the first operand is greater 
+than, greater than or equal to, less than, and less than or equal to the second 
+operand, respectively, and generate a result of bool type. When the condition 
+is satisfied, the result is true, if not satisfied, the result is false.  
+If operand type of a comparison operator is enumeration type, the result is 
+the same to the comparison of ordinal numbers of the operands. Similarly, 
+if operand type is bool, the comparison is the same to the comparison of 
+ordinal numbers (1 for true, 0 for false) of operands. Comparison for 
+offset type is the same as that for its origin-type.<br>
+  Equality comparison operators, "cmpEq" and "cmpNe", take two operands of 
+the same arbitrary type of scalar types. Whether or not the values of the 
+two operands are equal is tested, and true or false in bool is generated, 
+accordingly.<br>
+  When applying a comparison operator to two operands of different types, type 
+conversion, in compliance with the specifications of the source language, 
+has to be explicitly carried out before the comparison operation, in the same
+way as arithmetic expressions. The type conversion should be towards the 
+type with richer power of expression among the two. In spite of this, 
+in equal comparisons, void or null may be compared with any pointer 
+regardless to which type it points. No type conversion is needed between a 
+qualified type and its origin-type (the type without a type qualifier). 
+
+<h5 id='i-3-2-2-6'>3.2.2.6. Logical expressions</h5>
+  Logical operators, "and", "or", and "xor", operate on two operands of bool 
+type, and perform logical AND, logical OR, and exclusive OR, respectively. 
+They generate a result of bool type. When operands are integer or offset 
+types, they perform the operation on the internal representations of the 
+operands, and generate the results of the same types as the operands'. If 
+the compliment operator "not" is applied to an operand of bool type, it 
+generates the reversal of the operand, that is false for true, and true for 
+false.
+
+<h5 id='i-3-2-2-7'>3.2.2.7. Bit operation expressions</h5>
+  If the complement operator "not" is applied to an operand of a type of scalar 
+types other than floating point, which means integer, character, enumeration, 
+bool or offset type, it generates a result which holds the one's complement of 
+the internal expression of the operand (bitwise reversals), and is of the same 
+type as the operand. If one of operators "and", "or" and "xor" are  applied to 
+operands of a type of scalar types other than bool, it generates a result 
+whose internal representation is the bitwise logical AND, logical OR and 
+exclusive OR, respectively, of the internal representations of the operand. 
+The result of the operation is of the same type of the operand. The two operands 
+of "and", "or" and "xor" must be the same type.
+
+<h5 id='i-3-2-2-8'>3.2.2.8. Shift expressions</h5>
+  Shift operators, "shiftR", "shiftLL" and "shiftRL", take two operands. The 
+type of their first operand is one of scalar types other than bool, floating 
+point and pointer, and they operate on the internal representation of the 
+first operand. Their second operand should be of int type and the type of 
+result is the same as the type of the first operand. Arithmetic right shift 
+"shftR" shifts bits to the right extending the sign bit. Logical left shift 
+"shiftLL" shifts bits to the left together with the sign bit, and the emptied 
+bits at the right side are filled with zeros (0). Logical right shift "shiftRL" 
+shifts bits to the right together with the sign bit, and the emptied bits 
+at the left side are filled with zeros. <br>
+[[<br>
+  In transforming from C, if the type of operand is a signed integer or a 
+signed character, use arithmetic shift. Otherwise use logical shift.<br>
+]]<br>
+
+<h5 id='i-3-2-2-9'>3.2.2.9. Other operators</h5>
+  Type conversion operator "conv" converts the type of its operand into the
+type specified by the node type of "conv" node, that is the "conv" node type
+shows the type of converted result. The type of the result is decided at 
+HIR generation, and it is the type requested in the context by the operator 
+which uses the conv result as its operand. A pointer to "void" type can be 
+converted to and from a pointer to any type. <br>
+  The operator "enclose" has an operand representing an expression to be 
+evaluates as one value, that is, to be protected from partially combined 
+with other operand that is not contained in the operand of "enclose". 
+Some languages may represent such restriction by enclosing an expression 
+by parenthesis. If it is not necessary to consider such restriction, then
+it is not necessary to apply "enclose" to expressions enclosed by parenthesis 
+in the source program.<br>
+  The operator "subs" construct a subscripted variable expression taking 
+an expression representing an array as the first operand, and a subscript 
+expression as the second operand. The type of the result is the type of the 
+array element. If the type of the first operand is &lt;VECT n lb T>, the type of 
+the result is T. The type of the subscript expression should be integer. <br>
+"subs" can be used to readily obtain the location of an element of a 
+rectangular array from the value of the subscript, since how far the element 
+is placed from the top position of the rectangular array can be calculated 
+from the size of the array element and the subscript value. Arrays with 
+sub-arrays of different sizes are expressed using a pointer or as arrays 
+whose elements are pointers.<br>
+  For SSA function phi (φ) , "phi", a variable or register (v) to store the result 
+is specified as the first operand, and a list of pairs of a variable or a 
+register and a label (v_i L_i) is specified as the second operand. The labels 
+are of the preceding basic blocks, and show the paths the control flow took. 
+<pre>
+     (phi  T
+       (v T)
+       (list (v_1 L_1 T) (v_2 L_2 T) ... ) )
+</pre>
+This means that if the control is passed from the basic block labeled with L_i, 
+the corresponding v_i is selected as the result v (i = 1,2, ...). v_1, 
+v_2, ... and v are of the same type T, and that type T is the type of the 
+result of "phi".<br>
+<br>
+  We sum up here the operators and the operands, and the type of results,
+where O denotes available and X denotes undefined.
+<pre>
+  Type           Comparison of    sign      conversion to
+                  size  equality  reversal  integer type
+  signed integer    O      O       O         not needed
+  unsigned integer  O      O       X         not needed
+  floating point    O      O       O         convet
+  char              O      O       X         character code or origin type 
+  u_char            O      O       X         character code or origin type
+  bool              O      O       X         false 0, true 1
+  offset            O      O       O         origin-type (internalrepresentation) 
+  PTR               O      O       X         memory address
+  ENUM              O      O       X         origin-type (ordinal number)
+</pre>
+
+<h5 id='i-3-2-2-10'>3.2.2.10. Subprograms</h5>
+  As mentioned earlier, the type of a subprogram is expressed as below:
+<pre>
+     &lt;SUBP &lt;argument-1-type argument-2-type ... > bool return-value-type>  
+</pre>
+A pointer to a subprogram of type T is, like ordinary pointers, expressed as:
+<pre>
+     &lt;PTR T>
+</pre>
+If a subprogram is a function returning a value, then the type of the expression 
+calling the function is the type of the return value.  The type of expression 
+calling a subprogram that returns no value is void, that is, a subprogram 
+that returns no value may be treated as a function returning void value.<br>
+  Arguments are passed by value at a subprogram call. For an argument to be 
+passes as reference, the memory address of the argument obtained by "addr" 
+operator is passed to the subprogram. For more detail, refer to the section 
+for subprogram references.
+
+<h5 id='i-3-2-2-11'>3.2.2.11. Assign statements</h5>
+  An assign statement assigns the value of the second operand to the first 
+operand which is an l-value object so that the value of the first operand 
+becomes the value assigned. The types of the two operands must be the same, 
+and the node for assign has the same type (except for a type qualifier). 
+If the two operands are a pair of structures or unions of the same type, 
+the whole of the contents of the second operand is set to the first operand. <br>
+A type with const type qualifier can not be placed at the left hand side of 
+an assignment statement. If a value of a type other than the type of the first 
+operand is to be assigned, an explicit type conversion on the second operand 
+to the type of the first operand is required at HIR-base generation. A null 
+(NullNode) is the exception to this, and may be assigned to pointers of any type.<br>
+  All types, scalars and aggregates, except for void are valid as the type of 
+operands of an assign statement. This means, the value of an expression of 
+any one of the types of integer, character, floating point, bool, offset, 
+pointer, array, enumeration, structure and union may be assigned to an 
+l-value of the same type.<br>
+<br>
+  Note: Ways to handle assignments between arrays, and returning an array 
+as the return value of a function are yet to be completed.
+
+<h5 id='i-3-2-2-12'>3.2.2.12. Control statements</h5>
+  The type of the result of an if-statement, a jump-statement, a loop-statement, 
+a return-statement without return value or a switch-statement is void. The type 
+of a return-statement returning a value is the same as that of the value. 
+The type of a subprogram call-statement is the same as that of the return 
+value of the subprogram.
+
+<h5 id='i-3-2-2-13'>3.2.2.13. Other statements</h5>
+  The type of an expression-statement (ExpStmt) is the same as that of 
+its operand which is an expression. The type of a block-statement is void.
+
+<h5 id='i-3-2-2-14'>3.2.2.14. Labels</h5>
+  The symbol for a label is used for label definition and label reference only, 
+and never is the subject of other operation. The types of label definition 
+and label reference are void. 
+
+<h5 id='i-3-2-2-15'>3.2.2.15. Other notations</h5>
+  The operator "null" represents NullNode which stands for nothing is there. 
+<pre>
+     &lt;null void>
+</pre>
+Its type is void.  The NullNode is an instance of HIR and is not null. <br>
+  The notation null represents the absence of operand and it is not an 
+instance of HIR. The notation null can be placed where an operand or a symbol 
+is to be placed representing the absence of them, if absence is permitted at 
+the position.
+
+<h4 id='i-3-2-3'>3.2.3. Type conversions</h4>
+
+  The "conv" operator is used to convert the type of an operand in an 
+expression, such as an arithmetic expression, to the required type. In what 
+situation and how a conversion has to be done is decided by the source 
+language specifications. Required conversion operations have to be explicitly 
+inserted at the time of HIR-base generation. HIR-base does not perform any 
+implicit type conversions. <br>
+  Among the types of integer type, there is an ordered rank of conversion: 
+<pre>
+      short int &lt; int &lt; long int &lt; long long int
+</pre>
+A type conversion to a type higher in the rank (integer promotion) does not 
+cause any information loss. The rank order among the types of floating point 
+type is:
+<pre>
+      float &lt; double &lt; long double 
+</pre>
+A type conversion to a type higher in this rank also does not cause any 
+information loss.<br>
+  If converted to integer, false and true of type bool are 0 and 1, respectively. 
+A character can be converted to an integer whose value is the character code 
+of the character. An enumerator can be converted to an integer whose value is 
+the ordinal number of the enumerator. An enumerator can be converted to a 
+character whose character code is the ordinal number of the enumerator. A type 
+conversion can be explicitly done to or from integer and floating point types.
+  The value of an offset can be assumed to be a value of signed int or 
+signed long int type, in the sense the internal (binary) representations 
+before and after the conversion by "conv" are the same.<br>
+  The value of a pointer represents an address, and can be assumed to be a 
+value of either signed int, signed long int, unsigned int or unsigned long int 
+type. Signed or unsigned is dependent on the target machine. Unless otherwise 
+specified, signed is assumed.<br>
+  In general, when a type conversion of an operand is necessary for arithmetic 
+or other operations, the operand whose type is lower in the rank order is 
+converted to the type of the other which is higher in the rank order. But the 
+conversion rules in the syntax of the source language have the priority. <br>
+For example, when transforming from C to HIR-base, type conversions to make 
+operands compatible must be explicitly done in compliance with the language 
+specifications of C.<br>
+  The operator "conv" is used not only for substantive basic type conversions, 
+but also for just a change in how a pointer p is seen, from one that points 
+to an object of type T1, to another that points to an object of type T2:
+<pre>
+     (conv  (PTR T2)
+       (p (PTR T1)) )
+</pre>
+  The following is a summary of the relation between operand (x), result (r) 
+of "conv" and the effect of the conversion operation. Here, Ts stands for the 
+type of the operand, and Tr for the result. The same rules for "enum" apply 
+to "bool". The details of the conversion are implementation defined. In this 
+summary "int" is used as a representative of all integer types. The 
+conversions among different integer types are omitted here. 
+<pre>
+  Ts of      Tr of       Effect of
+  Operand x  Result r    Conversion operation
+  -------    --------    --------------------
+   int       char     The character code of r is the value of x.
+             enum     The ordinal number of r is the value of x.
+             offset   The value of r is the value of x.
+             pointer  The value of r is the value of x.
+   char      int      The value of r is the character code of x.
+             enum     The ordinal number of r is the character code of x.
+             offset   Same as (conv offset (conv int (x char))).
+   enum      int      The value of r is the ordinal number of x.
+             enum     The ordinal number of r is the ordinal number of x.
+             offset   Same as (conv offset (conv int (x Ts))).
+   offset    int      The value of r is the value of x..
+             enum     The ordinal number of r is the value of x.
+             pointer  If the type of pointer is signed,  
+                      then the value of r is the value of x.
+                      If the type of pointer is unsigned, 
+                      then the value of r is signed-to-unsigned
+                      converted value of x.
+   pointer   int      The value of r is the address represented
+                      by x.
+             enum     The ordinal number of r is the value of x.
+             offset   If address is signed,
+                      then the value of r is the value of x.
+                      If address is unsigned,
+                      then the value of r is unsigned-to-signed
+                      converted value of x.
+             pointer  The address represented by r and the address 
+                      represented by x are the same.
+                      Whether or not the internal representation of the
+                      object pointed by x may also be treated as the
+                      object pointed by r is decided by programmer's
+                      responsibility.
+</pre>
+[[<br>
+<h5>Implicit type conversions </h5>
+  As mentioned earlier, all implicit type conversions in the source program 
+are to be expressed as explicit type conversions in HIR-base. Some HIR-C 
+expressions still have hidden implicit type conversions. All of these are 
+to be made explicit in HIR-base, following the language specifications of C 
+and the rules of HIR-base. For example, in C, char and bool are treated to be 
+the same as int, but in HIR-base, char and bool and int are treated as different 
+types, so explicit type conversions must be inserted to keep the compatibility 
+between operands where necessary. <br>
+<br>
+C
+<pre>
+     int a, plus;
+     plus = a > 0;
+</pre>
+HIR-C
+<pre>
+     (assign int
+       &lt;var int plus>
+       (compGt int
+         &lt;var int a>
+         &lt;const int 0> ) )
+</pre>
+HIR-base
+<pre>
+     (assign int
+       &lt;var int plus>
+       (conv int
+         (compGt bool
+           &lt;var int a>
+           &lt;const int 0> ) ) )
+</pre>
+
+<h5>Different handlings of integer types in HIR-base and HIR-C</h5>
+  As mentioned above, HIR-base treats char, bool and enum as different types 
+from int type. But HIR-C treats them, like C, as a kind of int types. HIR-C 
+permits, like C, an integer addition to and subtraction from a pointer, and 
+subtraction between pointers. Whereas in HIR-base, these addition and 
+subtraction with an integer should be done only after the pointer is converted 
+to integer type, and subtraction between pointers should be done after type 
+conversions to offset type have been done. 
+
+<h5>Arithmetic expressions</h5>
+  In C, variables and function values which are declared either as char, 
+unsigned char, bool, and enum can be used as a kind of integer types and can be 
+made operands of arithmetic operations. Whereas in HIR-base, these types have 
+to be explicitly converted to int or unsigned int before they are used at a 
+place where an integer type is requested by context, such as arithmetic 
+operations and assignment to integer. Where a char, unsigned char, bool or 
+enum type is requested by context, such as assignment to a variable of type 
+char, bool or enum, int and unsigned int have to be explicitly and appropriately 
+converted to char, bool or enum, respectively, before they are used.
+
+<h5>Example</h5>
+C
+<pre>
+     char a, b;
+     a = 'a';
+     b = a + 1;
+</pre>
+HIR-C
+<pre>
+     (assign char
+       &lt;var char a>
+       (conv char
+         &lt;const int 97> ) )
+     (assign char
+       &lt;var char b>
+       (conv char
+         (add int
+           (conv int
+             &lt;var char a> )
+         &lt;const int 1> ) )
+</pre>
+HIR-base
+<pre>
+     (assign char
+       &lt;var char a>
+       &lt;const char 'a'> )
+     (assign char
+       &lt;var char b>
+       (conv char
+         (add int
+           (conv int
+             &lt;var char a> )
+           &lt;const int 1> ) ) )
+</pre>
+
+<h5>Pointer expressions</h5>
+  In HIR-C, like in C, operations on pointers are permitted. The 
+representations in HIR-C are transformed to HIR-base in the manner shown below. 
+  Let p and q be pointers of type T, and i, j and k be of integer type. (If p 
+or q, in the expressions below, is not a simple variable but is a general 
+pointer expression, p and q in the notations
+<pre>
+   &lt;var &lt;PTR T> p> and &lt;var &lt;PTR T> q> 
+</pre>
+are to be replaced by the corresponding expression.) <br>
+<br>
+C
+<pre>
+     p + i
+</pre>
+HIR-C
+<pre>
+     (add &lt;PTR T>
+       &lt;var &lt;PTR T> p>
+       &lt;var int i> )
+</pre>
+HIR-base
+<pre>
+     (add  &lt;PTR T>
+       &lt;var  &lt;PTR T> p>
+       (mult  offset
+         &lt;const  offset s>      where, s is sizeof T
+         &lt;var  int i>))
+</pre>
+
+   For the expression 
+<pre>
+      p - i
+</pre>
+replace all add operators to sub operator. Here, sizeof T is, in general, 
+a constant of offset type. <br>
+<br>
+C
+<pre>
+     p - q
+</pre>
+HIR-C
+<pre>
+     (offset  offset
+      &lt;var  &lt;PTR T> p2>
+      &lt;var  &lt;PTR T> p1>)
+</pre>
+HIR-base
+<pre>
+     (div   int
+      (sub   offset
+       &lt;var   &lt;PTR T> p2>
+       &lt;var   &lt;PTR T> p1>)
+      &lt;const   offset s>))      where, s is sizeof T
+</pre>
+]]<br>
+
+
+<h4 id='i-3-2-4'>3.2.4. Specifying initial values</h4>
+  A statement below is used to specify the initial values of variables. 
+<pre>
+    (setData l-value-expression value-specification)
+</pre>
+This statement means that the value specified by value-specification is set 
+to the address expressed by l-value-expression. Where l-value-expression is 
+a constant expression of an l-value, and value-specification is either a 
+constant, a list of value specifications, or a repetition of a value 
+specification.
+<pre>
+   value-specification -> constant
+         | (expList value-specification value-specification ... )
+         | (expRepeat value-specification number-of-repetitions)
+</pre>
+  If the l-value is a scalar variable and the value specified is a constant 
+of a compatible type to the type of l-value, the constant is set to the scalar 
+variable. Here, 
+<pre>
+    (expList value-specification value-specification ... )
+</pre>
+is a list of an arbitrary number of value-specifications, and 
+<pre>
+    (expRepeat value-specification number-of-repetitions)
+</pre>
+is a list of the value-specification repeated number-of-repetitions (an 
+integer constant) times.<br>
+  If the l-value represents a vector aa with n elements, and the 
+value-specification represents a list of n elements, then the above statement 
+means that for all elements of the vector aa, following assignment 
+<pre>
+    ( setData aa[i] v_i )
+</pre>
+is repeated, where 
+<pre>
+    aa[i] is the i-th element of the vector aa, and 
+    v_i is the i-th element of the value specification list.
+</pre>
+  If the l-value represents a structure s with n elements, and the 
+value-specification represents a list of n elements, the statement above 
+means that for all elements of the structure, following assignment
+<pre>
+    ( setData s_i v_i )
+</pre>
+is repeated, where 
+<pre>
+    s_i is the i-th element of the structure s, and 
+    v_i is the i-th element of the value specification list.
+</pre>
+  Initial value specification statements (setData ... ) are used to specify 
+values to be set prior to the start of the execution of a program. To specify 
+values to be set after starting execution, such as at the entries to 
+subprograms, assignment statements or loop statements should be used in HIR-base.
+
+<h4 id='i-3-2-5'>3.2.5. Subprogram references</h4>
+
+  References to subprograms are made by
+<pre>
+    (call subprogram-expression argument-list)
+</pre>
+where subprogram-expression is a subprogram or a pointer to a subprogram, and 
+argument-list is a list of arguments or an empty list. For example, a 
+subprogram call to a subprogram (function) sqrt to obtain a square root of 
+an argument x of double type is as follows. 
+<pre>
+     (call  double
+      (addr &lt;PTR &lt;SUBP &lt;double> false double>>
+       &lt;subp &lt;SUBP &lt;double> false double> sqrt> )
+      (list
+       &lt;var double x>) )
+</pre>
+  If the subprogram does not have any argument, the argument list is an empty 
+list. If a scalar expression with an l-value is specified as an argument, its 
+value is passed to the subprogram. If a pointer is specified, the value of the 
+pointer is passed.<br>
+  There are three ways to pass an array: 
+<ul>
+<li>Pass a pointer that points to the top element of the array</li>
+<li>Pass a pointer that points to the array</li>
+<li>Pass the array itself (which is copied at either calling or called side)</li>
+</ul>
+Which one of these three ways is to be used is decided at HIR generation 
+in compliance with the specifications of the source language.  There are 
+2 cases in the treatment of pointer:
+<ul>
+<li>Pass a pointer to the top element of an array and receive it as a pointer 
+      to the array.</li>
+<li>Pass a pointer to an array and receive it as a pointer to the top element
+      of the array. </li>
+</ul>
+Interpretations to these cases are implementation defined. It is desirable to 
+decide on one uniform approach to deal with such cases for each source language.  <br>
+  There are two ways to pass a structure or a union: 
+<ul>
+<li>Pass a pointer that points to the structure or the union.</li>
+<li> Pass the structure or the union itself (which is copied by either calling 
+      or called side).</li>
+</ul>
+Which one of these two ways is to be used is decided at HIR generation in 
+compliance with the specifications of the source language. If a pointer is 
+passed, then the call is call-by-reference, and if a structure or a union 
+itself is passed, then the call is call-by-value. <br>
+  If the type of the return value of a subprogram is a structure or a union, 
+an expression representing a structure or a union is to be specified as the 
+operand of "return". In this case, the value of the specified structure or 
+union is to be made the return value. When returning an aggregate is intended, 
+a pointer to an address where the aggregate is to be stored may be passed and 
+let the subprogram write values to the address, but all processes 
+involved have to be explicitly stated in HIR.<br>
+  Note: In stead of using a pointer to an array, passing the array itself as 
+the argument, and receiving the array itself as the return value are not yet 
+completely implemented.<br>
+[[<br>
+  The HIR representation for the following function call in C
+<pre>
+   int func( int a[3], int i ){
+     return a[i];
+   }
+    ....
+   r = func(aa, 2);
+    ....
+</pre>
+may be, with considerations to the conditions stated in section 2.2,  as
+follows:
+<pre>
+   (subpDef  void
+    &lt;subp  &lt;SUBP &lt;&lt;PTR int> int > false int> func>
+   &lt;null  void>            // Initialization part.
+    (labeldSt  void
+     (list
+      &lt;labelDef _lab1>)    // Label generated by subpDefinition of HIR.
+     (block  void
+      (return  int
+       (subs  int
+        (undecay  &lt;VECT 3 0 int>
+         &lt;var  &lt;PTR int> a>
+         &lt;const  int 3>
+         &lt;const  int 0>)
+        &lt;var  int i> ))))    
+     ... )
+    ....
+   (assign  int
+    &lt;var  int r>
+    (call  int
+     (addr  &lt;PTR &lt;SUBP &lt;&lt;PTR int> int > false int>>
+      &lt;subp  &lt;SUBP &lt;&lt;PTR int> int > false int> func>)
+     (list
+      (decay  &lt;PTR int>
+       &lt;var  &lt;VECT 3 0 int> aa>)
+      &lt;const  int 2>)))
+</pre>
+ Note that, as mentioned earlier, from the point of language specifications
+of C, "a", in this example, is a pointer to int, and does not secure that 
+the number of elements of the array to be 3.<br>
+]]<br>
+<br>
+[[ <br>
+  In Fortran, a real argument address is passed to the called side. The 
+address thus passed may be used as call-by-reference. As alternative 
+implementation, a copy of the formal parameter (dummy argument) may be 
+created as a local variable and write the update of the copy back to the 
+address before "return" when the value of the dummy argument is changed. <br>
+  For a scalar argument, its address is passed. For an array, a pointer 
+pointing to the array is passed. <br>
+  Since the (Fortran) language specifications prohibits the called procedure 
+to write to a storage location which is an overlap of two real arguments 
+passed from the calling procedure, the two methods of call-by-reference and 
+the use of copied local variables should give the same result. If the 
+overlapping is to be checked out, it has to be done in the front part by
+embedding checking operations, etc. <br>
+  A formal parameter which is the pointer to an array is to be undecayed to 
+an array, and "subs" is to be used for accesses to elements of the array. <br>
+For example:
+<pre>
+   PROGRAM SIMPLE
+   INTEGER AA(10), BB(3, 5), CC, DD
+     ....
+   DD = F(AA, BB, CC)
+     ....
+   END
+   FUNCTION F( A, B, C )
+   INTEGER A(10), B(3, 5)
+   INTEGER I, X
+     ....
+   X = C + A(I)
+   B(2, 3) = X
+   C = C + 1
+   RETURN X
+   END
+</pre>
+The codes above in Fortran may be transformed to codes in HIR similar to the 
+one below;
+<pre>
+  (prog             // PROGRAM SIMPLE
+   &lt;sym SIMPLE>     // program name
+   &lt;nullNode >      // initialization part
+   (subpDef void
+    &lt;subp &lt;SUBP &lt;> false int> SIMPLE_MAIN>
+            ;       // generated subprogram name
+    &lt;null void>     // initialization part
+    (labeldSt  void
+     (list
+      &lt;labelDef _lab1>)    // Label generated by subpDefinition of HIR.
+     (block          // subprogram body
+     ....
+      (assign int    // DD = F(AA, BB, CC)
+       &lt;var int DD>
+       (call int
+        (addr &lt;SUBP &lt;&lt;PTR &lt;VECT 10 1 int>>
+                     &lt;PTR &lt;VECT 5 1 &lt;VECT 3 1 int>>>
+                     &lt;PTR int>> false int>
+         &lt;subp &lt;SUBP &lt;&lt;PTR &lt;VECT 10 1 int>>
+                      &lt;PTR &lt;VECT 5 1 &lt;VECT 3 1 int>>>
+                      &lt;PTR int>> false int> F>)
+        (list     // argument list
+         (addr &lt;PTR &lt;VECT 10 1 int>>  // Change to array pointer.
+          &lt;var &lt;VECT 10 1 int> AA>)
+         (addr &lt;PTR &lt;VECT 5 1 &lt;VECT 3 1 int>>>
+          &lt;var &lt;VECT 5 1 &lt;VECT 3 1 int>> BB>)
+         (addr &lt;PTR int>  // Change to scalar pointer.
+          &lt;var int CC>))))
+     ....
+     (return void )
+    )))
+   (subpDef void
+    &lt;subp &lt;SUBP &lt;&lt;PTR &lt;VECT 10 1 int>>
+                 &lt;PTR &lt;VECT 5 1 &lt;VECT 3 1 int>>>
+                 &lt;PTR int>> false int> F>
+     &lt;null void>  // Initialization part
+     (labeldSt  void
+      (list
+       &lt;labelDef _lab1>)    // Label generated by subpDefinition of HIR.
+      (block void
+       (assign int   // Copy the contents of the scalar pointer argument C
+            ;       
+        &lt;var int _var1>    //  to _var1.
+        (contents int
+         &lt;var &lt;PTR int> C>))
+       (assign int
+        &lt;var int X>        
+        (add int
+         &lt;var int _var1>
+         (subs int
+          (contents &lt;VECT 10 1 int>      
+           &lt;var &lt;PTR &lt;VECT 10 1 int>> A>)
+          &lt;var int I>)))
+      (assign int
+       (subs int
+        (subs &lt;VECT 3 1 int>
+         (contents &lt;VECT 5 1 &lt;VECT 3 1 int>>       
+          &lt;var &lt;PTR &lt;VECT 5 1 &lt;VECT 3 1 int>>> B>)
+         &lt;const int 3>)
+        &lt;const int 2>)
+       &lt;var int X>)
+      (assign int
+       &lt;var int _var1>
+       (add int
+        &lt;var int _var1>
+        &lt;const int 1>))
+      (assign int    // Copy back _var1 
+       (contents int          // as the contents of the scalar pointer argument C.
+        &lt;var &lt;PTR int> C>)
+       &lt;var int _var1>)
+      (return int
+       &lt;var int X>)
+    )))
+  )
+</pre>
+  The first argument of subprogram call in C is always the pointer to a 
+subprogram. In Fortran, whether it is a subprogram symbol or the pointer to a 
+subprogram is implementation defined. <br>
+  When a constant is to be made an argument, it is better to create a 
+temporary variable whose value is the constant of concern, and pass the 
+address of the temporary variable, than to pass the address of the constant. 
+This prevents occurrence of bad effects from a program error which overwrites 
+a constant argument. <br>
+  The above mentioned is just one of many implementation choices, others may 
+as well be chosen, as long as they comply with the language specifications 
+in a coherent manner.<br>
+]]<br>
+
+</body>
+</html>

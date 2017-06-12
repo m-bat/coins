@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html 
+  PUBLIC "-//W3C//DTD HTML 4.0//EN">
+
+<html>
+  <head>
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title> Basic Parallelization</title>
+
+  </head>
+  <body>
+	<h1>Basic Parallelization Facilities</h1>
+
+<p>COINS provides following facilities for parallelization.</p>
+<ul>
+<li>Loop analyzer to discriminate whether a loop can be executed 
+in parallel as a do-all loop.</li>
+<li>Normalize a loop to conform to do-all type pallelization.</li>
+<li>Generate OpenMP program for a program containing normalized do-all loops.</li>
+<li>Generate machine code for a program containing normalized do-all loops.</li>
+</ul>
+
+<h3>Loop Analyzer </h3>
+
+<p>The loop analyzer investigates memory access areas for each loop to find
+the possibility of overlap of access areas between iterations of the loop
+by using the result of control flow and data flow analysis.
+The analyzer judges following loops as parallelizable.</p>
+<ul>
+<li>There is no possibility of memory area overlap between loop iterations.</li>
+<li>Memory area overlap is only caused by induction variables.</li>
+<li>The loop is a reduction loop computing summation, subtraction of summation,
+multiplication of a sequence of array elements.</li>
+<li>By shifting the region of loop index, the loop can be changed to a loop conforming to one of above cases.</li>
+</ul>
+<p>The analysis is done from inner-most loop to outer-most loop.
+ Subprograms and loops to be analyzed can be specified by pragma.</p>
+ 
+<h3>Loop Normalization </h3>
+
+<p>A loop is changed to a for-loop with loop index changing its value 0, 1, 2, ...
+in such form as</p>
+<pre>
+    for (i = 0; i < n; i = i + 1) { .... }
+</pre>
+<p>where, i is the loop index and n is the iteration count.</p>
+<p>All induction variables (integer variable that increases/decreases by a fixed 
+ number by iteration) are detected and their values are computed from
+the loop index. Corresponding to the change of induction variable 
+representation, array element expressions are changed accordingly.</p>
+
+<h3>OpenMP program generation </h3>
+
+<p>For normalized do-all loops, OpenMP directives are attached so that
+ the loop can be executed in parallel by using an OpenMP compiler.
+For loops that failed to be parallelized, the reason of failure
+will be indicated by comment. The resultant program is generated 
+as a C program with OpenMP directives and comments by using
+HIR-to-C translator of COINS.</p>
+
+<h3>Machine code generation for parallel execution </h3>
+
+<p>If machine code generation for parallel execution is specified by
+compile command, then each of do-all loops selected by pragma
+is transformed to a subprogram to be executed as a slave thread and the original
+program is cahnged to be executed as master thread without using OpenMP.
+The program can be executed in parallel by linking with run-time routine 
+that controls parallel execution.</p>
+
+<h3>Note</h3>
+
+<p>For more detail, see <a href='../COINSdoc.en/para/para-frame.html' target="_top">Parallelization for HIR</a>.</p>
+
+  </body>
+</html>

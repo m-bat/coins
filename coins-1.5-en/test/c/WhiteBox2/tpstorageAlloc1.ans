@@ -1,0 +1,6 @@
+sizeof(strcut ct_data)		8
+sizeof(ct_data[0])		8
+sizeof(ct_data[0].fca)		8
+sizeof(ct_data[0].fca[0])	4
+sizeof(ctbuf)			32
+0 1 2 3 4 5 6 7 

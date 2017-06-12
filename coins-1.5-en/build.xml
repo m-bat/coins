@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!-- ===================================================================  -->
+<!-- Copyright (C) 2007 Association for the COINS Compiler Infrastructure -->
+<!--     (Read COPYING for detailed information.)                         -->
+<!-- ===================================================================  -->
+<project name="Coins Project" default="buildall" basedir=".">
+
+  <property name="src.dir" value="${basedir}/src"/>
+  <property name="build.classes" value="${basedir}/classes"/>
+
+  <!-- =================================================================== -->
+  <!-- Compile                                                             -->
+  <!-- =================================================================== -->
+  <target name="compile"  description="compile java sources">
+    <mkdir dir="${build.classes}"/>
+    <depend srcdir="${src.dir}"
+        destdir="${build.classes}"
+        closure="yes"/>
+    <javac srcdir="${src.dir}"
+           destdir="${build.classes}"
+	   fork="yes"
+	   excludes="coins/backend/gen/CodeGenerator_*"
+	   optimize="on" deprecation="on" debug="on"
+	   memoryMaximumSize="256m">
+    </javac>
+    <javac srcdir="${src.dir}"
+           destdir="${build.classes}"
+	   fork="yes"
+	   includes="coins/backend/gen/CodeGenerator_*"
+	   optimize="on" deprecation="on" debug="on"
+	   memoryMaximumSize="256m">
+    </javac>
+  </target>
+
+  <!-- =================================================================== -->
+  <!-- Copy                                                                -->
+  <!-- =================================================================== -->
+  <target name = "copy" description = "copy resources">
+    <copy file = "suffixes" todir = "${build.classes}/coins/driver"/>
+  </target>
+
+  <!-- =================================================================== -->
+  <!-- Clean                                                               -->
+  <!-- =================================================================== -->
+  <target name="clean"  description="removes all files from build tree">
+    <delete>
+       <fileset dir="${build.classes}"/>
+    </delete>
+  </target>
+
+  <!-- =================================================================== -->
+  <!--  Build all                                                           -->                
+  <!-- =================================================================== -->
+  <target name="buildall" depends="compile, copy" description="build all">
+  </target>
+</project>

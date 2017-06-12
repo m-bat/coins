@@ -1,0 +1,2038 @@
+;; -----------------------------------------------------------------------
+;;%   Copyright (C) 2007 Association for the COINS Compiler Infrastructure 
+;;%       (Read COPYING for detailed information.)             
+;;------------------------------------------------------------------------ 
+;;; simd instructions
+
+;;; data transfer
+
+;; movdqa --> movdqu ; Temporally!
+;;   mem -> regx
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      (SET I8 (SUBREG I8 regx (INTCONST I32 @i)) memb)))
+  (code (movdqu $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i)) memw)))
+  (code (movdqu $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i)) meml)))
+  (code (movdqu $2 $1))
+  (cost 1))
+
+;;   regx -> mem
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      (SET I8 memb (SUBREG I8 regx (INTCONST I32 @i)))))
+  (code (movdqu $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 memw (SUBREG I16 regx (INTCONST I32 @i)))))
+  (code (movdqu $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 meml (SUBREG I32 regx (INTCONST I32 @i)))))
+  (code (movdqu $2 $1))
+  (cost 1))
+
+
+;; movq
+;;   mem -> regm
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I8 (SUBREG I8 regm (INTCONST I32 @i)) memb)))
+  (code (movq $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i)) memw)))
+  (code (movq $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i)) meml)))
+  (code (movq $2 $1))
+  (cost 1))
+;;   regm -> mem
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I8 memb (SUBREG I8 regm (INTCONST I32 @i)))))
+  (code (movq $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 memw (SUBREG I16 regm (INTCONST I32 @i)))))
+  (code (movq $2 $1))
+  (cost 1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 meml (SUBREG I32 regm (INTCONST I32 @i)))))
+  (code (movq $2 $1))
+  (cost 1))
+
+;; regx -> mregb(regb/memb)
+(foreach (@bn @wn) ((0 0) (2 1) (4 2) (6 3) (8 4) (10 5) (12 6) (14 7))
+(defrule void
+  (SET I8 mregb (SUBREG I8 regx (INTCONST I32 @bn)))
+  (code
+    (pextrw (imm @wn) $2 "%edx")
+    (movb "%dl" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 0)))
+(foreach (@bn @wn) ((1 0) (3 1) (5 2) (7 3) (9 4) (11 5) (13 6) (15 7))
+(defrule void
+  (SET I8 mregb (SUBREG I8 regx (INTCONST I32 @bn)))
+  (code
+    (pextrw (imm @wn) $2 "%edx")
+    (movb "%dh" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 0)))
+
+;; regx -> mregw(regw/memw)
+(foreach @n (0 1 2 3 4 5 6 7)
+(defrule void
+  (SET I16 mregw (SUBREG I16 regx (INTCONST I32 @n)))
+  (code
+    (pextrw (imm @n) $2 "%edx")
+    (movw "%dx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 0)))
+
+;; regx -> mregl(regl/meml)
+(defrule void
+  (SET I32 mregl (SUBREG I32 regx (INTCONST I32 0)))
+  (code (movd $2 $1))
+  (cost 1))
+(foreach (@n @sh) ((1 225) (2 198) (3 39))
+  (defrule void
+    (SET I32 mregl (SUBREG I32 regx (INTCONST I32 @n)))
+    (code
+      (pshufd (imm @sh) $2 $2)
+      (movd $2 $1)
+      (pshufd (imm @sh) $2 $2))
+    (cost 1)))
+
+;; regb -> regx
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+    (SET I8 (SUBREG I8 xregx (INTCONST I32 @n)) regb)))
+  (code
+    (movb $2 "%dl")
+    (movb $2 "%dh")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1)
+    (pinsrw (imm 4) "%edx" $1)
+    (pinsrw (imm 5) "%edx" $1)
+    (pinsrw (imm 6) "%edx" $1)
+    (pinsrw (imm 7) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+
+(foreach (@bn @wn) ((0 0) (2 1) (4 2) (6 3) (8 4) (10 5) (12 6) (14 7))
+(defrule void
+  (SET I8 (SUBREG I8 xregx (INTCONST I32 @bn)) regb)
+  (code
+    (pextrw (imm @wn) $1 "%edx")
+    (movb $2 "%dl")
+    (pinsrw (imm @wn) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1)))
+(foreach (@bn @wn) ((1 0) (3 1) (5 2) (7 3) (9 4) (11 5) (13 6) (15 7))
+(defrule void
+  (SET I8 (SUBREG I8 xregx (INTCONST I32 @bn)) regb)
+  (code
+    (pextrw (imm @wn) $1 "%edx")
+    (movb $2 "%dh")
+    (pinsrw (imm @wn) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1)))
+
+;; regw -> regx
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3 4 5 6 7)
+    (SET I16 (SUBREG I16 xregx (INTCONST I32 @n)) regw)))
+  (code
+    (movw $2 "%dx")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1)
+    (pinsrw (imm 4) "%edx" $1)
+    (pinsrw (imm 5) "%edx" $1)
+    (pinsrw (imm 6) "%edx" $1)
+    (pinsrw (imm 7) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+
+(foreach @n (0 1 2 3 4 5 6 7)
+  (defrule void
+    (SET I16 (SUBREG I16 xregx (INTCONST I32 @n)) regw)
+    (code
+      (movw $2 "%dx")
+      (pinsrw (imm @n) "%edx" $1))
+    (clobber (REG I32 "%edx"))
+    (cost 1)))
+
+;; regl -> regx
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3)
+    (SET I32 (SUBREG I32 xregx (INTCONST I32 @n)) regl)))
+  (code
+    (movd $2 $1)
+    (pinsrw (imm 2) $2 $1)
+    (pinsrw (imm 4) $2 $1)
+    (pinsrw (imm 6) $2 $1)
+    (rol (imm 16) $2)
+    (pinsrw (imm 3) $2 $1)
+    (pinsrw (imm 5) $2 $1)
+    (pinsrw (imm 7) $2 $1)
+    (rol (imm 16) $2))
+  (cost 1))
+
+(foreach (@n @i @j) ((0 0 1) (1 2 3) (2 4 5) (3 6 7))
+  (defrule void
+    (SET I32 (SUBREG I32 xregx (INTCONST I32 @n)) regl)
+    (code
+      (pinsrw (imm @i) $2 $1)
+      (rol (imm 16) $2)
+      (pinsrw (imm @j) $2 $1)
+      (rol (imm 16) $2))
+    (cost 1)))
+
+;; regm -> mregb(regb/memb)
+(foreach (@bn @wn) ((0 0) (2 1) (4 2) (6 3))
+(defrule void
+  (SET I8 mregb (SUBREG I8 regm (INTCONST I32 @bn)))
+  (code
+    (pextrw (imm @wn) $2 "%edx")
+    (movb "%dl" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 0)))
+(foreach (@bn @wn) ((1 0) (3 1) (5 2) (7 3))
+(defrule void
+  (SET I8 mregb (SUBREG I8 regm (INTCONST I32 @bn)))
+  (code
+    (pextrw (imm @wn) $2 "%edx")
+    (movb "%dh" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 0)))
+
+;; regm -> mregw(regw/memw)
+(foreach @n (0 1 2 3)
+(defrule void
+  (SET I16 mregw (SUBREG I16 regm (INTCONST I32 @n)))
+  (code
+    (pextrw (imm @n) $2 "%edx")
+    (movw "%dx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 0)))
+
+;; regm -> mregl(regl/meml)
+(defrule void
+  (SET I32 mregl (SUBREG I32 regm (INTCONST I32 0)))
+  (code (movd $2 $1))
+  (cost 1))
+(defrule void
+  (SET I32 mregl (SUBREG I32 regm (INTCONST I32 1)))
+  (code
+    (pshufw (imm 78) $2 $2)
+    (movd $2 $1)
+    (pshufw (imm 78) $2 $2))
+  (cost 1))
+
+;; regb -> regm
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3 4 5 6 7)
+    (SET I8 (SUBREG I8 xregm (INTCONST I32 @n)) regb)))
+  (code
+    (movb $2 "%dl")
+    (movb $2 "%dh")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+
+(foreach (@bn @wn) ((0 0) (2 1) (4 2) (6 3))
+(defrule void
+  (SET I8 (SUBREG I8 xregm (INTCONST I32 @bn)) regb)
+  (code
+    (pextrw (imm @wn) $1 "%edx")
+    (movb $2 "%dl")
+    (pinsrw (imm @wn) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1)))
+(foreach (@bn @wn) ((1 0) (3 1) (5 2) (7 3))
+(defrule void
+  (SET I8 (SUBREG I8 xregm (INTCONST I32 @bn)) regb)
+  (code
+    (pextrw (imm @wn) $1 "%edx")
+    (movb $2 "%dh")
+    (pinsrw (imm @wn) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1)))
+
+;; regw -> regm
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3)
+    (SET I16 (SUBREG I16 xregm (INTCONST I32 @n)) regw)))
+  (code
+    (movw $2 "%dx")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+
+(foreach @n (0 1 2 3)
+  (defrule void
+    (SET I16 (SUBREG I16 xregm (INTCONST I32 @n)) regw)
+    (code
+      (movw $2 "%dx")
+      (pinsrw (imm @n) "%edx" $1))
+    (clobber (REG I32 "%edx"))
+    (cost 1)))
+
+;; regl -> regm
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1)
+    (SET I32 (SUBREG I32 xregm (INTCONST I32 @n)) regl)))
+  (code
+    (movd $2 $1)
+    (pinsrw (imm 2) $2 $1)
+    (rol (imm 16) $2)
+    (pinsrw (imm 3) $2 $1)
+    (rol (imm 16) $2))
+  (cost 1))
+
+(foreach (@n @i @j) ((0 0 1) (1 2 3))
+  (defrule void
+    (SET I32 (SUBREG I32 xregm (INTCONST I32 @n)) regl)
+    (code
+      (pinsrw (imm @i) $2 $1)
+      (rol (imm 16) $2)
+      (pinsrw (imm @j) $2 $1)
+      (rol (imm 16) $2))
+    (cost 1)))
+
+;;; con -> regm
+;; 8bit
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3 4 5 6 7)
+    (SET I8 (SUBREG I8 xregm (INTCONST I32 @n)) con)))
+  (code
+    (movb (imm $2) "%dl")
+    (movb (imm $2) "%dh")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+;(foreach (@bn @wn) ((0 0) (2 1) (4 2) (6 3))
+;(defrule void
+;  (SET I8 (SUBREG I8 xregm (INTCONST I32 @bn)) con)
+;  (code
+;    (pextrw (imm @wn) $1 "%edx")
+;    (movb (imm $2) "%dl")
+;    (pinsrw (imm @wn) "%edx" $1))
+;  (clobber (REG I32 "%edx"))
+;  (cost 1)))
+;(foreach (@bn @wn) ((1 0) (3 1) (5 2) (7 3))
+;(defrule void
+;  (SET I8 (SUBREG I8 xregm (INTCONST I32 @bn)) con)
+;  (code
+;    (pextrw (imm @wn) $1 "%edx")
+;    (movb (imm $2) "%dh")
+;    (pinsrw (imm @wn) "%edx" $1))
+;  (clobber (REG I32 "%edx"))
+;  (cost 1)))
+;; 16bit
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3)
+    (SET I16 (SUBREG I16 xregm (INTCONST I32 @n)) con)))
+  (code
+    (movw (imm $2) "%dx")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+;(foreach @n (0 1 2 3)
+;  (defrule void
+;    (SET I16 (SUBREG I16 xregm (INTCONST I32 @n)) con)
+;    (code
+;      (movw (imm $2) "%dx")
+;      (pinsrw (imm @n) "%edx" $1))
+;    (clobber (REG I32 "%edx"))
+;    (cost 1)))
+;; 32bit
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1)
+    (SET I32 (SUBREG I32 xregm (INTCONST I32 @n)) con)))
+  (code
+    (movl (imm $2) "%edx")
+    (movd "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (rol (imm 16) "%edx")
+    (pinsrw (imm 3) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+;(foreach (@n @i @j) ((0 0 1) (1 2 3))
+;  (defrule void
+;    (SET I32 (SUBREG I32 xregm (INTCONST I32 @n)) con)
+;    (code
+;      (movl (imm $2) "%edx")
+;      (pinsrw (imm @i) "%edx" $1)
+;      (rol (imm 16) "%edx")
+;      (pinsrw (imm @j) "%edx" $1))
+;    (clobber (REG I32 "%edx"))
+;    (cost 1)))
+
+;;; con -> regx
+;; 8bit
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+    (SET I8 (SUBREG I8 xregx (INTCONST I32 @n)) con)))
+  (code
+    (movb (imm $2) "%dl")
+    (movb (imm $2) "%dh")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1)
+    (pinsrw (imm 4) "%edx" $1)
+    (pinsrw (imm 5) "%edx" $1)
+    (pinsrw (imm 6) "%edx" $1)
+    (pinsrw (imm 7) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+;(foreach (@bn @wn) ((0 0) (2 1) (4 2) (6 3) (8 4) (10 5) (12 6) (14 7))
+;(defrule void
+;  (SET I8 (SUBREG I8 xregx (INTCONST I32 @bn)) con)
+;  (code
+;    (pextrw (imm @wn) $1 "%edx")
+;    (movb (imm $2) "%dl")
+;    (pinsrw (imm @wn) "%edx" $1))
+;  (clobber (REG I32 "%edx"))
+;  (cost 1)))
+;(foreach (@bn @wn) ((1 0) (3 1) (5 2) (7 3) (9 4) (11 5) (13 6) (15 7))
+;(defrule void
+;  (SET I8 (SUBREG I8 xregx (INTCONST I32 @bn)) con)
+;  (code
+;    (pextrw (imm @wn) $1 "%edx")
+;    (movb (imm $2) "%dh")
+;    (pinsrw (imm @wn) "%edx" $1))
+;  (clobber (REG I32 "%edx"))
+;  (cost 1)))
+;; 16bit
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3 4 5 6 7)
+    (SET I16 (SUBREG I16 xregx (INTCONST I32 @n)) con)))
+  (code
+    (movw (imm $2) "%dx")
+    (pinsrw (imm 0) "%edx" $1)
+    (pinsrw (imm 1) "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 3) "%edx" $1)
+    (pinsrw (imm 4) "%edx" $1)
+    (pinsrw (imm 5) "%edx" $1)
+    (pinsrw (imm 6) "%edx" $1)
+    (pinsrw (imm 7) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+;(foreach @n (0 1 2 3 4 5 6 7)
+;  (defrule void
+;    (SET I16 (SUBREG I16 xregx (INTCONST I32 @n)) con)
+;    (code
+;      (movw (imm $2) "%dx")
+;      (pinsrw (imm @n) "%edx" $1))
+;    (clobber (REG I32 "%edx"))
+;    (cost 1)))
+;; 32bit
+(defrule void
+  (PARALLEL
+  (foreach @n (0 1 2 3)
+    (SET I32 (SUBREG I32 xregx (INTCONST I32 @n)) con)))
+  (code
+    (movl (imm $2) "%edx")
+    (movd "%edx" $1)
+    (pinsrw (imm 2) "%edx" $1)
+    (pinsrw (imm 4) "%edx" $1)
+    (pinsrw (imm 6) "%edx" $1)
+    (rol (imm 16) "%edx")
+    (pinsrw (imm 3) "%edx" $1)
+    (pinsrw (imm 5) "%edx" $1)
+    (pinsrw (imm 7) "%edx" $1))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+;(foreach (@n @i @j) ((0 0 1) (1 2 3) (2 4 5) (3 6 7))
+;  (defrule void
+;    (SET I32 (SUBREG I32 xregx (INTCONST I32 @n)) con)
+;    (code
+;      (movl (imm $2) "%edx")
+;      (pinsrw (imm @i) "%edx" $1)
+;      (rol (imm 16) "%edx")
+;      (pinsrw (imm @j) "%edx" $1))
+;    (clobber (REG I32 "%edx"))
+;    (cost 1)))
+
+;;; psadbw  Packed Sum of Absolute Differences
+; PSADBW mm1,mm2/m64
+(defrule void
+  (SET I8
+    (SUBREG I8 regm (INTCONST I32 0))
+    (ADD I8
+      (ADD I8
+        (ADD I8
+          (ADD I8
+            (ADD I8
+              (ADD I8
+                (ADD I8
+                  (BOR I8
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regm (INTCONST I32 0)) (SUBREG I8 regm (INTCONST I32 0)))
+                      (TSTLES I8 (SUBREG I8 regm (INTCONST I32 0)) (SUBREG I8 regm (INTCONST I32 0))))
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regm (INTCONST I32 0)) (SUBREG I8 regm (INTCONST I32 0)))
+                      (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 0)) (SUBREG I8 regm (INTCONST I32 0))))))
+                  (BOR I8
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regm (INTCONST I32 1)) (SUBREG I8 regm (INTCONST I32 1)))
+                      (TSTLES I8 (SUBREG I8 regm (INTCONST I32 1)) (SUBREG I8 regm (INTCONST I32 1))))
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regm (INTCONST I32 1)) (SUBREG I8 regm (INTCONST I32 1)))
+                      (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 1)) (SUBREG I8 regm (INTCONST I32 1)))))))
+                (BOR I8
+                  (BAND I8
+                    (SUB I8 (SUBREG I8 regm (INTCONST I32 2)) (SUBREG I8 regm (INTCONST I32 2)))
+                    (TSTLES I8 (SUBREG I8 regm (INTCONST I32 2)) (SUBREG I8 regm (INTCONST I32 2))))
+                  (BAND I8
+                    (SUB I8 (SUBREG I8 regm (INTCONST I32 2)) (SUBREG I8 regm (INTCONST I32 2)))
+                    (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 2)) (SUBREG I8 regm (INTCONST I32 2)))))))
+              (BOR I8
+                (BAND I8
+                  (SUB I8 (SUBREG I8 regm (INTCONST I32 3)) (SUBREG I8 regm (INTCONST I32 3)))
+                  (TSTLES I8 (SUBREG I8 regm (INTCONST I32 3)) (SUBREG I8 regm (INTCONST I32 3))))
+                (BAND I8
+                  (SUB I8 (SUBREG I8 regm (INTCONST I32 3)) (SUBREG I8 regm (INTCONST I32 3)))
+                  (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 3)) (SUBREG I8 regm (INTCONST I32 3)))))))
+            (BOR I8
+              (BAND I8
+                (SUB I8 (SUBREG I8 regm (INTCONST I32 4)) (SUBREG I8 regm (INTCONST I32 4)))
+                (TSTLES I8 (SUBREG I8 regm (INTCONST I32 4)) (SUBREG I8 regm (INTCONST I32 4))))
+              (BAND I8
+                (SUB I8 (SUBREG I8 regm (INTCONST I32 4)) (SUBREG I8 regm (INTCONST I32 4)))
+                (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 4)) (SUBREG I8 regm (INTCONST I32 4)))))))
+          (BOR I8
+            (BAND I8
+              (SUB I8 (SUBREG I8 regm (INTCONST I32 5)) (SUBREG I8 regm (INTCONST I32 5)))
+              (TSTLES I8 (SUBREG I8 regm (INTCONST I32 5)) (SUBREG I8 regm (INTCONST I32 5))))
+            (BAND I8
+              (SUB I8 (SUBREG I8 regm (INTCONST I32 5)) (SUBREG I8 regm (INTCONST I32 5)))
+              (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 5)) (SUBREG I8 regm (INTCONST I32 5)))))))
+        (BOR I8
+          (BAND I8
+            (SUB I8 (SUBREG I8 regm (INTCONST I32 6)) (SUBREG I8 regm (INTCONST I32 6)))
+            (TSTLES I8 (SUBREG I8 regm (INTCONST I32 6)) (SUBREG I8 regm (INTCONST I32 6))))
+          (BAND I8
+            (SUB I8 (SUBREG I8 regm (INTCONST I32 6)) (SUBREG I8 regm (INTCONST I32 6)))
+            (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 6)) (SUBREG I8 regm (INTCONST I32 6)))))))
+      (BOR I8
+        (BAND I8
+          (SUB I8 (SUBREG I8 regm (INTCONST I32 7)) (SUBREG I8 regm (INTCONST I32 7)))
+          (TSTLES I8 (SUBREG I8 regm (INTCONST I32 7)) (SUBREG I8 regm (INTCONST I32 7))))
+        (BAND I8
+          (SUB I8 (SUBREG I8 regm (INTCONST I32 7)) (SUBREG I8 regm (INTCONST I32 7)))
+          (BNOT I8 (TSTLES I8 (SUBREG I8 regm (INTCONST I32 7)) (SUBREG I8 regm (INTCONST I32 7))))))))
+  (code
+    (psadbw $3 $2)
+    (movd $2 "%eax"))
+  (cost 1))
+
+; PSADBW xmm1,xmm2/m128
+(defrule void
+  (PARALLEL
+  (SET I8
+    (SUBREG I8 regx (INTCONST I32 0))
+    (ADD I8
+      (ADD I8
+        (ADD I8
+          (ADD I8
+            (ADD I8
+              (ADD I8
+                (ADD I8
+                  (BOR I8
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 0)) (SUBREG I8 regx (INTCONST I32 0)))
+                      (TSTLES I8 (SUBREG I8 regx (INTCONST I32 0)) (SUBREG I8 regx (INTCONST I32 0))))
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 0)) (SUBREG I8 regx (INTCONST I32 0)))
+                      (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 0)) (SUBREG I8 regx (INTCONST I32 0))))))
+                  (BOR I8
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 1)) (SUBREG I8 regx (INTCONST I32 1)))
+                      (TSTLES I8 (SUBREG I8 regx (INTCONST I32 1)) (SUBREG I8 regx (INTCONST I32 1))))
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 1)) (SUBREG I8 regx (INTCONST I32 1)))
+                      (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 1)) (SUBREG I8 regx (INTCONST I32 1)))))))
+                (BOR I8
+                  (BAND I8
+                    (SUB I8 (SUBREG I8 regx (INTCONST I32 2)) (SUBREG I8 regx (INTCONST I32 2)))
+                    (TSTLES I8 (SUBREG I8 regx (INTCONST I32 2)) (SUBREG I8 regx (INTCONST I32 2))))
+                  (BAND I8
+                    (SUB I8 (SUBREG I8 regx (INTCONST I32 2)) (SUBREG I8 regx (INTCONST I32 2)))
+                    (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 2)) (SUBREG I8 regx (INTCONST I32 2)))))))
+              (BOR I8
+                (BAND I8
+                  (SUB I8 (SUBREG I8 regx (INTCONST I32 3)) (SUBREG I8 regx (INTCONST I32 3)))
+                  (TSTLES I8 (SUBREG I8 regx (INTCONST I32 3)) (SUBREG I8 regx (INTCONST I32 3))))
+                (BAND I8
+                  (SUB I8 (SUBREG I8 regx (INTCONST I32 3)) (SUBREG I8 regx (INTCONST I32 3)))
+                  (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 3)) (SUBREG I8 regx (INTCONST I32 3)))))))
+            (BOR I8
+              (BAND I8
+                (SUB I8 (SUBREG I8 regx (INTCONST I32 4)) (SUBREG I8 regx (INTCONST I32 4)))
+                (TSTLES I8 (SUBREG I8 regx (INTCONST I32 4)) (SUBREG I8 regx (INTCONST I32 4))))
+              (BAND I8
+                (SUB I8 (SUBREG I8 regx (INTCONST I32 4)) (SUBREG I8 regx (INTCONST I32 4)))
+                (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 4)) (SUBREG I8 regx (INTCONST I32 4)))))))
+          (BOR I8
+            (BAND I8
+              (SUB I8 (SUBREG I8 regx (INTCONST I32 5)) (SUBREG I8 regx (INTCONST I32 5)))
+              (TSTLES I8 (SUBREG I8 regx (INTCONST I32 5)) (SUBREG I8 regx (INTCONST I32 5))))
+            (BAND I8
+              (SUB I8 (SUBREG I8 regx (INTCONST I32 5)) (SUBREG I8 regx (INTCONST I32 5)))
+              (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 5)) (SUBREG I8 regx (INTCONST I32 5)))))))
+        (BOR I8
+          (BAND I8
+            (SUB I8 (SUBREG I8 regx (INTCONST I32 6)) (SUBREG I8 regx (INTCONST I32 6)))
+            (TSTLES I8 (SUBREG I8 regx (INTCONST I32 6)) (SUBREG I8 regx (INTCONST I32 6))))
+          (BAND I8
+            (SUB I8 (SUBREG I8 regx (INTCONST I32 6)) (SUBREG I8 regx (INTCONST I32 6)))
+            (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 6)) (SUBREG I8 regx (INTCONST I32 6)))))))
+      (BOR I8
+        (BAND I8
+          (SUB I8 (SUBREG I8 regx (INTCONST I32 7)) (SUBREG I8 regx (INTCONST I32 7)))
+          (TSTLES I8 (SUBREG I8 regx (INTCONST I32 7)) (SUBREG I8 regx (INTCONST I32 7))))
+        (BAND I8
+          (SUB I8 (SUBREG I8 regx (INTCONST I32 7)) (SUBREG I8 regx (INTCONST I32 7)))
+          (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 7)) (SUBREG I8 regx (INTCONST I32 7))))))))
+  (SET I8
+    (SUBREG I8 regx (INTCONST I32 8))
+    (ADD I8
+      (ADD I8
+        (ADD I8
+          (ADD I8
+            (ADD I8
+              (ADD I8
+                (ADD I8
+                  (BOR I8
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 8)) (SUBREG I8 regx (INTCONST I32 8)))
+                      (TSTLES I8 (SUBREG I8 regx (INTCONST I32 8)) (SUBREG I8 regx (INTCONST I32 8))))
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 8)) (SUBREG I8 regx (INTCONST I32 8)))
+                      (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 8)) (SUBREG I8 regx (INTCONST I32 8))))))
+                  (BOR I8
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 9)) (SUBREG I8 regx (INTCONST I32 9)))
+                      (TSTLES I8 (SUBREG I8 regx (INTCONST I32 9)) (SUBREG I8 regx (INTCONST I32 9))))
+                    (BAND I8
+                      (SUB I8 (SUBREG I8 regx (INTCONST I32 9)) (SUBREG I8 regx (INTCONST I32 9)))
+                      (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 9)) (SUBREG I8 regx (INTCONST I32 9)))))))
+                (BOR I8
+                  (BAND I8
+                    (SUB I8 (SUBREG I8 regx (INTCONST I32 10)) (SUBREG I8 regx (INTCONST I32 10)))
+                    (TSTLES I8 (SUBREG I8 regx (INTCONST I32 10)) (SUBREG I8 regx (INTCONST I32 10))))
+                  (BAND I8
+                    (SUB I8 (SUBREG I8 regx (INTCONST I32 10)) (SUBREG I8 regx (INTCONST I32 10)))
+                    (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 10)) (SUBREG I8 regx (INTCONST I32 10)))))))
+              (BOR I8
+                (BAND I8
+                  (SUB I8 (SUBREG I8 regx (INTCONST I32 11)) (SUBREG I8 regx (INTCONST I32 11)))
+                  (TSTLES I8 (SUBREG I8 regx (INTCONST I32 11)) (SUBREG I8 regx (INTCONST I32 11))))
+                (BAND I8
+                  (SUB I8 (SUBREG I8 regx (INTCONST I32 11)) (SUBREG I8 regx (INTCONST I32 11)))
+                  (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 11)) (SUBREG I8 regx (INTCONST I32 11)))))))
+            (BOR I8
+              (BAND I8
+                (SUB I8 (SUBREG I8 regx (INTCONST I32 12)) (SUBREG I8 regx (INTCONST I32 12)))
+                (TSTLES I8 (SUBREG I8 regx (INTCONST I32 12)) (SUBREG I8 regx (INTCONST I32 12))))
+              (BAND I8
+                (SUB I8 (SUBREG I8 regx (INTCONST I32 12)) (SUBREG I8 regx (INTCONST I32 12)))
+                (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 12)) (SUBREG I8 regx (INTCONST I32 12)))))))
+          (BOR I8
+            (BAND I8
+              (SUB I8 (SUBREG I8 regx (INTCONST I32 13)) (SUBREG I8 regx (INTCONST I32 13)))
+              (TSTLES I8 (SUBREG I8 regx (INTCONST I32 13)) (SUBREG I8 regx (INTCONST I32 13))))
+            (BAND I8
+              (SUB I8 (SUBREG I8 regx (INTCONST I32 13)) (SUBREG I8 regx (INTCONST I32 13)))
+              (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 13)) (SUBREG I8 regx (INTCONST I32 13)))))))
+        (BOR I8
+          (BAND I8
+            (SUB I8 (SUBREG I8 regx (INTCONST I32 14)) (SUBREG I8 regx (INTCONST I32 14)))
+            (TSTLES I8 (SUBREG I8 regx (INTCONST I32 14)) (SUBREG I8 regx (INTCONST I32 14))))
+          (BAND I8
+            (SUB I8 (SUBREG I8 regx (INTCONST I32 14)) (SUBREG I8 regx (INTCONST I32 14)))
+            (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 14)) (SUBREG I8 regx (INTCONST I32 14)))))))
+      (BOR I8
+        (BAND I8
+          (SUB I8 (SUBREG I8 regx (INTCONST I32 15)) (SUBREG I8 regx (INTCONST I32 15)))
+          (TSTLES I8 (SUBREG I8 regx (INTCONST I32 15)) (SUBREG I8 regx (INTCONST I32 15))))
+        (BAND I8
+          (SUB I8 (SUBREG I8 regx (INTCONST I32 15)) (SUBREG I8 regx (INTCONST I32 15)))
+          (BNOT I8 (TSTLES I8 (SUBREG I8 regx (INTCONST I32 15)) (SUBREG I8 regx (INTCONST I32 15)))))))))
+ (code
+    (psadbw $3 $2)
+    (movd $2 "%eax")
+    (pextrw (imm 4) $2 "%edx")
+    (addl "%edx" "%eax"))
+  (clobber (REG I32 "%edx"))
+  (cost 1))
+
+
+
+;pavgb/pavgw  Packed Average
+;PAVGB mm1,mm2/m64
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+        (RSHS I8 
+            (ADD I8 (ADD I8 (SUBREG I8 regm (INTCONST I32 @i))
+                            (SUBREG I8 regm (INTCONST I32 @i)))
+                    (INTCONST I8 1))
+            (INTCONST I8 1)))))
+ (code (pavgb $3 $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+        (ADD I8 (ADD I8 
+                    (RSHS I8 (SUBREG I8 regm (INTCONST I32 @i)) (INTCONST I8 1))
+                    (RSHS I8 (SUBREG I8 regm (INTCONST I32 @i)) (INTCONST I8 1)))
+                (BAND I8 (BOR I8 (SUBREG I8 regm (INTCONST I32 @i))
+                                 (SUBREG I8 regm (INTCONST I32 @i)))
+                         (INTCONST I8 1))))))
+ (code (pavgb $3 $2))
+  (cost 3))
+;PAVGB xmm1,xmm2/m128
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+        (RSHS I8 
+            (ADD I8 (ADD I8 (SUBREG I8 regx (INTCONST I32 @i))
+                            (SUBREG I8 regx (INTCONST I32 @i)))
+                    (INTCONST I8 1))
+            (INTCONST I8 1)))))
+ (code (pavgb $3 $2))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+        (ADD I8 (ADD I8 
+                    (RSHS I8 (SUBREG I8 regx (INTCONST I32 @i)) (INTCONST I8 1))
+                    (RSHS I8 (SUBREG I8 regx (INTCONST I32 @i)) (INTCONST I8 1)))
+                (BAND I8 (BOR I8 (SUBREG I8 regx (INTCONST I32 @i))
+                                 (SUBREG I8 regx (INTCONST I32 @i)))
+                         (INTCONST I8 1))))))
+ (code (pavgb $3 $2))
+  (cost 4))
+
+;PAVGW mm1,mm2/m64
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+        (RSHS I16 
+            (ADD I16 (ADD I16 (SUBREG I16 regm (INTCONST I32 @i))
+                              (SUBREG I16 regm (INTCONST I32 @i)))
+                     (INTCONST I16 1))
+            (INTCONST I16 1)))))
+  (code (pavgw $3 $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+        (ADD I16 (ADD I16 
+                    (RSHS I16 (SUBREG I16 regm (INTCONST I32 @i)) (INTCONST I16 1))
+                    (RSHS I16 (SUBREG I16 regm (INTCONST I32 @i)) (INTCONST I16 1)))
+                (BAND I16 (BOR I16 (SUBREG I16 regm (INTCONST I32 @i))
+                                   (SUBREG I16 regm (INTCONST I32 @i)))
+                         (INTCONST I16 1))))))
+ (code (pavgw $3 $2))
+  (cost 3))
+;PAVGW xmm1,xmm2/m128
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+        (RSHS I16 
+            (ADD I16 (ADD I16 (SUBREG I16 regx (INTCONST I32 @i))
+                              (SUBREG I16 regx (INTCONST I32 @i)))
+                     (INTCONST I16 1))
+            (INTCONST I16 1)))))
+  (code (pavgw $3 $2))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+        (ADD I16 (ADD I16 
+                    (RSHS I16 (SUBREG I16 regx (INTCONST I32 @i)) (INTCONST I16 1))
+                    (RSHS I16 (SUBREG I16 regx (INTCONST I32 @i)) (INTCONST I16 1)))
+                (BAND I16 (BOR I16 (SUBREG I16 regx (INTCONST I32 @i))
+                                   (SUBREG I16 regx (INTCONST I32 @i)))
+                         (INTCONST I16 1))))))
+ (code (pavgw $3 $2))
+  (cost 4))
+
+;pmaxub  Packed Unsigned Integer Byte Maximum
+;pminub  Packed Unsigned Integer Byte Minimum
+;PMAXUB mm1,mm2/m64
+;PMINUB mm1,mm2/m64
+(foreach (@cc @fn) ((GEU max) (LTU min))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+    (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+        (BOR I8 (BAND I8 (SUBREG I8 regm (INTCONST I32 @i))
+                (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i))))
+                (BAND I8 (SUBREG I8 regm (INTCONST I32 @i)) 
+                (BNOT I8 (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i)))))))))
+  (code (p@fnub $4 $3))
+  (cost 3)))
+;PMAXUB xmm1,xmm2/m128
+;PMINUB xmm1,xmm2/m128
+(foreach (@cc @fn) ((GEU max) (LTU min))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+    (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+        (BOR I8 (BAND I8 (SUBREG I8 regx (INTCONST I32 @i))
+                (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i))))
+                (BAND I8 (SUBREG I8 regx (INTCONST I32 @i)) 
+                (BNOT I8 (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i)))))))))
+  (code (p@fnub $4 $3))
+  (cost 4)))
+
+;pmaxsw Packed Signed Integer Word Maximum
+;pminsw Packed Signed Integer Word Minimum
+;PMAXSW mm1,mm2/m64
+;PMINSW mm1,mm2/m64
+(foreach (@cc @fn) ((GES max) (LTS min))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+        (BOR I16 (BAND I16 (SUBREG I16 regm (INTCONST I32 @i))
+                 (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i))))
+                 (BAND I16 (SUBREG I16 regm (INTCONST I32 @i)) 
+                 (BNOT I16 (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i)))))))))
+  (code (p@fnsw $4 $3))
+  (cost 3)))
+;PMAXSW xmm1,xmm2/m128
+;PMINSW xmm1,xmm2/m128
+(foreach (@cc @fn) ((GES max) (LTS min))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+        (BOR I16 (BAND I16 (SUBREG I16 regx (INTCONST I32 @i))
+                 (TST@cc I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i))))
+                 (BAND I16 (SUBREG I16 regx (INTCONST I32 @i)) 
+                 (BNOT I16 (TST@cc I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i)))))))))
+  (code (p@fnsw $4 $3))
+  (cost 4)))
+
+;pcmpeqb/pcmpeqw/pcmpeqd  Packed Compare for Equal
+;pcmpgtb/pcmpgtw/pcmpgtd  Packed Compare for Greater Than
+;PCMPEQB mm1,mm2/m64
+;PCMPGTB mm1,mm2/m64
+(foreach (@cc @fn) ((EQ eq) (GTS gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnb $4 $3))
+  (cost 3)))
+;;    (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+;;            (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i))))))
+(foreach (@cc @fn) ((EQ eq) (GTS gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                 (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i))))
+                 (BAND I16 con
+                 (BNOT I16 (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnw $4 $3))
+  (cost 3)))
+;;    (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+;;            (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i))))))
+(foreach (@cc @fn) ((EQ eq) (GTS gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1)
+   (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TST@cc I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TST@cc I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnd $4 $3))
+  (cost 3)))
+;;    (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+;;            (TST@cc I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i))))))
+;PCMPEQB xmm1,xmm2/m128
+;PCMPGTB xmm1,xmm2/m128
+(foreach (@cc @fn) ((EQ eq) (GTS gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+   (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnb $4 $3))
+  (cost 4)))
+;;    (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+;;            (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i))))))
+(foreach (@cc @fn) ((EQ eq) (GTS gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                 (TST@cc I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i))))
+                 (BAND I16 con
+                 (BNOT I16 (TST@cc I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnw $4 $3))
+  (cost 4)))
+(foreach (@cc @fn) ((EQ eq) (GTS gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TST@cc I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TST@cc I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnd $4 $3))
+  (cost 4)))
+
+;Packed Compare for not Equal
+;Packed Compare for Less Than Equal
+; mm1,mm2/m64
+(foreach (@cc @fn) ((NE eq) (LES gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnb $4 $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $3))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 3)))
+;;    (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+;;            (TST@cc I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i))))))
+(foreach (@cc @fn) ((NE eq) (LES gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                 (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i))))
+                 (BAND I16 con
+                 (BNOT I16 (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnw $4 $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $3))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 3)))
+;;    (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+;;            (TST@cc I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i))))))
+(foreach (@cc @fn) ((NE eq) (LES gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1)
+   (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TST@cc I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TST@cc I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnd $4 $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $3))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 3)))
+;;    (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+;;            (TST@cc I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i))))))
+;xmm1,xmm2/m128
+(foreach (@cc @fn) ((NE eq) (LES gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+   (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnb $4 $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $3))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 4)))
+;;    (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+;;            (TST@cc I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i))))))
+(foreach (@cc @fn) ((NE eq) (LES gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                (TST@cc I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i))))
+                (BAND I16 con
+                (BNOT I16 (TST@cc I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnw $4 $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $3))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 4)))
+;;    (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+;;            (TST@cc I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i))))))
+(foreach (@cc @fn) ((NE eq) (LES gt))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TST@cc I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TST@cc I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (pcmp@fnd $4 $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $3))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 4)))
+;;    (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+;;            (TST@cc I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i))))))
+
+;Packed Compare for Greater than equal
+; mm1,mm2/m64
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TSTGES I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TSTGES I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movq $3 "%MM7")
+        (pcmpgtb $4 $3)
+        (pcmpeqb $4 "%MM7")
+        (por "%MM7" $3))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                 (TSTGES I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i))))
+                 (BAND I16 con
+                 (BNOT I16 (TSTGES I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movq $3 "%MM7")
+        (pcmpgtw $4 $3)
+        (pcmpeqw $4 "%MM7")
+        (por "%MM7" $3))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1)
+   (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TSTGES I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TSTGES I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (movq $3 "%MM7")
+        (pcmpgtd $4 $3)
+        (pcmpeqd $4 "%MM7")
+        (por "%MM7" $3))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+;xmm1,xmm2/m128
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+   (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TSTGES I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TSTGES I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movdqu $3 "%XMM7")
+        (pcmpgtb $4 $3)
+        (pcmpeqb $4 "%XMM7")
+        (por "%XMM7" $3))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                (TSTGES I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i))))
+                (BAND I16 con
+                (BNOT I16 (TSTGES I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movdqu $3 "%XMM7")
+        (pcmpgtw $4 $3)
+        (pcmpeqw $4 "%XMM7")
+        (por "%XMM7" $3))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TSTGES I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TSTGES I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (movdqu $3 "%XMM7")
+        (pcmpgtd $4 $3)
+        (pcmpeqd $4 "%XMM7")
+        (por "%XMM7" $3))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+
+
+;Packed Compare for Less
+; mm1,mm2/m64
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TSTLTS I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TSTLTS I8 (SUBREG I8 regm (INTCONST I32 @i)) (SUBREG I8 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movq $3 "%MM7")
+        (pcmpgtb $4 $3)
+        (pcmpeqb $4 "%MM7")
+        (por "%MM7" $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $3))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                 (TSTLTS I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i))))
+                 (BAND I16 con
+                 (BNOT I16 (TSTLTS I16 (SUBREG I16 regm (INTCONST I32 @i)) (SUBREG I16 regm (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movq $3 "%MM7")
+        (pcmpgtw $4 $3)
+        (pcmpeqw $4 "%MM7")
+        (por "%MM7" $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $3))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1)
+   (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TSTLTS I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TSTLTS I32 (SUBREG I32 regm (INTCONST I32 @i)) (SUBREG I32 regm (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (movq $3 "%MM7")
+        (pcmpgtd $4 $3)
+        (pcmpeqd $4 "%MM7")
+        (por "%MM7" $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $3))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 3))
+;xmm1,xmm2/m128
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+   (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+        (BOR I8 (BAND I8 con
+                 (TSTLTS I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i))))
+                 (BAND I8 con
+                 (BNOT I8 (TSTLTS I8 (SUBREG I8 regx (INTCONST I32 @i)) (SUBREG I8 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 255 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movdqu $3 "%XMM7")
+        (pcmpgtb $4 $3)
+        (pcmpeqb $4 "%XMM7")
+        (por "%XMM7" $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $3))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 4))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3 4 5 6 7)
+   (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+        (BOR I16 (BAND I16 con
+                (TSTLTS I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i))))
+                (BAND I16 con
+                (BNOT I16 (TSTLTS I16 (SUBREG I16 regx (INTCONST I32 @i)) (SUBREG I16 regx (INTCONST I32 @i)))))))))
+  (cond "(((LirIconst)$2).signedValue() == 65535 || ((LirIconst)$2).signedValue() == -1) && ((LirIconst)$5).signedValue() == 0")
+  (code (movdqu $3 "%XMM7")
+        (pcmpgtw $4 $3)
+        (pcmpeqw $4 "%XMM7")
+        (por "%XMM7" $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $3))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 4))
+(defrule void
+  (PARALLEL
+   (foreach @i (0 1 2 3)
+   (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+        (BOR I32 (BAND I32 con
+                 (TSTLTS I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i))))
+                 (BAND I32 con
+                 (BNOT I32 (TSTLTS I32 (SUBREG I32 regx (INTCONST I32 @i)) (SUBREG I32 regx (INTCONST I32 @i)))))))))
+  (cond "((LirIconst)$2).signedValue() == -1 && ((LirIconst)$5).signedValue() == 0")
+  (code (movdqu $3 "%XMM7")
+        (pcmpgtd $4 $3)
+        (pcmpeqd $4 "%XMM7")
+        (por "%XMM7" $3)
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $3))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 4))
+
+;;; psraw/psrad  Packed Shift Right Arithmetic
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i)) (RSHS I16 (SUBREG I16 regm (INTCONST I32 @i)) regw))))
+  (regset ($3 *reg-cx-I16*))
+  (code 
+    (movd "%ecx" "%MM7")
+    (psraw "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i)) (RSHS I16 (SUBREG I16 regx (INTCONST I32 @i)) regw))))
+  (regset ($3 *reg-cx-I16*))
+  (code 
+    (movd "%ecx" "%XMM7")
+    (psraw "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i)) (RSHS I32 (SUBREG I32 regm (INTCONST I32 @i)) regl))))
+  (regset ($3 *reg-ecx-I32*))
+  (code 
+    (movd "%ecx" "%MM7")
+    (psrad "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i)) (RSHS I32 (SUBREG I32 regx (INTCONST I32 @i)) regl))))
+  (regset ($3 *reg-ecx-I32*))
+  (code 
+    (movd "%ecx" "%XMM7")
+    (psrad "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i)) (RSHS I16 (SUBREG I16 regm (INTCONST I32 @i)) con))))
+  (code (psraw (imm $3) $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i)) (RSHS I16 (SUBREG I16 regx (INTCONST I32 @i)) con))))
+  (code (psraw (imm $3) $2))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i)) (RSHS I32 (SUBREG I32 regm (INTCONST I32 @i)) con))))
+  (code (psrad (imm $3) $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i)) (RSHS I32 (SUBREG I32 regx (INTCONST I32 @i)) con))))
+  (code (psrad (imm $3) $2))
+  (cost 4))
+
+;;; psrlw/psrld  Packed Shift Right Logical
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i)) (RSHU I16 (SUBREG I16 regm (INTCONST I32 @i)) regw))))
+  (regset ($3 *reg-cx-I16*))
+  (code 
+    (movd "%ecx" "%MM7")
+    (psrlw "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i)) (RSHU I16 (SUBREG I16 regx (INTCONST I32 @i)) regw))))
+  (regset ($3 *reg-cx-I16*))
+  (code 
+    (movd "%ecx" "%XMM7")
+    (psrlw "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i)) (RSHU I32 (SUBREG I32 regm (INTCONST I32 @i)) regl))))
+  (regset ($3 *reg-ecx-I32*))
+  (code 
+    (movd "%ecx" "%MM7")
+    (psrld "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i)) (RSHU I32 (SUBREG I32 regx (INTCONST I32 @i)) regl))))
+  (regset ($3 *reg-ecx-I32*))
+  (code 
+    (movd "%ecx" "%XMM7")
+    (psrld "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i)) (RSHU I16 (SUBREG I16 regm (INTCONST I32 @i)) con))))
+  (code (psrlw (imm $3) $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i)) (RSHU I16 (SUBREG I16 regx (INTCONST I32 @i)) con))))
+  (code (psrlw (imm $3) $2))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i)) (RSHU I32 (SUBREG I32 regm (INTCONST I32 @i)) con))))
+  (code (psrld (imm $3) $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i)) (RSHU I32 (SUBREG I32 regx (INTCONST I32 @i)) con))))
+  (code (psrld (imm $3) $2))
+  (cost 4))
+
+;;; psllw/pslld  Packed Shift Left Logical
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i)) (LSHS I16 (SUBREG I16 regm (INTCONST I32 @i)) regw))))
+  (regset ($3 *reg-cx-I16*))
+  (code 
+    (movd "%ecx" "%MM7")
+    (psllw "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i)) (LSHS I16 (SUBREG I16 regx (INTCONST I32 @i)) regw))))
+  (regset ($3 *reg-cx-I16*))
+  (code 
+    (movd "%ecx" "%XMM7")
+    (psllw "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i)) (LSHS I32 (SUBREG I32 regm (INTCONST I32 @i)) regl))))
+  (regset ($3 *reg-ecx-I32*))
+  (code 
+    (movd "%ecx" "%MM7")
+    (pslld "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i)) (LSHS I32 (SUBREG I32 regx (INTCONST I32 @i)) regl))))
+  (regset ($3 *reg-ecx-I32*))
+  (code 
+    (movd "%ecx" "%XMM7")
+    (pslld "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 4))
+
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i)) (LSHS I16 (SUBREG I16 regm (INTCONST I32 @i)) con))))
+  (code (psllw (imm $3) $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i)) (LSHS I16 (SUBREG I16 regx (INTCONST I32 @i)) con))))
+  (code (psllw (imm $3) $2))
+  (cost 4))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i)) (LSHS I32 (SUBREG I32 regm (INTCONST I32 @i)) con))))
+  (code (pslld (imm $3) $2))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i)) (LSHS I32 (SUBREG I32 regx (INTCONST I32 @i)) con))))
+  (code (pslld (imm $3) $2))
+  (cost 4))
+
+;;;  Arithmetic/Logical operations
+
+;Logical AND NOT
+;PANDN mmx, mmx ("pandn ?1m, ?2m" "pandn %?2m,%?1m")
+;PANDN mmx, m64  ("pandn ?1m, QWORD PTR ??2s" "pandn ??2s,%?1m")
+;8bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 5 6 7)
+      (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+	       (BAND I8 (BNOT I8 (SUBREG I8 regm (INTCONST I32 @i)))
+			 (SUBREG I8 regm (INTCONST I32 @i))))))
+  (code (pandn $3 $2))
+  (cost 3))
+;16bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+	       (BAND I16 (BNOT I16 (SUBREG I16 regm (INTCONST I32 @i)))
+			 (SUBREG I16 regm (INTCONST I32 @i))))))
+  (code (pandn $3 $2))
+  (cost 3))
+;32bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+	       (BAND I32 (BNOT I32 (SUBREG I32 regm (INTCONST I32 @i)))
+			 (SUBREG I32 regm (INTCONST I32 @i))))))
+  (code (pandn $3 $2))
+  (cost 3))
+
+;PANDN xmm, xmm  ("pandn ?1x, ?2x" "nil")
+;PANDN xmm, m128 ("pandn ?1x, QWORD PTR ??2s" "nil")
+;8bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+	       (BAND I8 (BNOT I8 (SUBREG I8 regx (INTCONST I32 @i)))
+			 (SUBREG I8 regx (INTCONST I32 @i))))))
+  (code (pandn $3 $2))
+  (cost 4))
+;16bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+	       (BAND I16 (BNOT I16 (SUBREG I16 regx (INTCONST I32 @i)))
+			 (SUBREG I16 regx (INTCONST I32 @i))))))
+  (code (pandn $3 $2))
+  (cost 4))
+;32bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+	       (BAND I32 (BNOT I32 (SUBREG I32 regx (INTCONST I32 @i)))
+			 (SUBREG I32 regx (INTCONST I32 @i))))))
+  (code (pandn $3 $2))
+  (cost 4))
+
+;Add Packed Byte/Word/Doubleword Integers
+;Subtract Packed Byte/Word/Doubleword Integers
+;Logical AND/OR/XOR
+
+;@code mmx, mmx ("@code ?1m, ?2m" "@code %?2m,%?1m")
+;@code mmx, m64  ("@code ?1m, QWORD PTR ??2s" "@code ??2s,%?1m")
+;8bit
+(foreach (@cd @op) ((paddb ADD) (psubb SUB) (pand BAND) (por BOR) (pxor BXOR))
+  (defrule void
+    (PARALLEL
+      (foreach @i (0 1 2 3 4 5 6 7)
+        (SET I8
+          (SUBREG I8 regm (INTCONST I32 @i))
+          (@op I8
+            (SUBREG I8 regm (INTCONST I32 @i))
+            (SUBREG I8 regm (INTCONST I32 @i))))))
+    (code (@cd $3 $2))
+    (cost 3)))
+;16bit
+(foreach (@cd @op) ((paddw ADD) (psubw SUB) (pmullw MUL) (pand BAND) (por BOR) (pxor BXOR))
+  (defrule void
+    (PARALLEL
+      (foreach @i (0 1 2 3)
+        (SET I16
+          (SUBREG I16 regm (INTCONST I32 @i))
+          (@op I16
+            (SUBREG I16 regm (INTCONST I32 @i))
+            (SUBREG I16 regm (INTCONST I32 @i))))))
+    (code (@cd $3 $2))
+    (cost 3)))
+;32bit
+(foreach (@cd @op) ((paddd ADD) (psubd SUB) (pand BAND) (por BOR) (pxor BXOR))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+		       (@op I32 (SUBREG I32 regm (INTCONST I32 @i))
+				(SUBREG I32 regm (INTCONST I32 @i))))))
+  (code (@cd $3 $2))
+  (cost 3)))
+
+;@code xmm, xmm  ("@code ?1x, ?2x" "nil")
+;@code xmm, m128 ("@code ?1x, QWORD PTR ??2s" "nil")
+;8bit
+(foreach (@cd @op) ((paddb ADD) (psubb SUB) (pand BAND) (por BOR) (pxor BXOR))
+  (defrule void
+    (PARALLEL
+      (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+        (SET I8
+          (SUBREG I8 regx (INTCONST I32 @i))
+          (@op I8
+            (SUBREG I8 regx (INTCONST I32 @i))
+            (SUBREG I8 regx (INTCONST I32 @i))))))
+    (code (@cd $3 $2))
+    (cost 4)))
+;16bit
+(foreach (@cd @op) ((paddw ADD) (psubw SUB) (pmullw MUL) (pand BAND) (por BOR) (pxor BXOR))
+  (defrule void
+    (PARALLEL
+      (foreach @i (0 1 2 3 4 5 6 7)
+        (SET I16
+          (SUBREG I16 regx (INTCONST I32 @i))
+          (@op I16
+            (SUBREG I16 regx (INTCONST I32 @i))
+            (SUBREG I16 regx (INTCONST I32 @i))))))
+    (code (@cd $3 $2))
+    (cost 4)))
+;32bit
+(foreach (@cd @op) ((paddd ADD) (psubd SUB) (pand BAND) (por BOR) (pxor BXOR))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+		       (@op I32 (SUBREG I32 regx (INTCONST I32 @i))
+				(SUBREG I32 regx (INTCONST I32 @i))))))
+  (code (@cd $3 $2))
+  (cost 4)))
+
+;;; neg
+;; 8bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+              (NEG I8 (SUBREG I8 regm (INTCONST I32 @i))))))
+  (code 
+        (psllq (imm 64) "%MM7")
+        (psubb $2 "%MM7")
+        (movq "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 2))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+              (NEG I8 (SUBREG I8 regx (INTCONST I32 @i))))))
+  (code 
+        (pslldq (imm 16) "%XMM7")
+        (psubb $2 "%XMM7")
+        (movdqu "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 3))
+;; 16bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+              (NEG I16 (SUBREG I16 regm (INTCONST I32 @i))))))
+  (code 
+        (psllq (imm 64) "%MM7")
+        (psubw $2 "%MM7")
+        (movq "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 2))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+              (NEG I16 (SUBREG I16 regx (INTCONST I32 @i))))))
+  (code 
+        (pslldq (imm 16) "%XMM7")
+        (psubw $2 "%XMM7")
+        (movdqu "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 3))
+;; 32bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+              (NEG I32 (SUBREG I32 regm (INTCONST I32 @i))))))
+  (code 
+        (psllq (imm 64) "%MM7")
+        (psubd $2 "%MM7")
+        (movq "%MM7" $2))
+  (clobber (REG I64 "%MM7"))
+  (cost 2))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+              (NEG I32 (SUBREG I32 regx (INTCONST I32 @i))))))
+  (code 
+        (pslldq (imm 16) "%XMM7")
+        (psubd $2 "%XMM7")
+        (movdqu "%XMM7" $2))
+  (clobber (REG I128 "%XMM7"))
+  (cost 3))
+
+;;; not
+;; 8bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I8 (SUBREG I8 regm (INTCONST I32 @i))
+              (BNOT I8 (SUBREG I8 regm (INTCONST I32 @i))))))
+  (code 
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $2))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 2))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+      (SET I8 (SUBREG I8 regx (INTCONST I32 @i))
+              (BNOT I8 (SUBREG I8 regx (INTCONST I32 @i))))))
+  (code 
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $2))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 3))
+
+;; 16bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I16 (SUBREG I16 regm (INTCONST I32 @i))
+              (BNOT I16 (SUBREG I16 regm (INTCONST I32 @i))))))
+  (code 
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $2))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 2))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3 4 5 6 7)
+      (SET I16 (SUBREG I16 regx (INTCONST I32 @i))
+              (BNOT I16 (SUBREG I16 regx (INTCONST I32 @i))))))
+  (code 
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $2))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 3))
+
+;; 32bit
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+              (BNOT I32 (SUBREG I32 regm (INTCONST I32 @i))))))
+  (code 
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%MM7")
+        (pinsrw (imm 2) "%edx" "%MM7")
+        (pinsrw (imm 3) "%edx" "%MM7")
+        (pxor "%MM7" $2))
+  (clobber (REG I32 "%edx") (REG I64 "%MM7"))
+  (cost 2))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+              (BNOT I32 (SUBREG I32 regx (INTCONST I32 @i))))))
+  (code 
+        (movl (imm 4294967295) "%edx")
+        (movd "%edx" "%XMM7")
+        (pinsrw (imm 2) "%edx" "%XMM7")
+        (pinsrw (imm 3) "%edx" "%XMM7")
+        (pinsrw (imm 4) "%edx" "%XMM7")
+        (pinsrw (imm 5) "%edx" "%XMM7")
+        (pinsrw (imm 6) "%edx" "%XMM7")
+        (pinsrw (imm 7) "%edx" "%XMM7")
+        (pxor "%XMM7" $2))
+  (clobber (REG I32 "%edx") (REG I128 "%XMM7"))
+  (cost 3))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Streaming 
+;;; Floating point
+;;; data transfer
+;;   mem -> regx
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i)) memf)))
+  (code (movups $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i)) memf)))
+  (code (movlps $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F64 (SUBREG F64 regx (INTCONST I32 @i)) memd)))
+  (code (movupd $2 $1))
+  (cost 4))
+(defrule void
+  (PARALLEL
+      (SET F64 (SUBREG F64 regx (INTCONST I32 0)) memd))
+  (code (movlpd $2 $1))
+  (cost 4))
+
+;;   regx -> mem
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET F32 memf (SUBREG F32 regx (INTCONST I32 @i)))))
+  (code (movups $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F32 memf (SUBREG F32 regx (INTCONST I32 @i)))))
+  (code (movlps $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F64 memd (SUBREG F64 regx (INTCONST I32 @i)))))
+  (code (movupd $2 $1))
+  (cost 4))
+(defrule void
+  (PARALLEL
+      (SET F64 memd (SUBREG F64 regx (INTCONST I32 0))))
+  (code (movlpd $2 $1))
+  (cost 4))
+
+;regx -> regx
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i))
+               (SUBREG F32 regx (INTCONST I32 @i)))))
+  (code (movups $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F64 (SUBREG F64 regx (INTCONST I32 @i))
+               (SUBREG F64 regx (INTCONST I32 @i)))))
+  (code (movupd $2 $1))
+  (cost 3))
+
+
+;;;Convert
+;float -> dword
+;xmm->mmx
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+               (CONVFI I32 (SUBREG F32 regx (INTCONST I32 @i))))))
+  (code (cvtps2pi $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regm (INTCONST I32 @i))
+               (CONVFI I32 (SUBREG F64 regx (INTCONST I32 @i))))))
+  (code (cvtpd2pi $2 $1))
+  (cost 3))
+;xmm->xmm
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+               (CONVFI I32 (SUBREG F32 regx (INTCONST I32 @i))))))
+  (code (cvtps2dq $2 $1))
+  (cost 3))
+;  (code (cvttps2dq $2 $1))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET I32 (SUBREG I32 regx (INTCONST I32 @i))
+               (CONVFI I32 (SUBREG F64 regx (INTCONST I32 @i))))))
+  (code (cvtpd2dq $2 $1))
+  (cost 3))
+;  (code (cvttpd2dq $2 $1))
+;;dword -> float
+;mmx->xmm
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i))
+               (CONVSF F32 (SUBREG I32 regm (INTCONST I32 @i))))))
+  (code (cvtpi2ps $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F64 (SUBREG F64 regx (INTCONST I32 @i))
+               (CONVSF F64 (SUBREG I32 regm (INTCONST I32 @i))))))
+  (code (cvtpi2pd $2 $1))
+  (cost 3))
+;xmm->xmm
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i))
+               (CONVSF F32 (SUBREG I32 regx (INTCONST I32 @i))))))
+  (code (cvtdq2ps $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F64 (SUBREG F64 regx (INTCONST I32 @i))
+               (CONVSF F64 (SUBREG I32 regx (INTCONST I32 @i))))))
+  (code (cvtdq2pd $2 $1))
+  (cost 3))
+;single precision <-> double precision
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i))
+               (CONVFT F32 (SUBREG F64 regx (INTCONST I32 @i))))))
+  (code (cvtpd2ps $2 $1))
+  (cost 3))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F64 (SUBREG F64 regx (INTCONST I32 @i))
+               (CONVFX F64 (SUBREG F32 regx (INTCONST I32 @i))))))
+  (code (cvtps2pd $2 $1))
+  (cost 3))
+
+; Packed Single Precision Floating Point reciprocal
+;RCPPS
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i))
+		       (DIVS F32 (FLOATCONST F32 1.0)
+				(SUBREG F32 regx (INTCONST I32 @i))))))
+  (code (rcpps $2 $1))
+  (cost 3))
+
+;;  Arithmetic/Logical operations
+;;;(foreach (@cd @op) ((addps ADD) (subps SUB) (mulps MUL) (divps DIVS) (andps BAND) (orps BOR) (xorps BXOR))
+(foreach (@cd @op) ((addps ADD) (subps SUB) (mulps MUL) (divps DIVS))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1 2 3)
+      (SET F32 (SUBREG F32 regx (INTCONST I32 @i))
+	       (@op F32 (SUBREG F32 regx (INTCONST I32 @i))
+			(SUBREG F32 regx (INTCONST I32 @i))))))
+  (code (@cd $3 $2))
+  (cost 3)))
+;;;(foreach (@cd @op) ((addpd ADD) (subpd SUB) (mulpd MUL) (divpd DIVS) (andpd BAND) (orpd BOR) (xorpd BXOR))
+(foreach (@cd @op) ((addpd ADD) (subpd SUB) (mulpd MUL) (divpd DIVS))
+(defrule void
+  (PARALLEL
+    (foreach @i (0 1)
+      (SET F64 (SUBREG F64 regx (INTCONST I32 @i))
+	       (@op F64 (SUBREG F64 regx (INTCONST I32 @i))
+			(SUBREG F64 regx (INTCONST I32 @i))))))
+  (code (@cd $3 $2))
+  (cost 3)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

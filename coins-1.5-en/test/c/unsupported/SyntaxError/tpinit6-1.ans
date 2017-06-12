@@ -1,0 +1,2 @@
+b=13 c=3 
+This test will cause 'excess initializer braces' error.

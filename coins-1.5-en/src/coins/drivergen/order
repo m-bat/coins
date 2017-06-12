@@ -1,0 +1,15 @@
+// ----------------------------------------------------------
+//   Copyright (C) 2005 The Coins Project Group               
+//       (Read COPYING for detailed information.)             
+//-----------------------------------------------------------
+//
+// It is the sample of the 'Process Order Sheet'
+//
+// Driver is created to invoke these process.
+//
+
+MakeHirFromSource
+MakeNewLirFromHir
+GenerateCode
+
+//end

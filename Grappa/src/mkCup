@@ -1,0 +1,15 @@
+#!/bin/ksh
+SRCROOT="${SRCROOT:-.}"
+OUTROOT="${OUTROOT:-${HOME}/java}"
+
+cd ${SRCROOT}
+cd $JDK/java_cup/runtime
+
+files=
+for file in *.java
+do
+	files="$files $file"
+done
+
+print -u2 "javac -d ${OUTROOT}/$JDK $OPTIONS $files"
+javac -d ${OUTROOT}/$JDK $OPTIONS $files

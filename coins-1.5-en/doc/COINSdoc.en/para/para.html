@@ -1,0 +1,819 @@
+<?xml version="1.0" encoding="Shift_JIS"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0//EN">
+
+<html>
+  <head>
+	<link rel="stylesheet" type="text/css" href="../contents.css">
+
+    <title> Parallelization for HIR</title>
+
+  </head>
+  <body>
+	<h1>6. Parallelization for HIR</h1>
+
+  COINS has features to aid do-all parallelization 
+(<a href='#Aho'>Aho, et al.</a>),
+SMP parallelization and SIMD parallelization. 
+The do-all parallelization and SMP parallelization are done
+for HIR.  The SIMD parallelization 
+(<a href='#Suzuki'>Suzuki, et al.</a>),
+is done for LIR, and it is explained in other chapter 
+(<a href='../simd/simd-frame.html' target="_top"> SIMD Parallelization for LIR</a>).
+
+<h2 id='i-6-1'>6.1. Loop Parallelization</h2>    
+
+<h3 id='i-6-1-1'>6.1.1. Overview of do-all parallelization</h3>
+
+<p>The package &quot;coins.lparallel&quot; is the do-all type loop parallelizer
+(<a href='#Iwasawa'>Iwasawa</a> and <a href='#Watanabe'>Watanabe, et al.</a>).
+This package analyzes the program for parallelizable loops and generates either
+OpenMP program (<a href='#Chandra'>Chandra et al.</a>)
+ written in C or machine code (assembly language code) to be 
+executed in parallel. When OpenMP program is generated, COINS does not do 
+the parallelization itself, but the driver calls an external OpenMP compiler 
+to execute the program in parallel.</p>
+
+<p>
+Parallelization heavily depends on the computer used to execute
+a program and also on control program (may be an operating system) for
+parallel execution. COINS does not do complete-automatic parallelization.
+It may insert directives (pragmas) for parallelization in OpenMP case
+or call statements for routines that control parallel execution in
+machine code generation case. Such control routines should be prepared 
+by a user according to the computer used as it will be explained later.
+Candidates of subprograms and loops to be parallelized should
+also be specified by pragmas as explained in later paragraphs.
+</p>
+
+<p> In do-all parallelization, compiler option can specify to 
+generate either parallelized object code or OpenMP 
+program.  The loop analyzer of COINS analyzes 
+HIR and discriminates a for-loop to be parallelized if 
+memory access areas covered by each iteration do 
+not intersect with each other except for the areas 
+covered by induction variables and reduction 
+variables.
+</p>
+
+  The analyzer also normalizes for-loops so 
+that their loop index starts from 0 and increments by 
+1 changing all subscript expressions so that they are 
+computed using the normalized loop index.  All 
+induction variables are also changed to be computed 
+from the normalized loop index.  This transformation 
+is a simple affine transformation
+(<a href='#Aho'>Aho, et al.</a>).<br>
+<br>
+   If machine code generation is specified, each of 
+parallelizable for-loops is transformed to a 
+subprogram to be executed in parallel as slave 
+threads and the original loop is transformed to 
+control the execution as a master thread.  The 
+execution of such threads is controlled by runtime 
+routines designed according to a parallelizing 
+framework.<br>
+<br>
+  In the do-all parallelization, functions to be 
+analyzed and candidates of loops to be parallelized 
+are selected by pragma in source program because it 
+is difficult to judge automatically whether a loop can 
+be speeded up by parallelization or not.  The loop 
+analyzer discriminates whether the candidate loops 
+can be really parallelized, and extracts information 
+required for parallel execution.<br>
+<br>
+  There is also a feature for forcing parallelization of 
+a loop even if the loop analyzer can not discriminate 
+the loop is parallelizable, where information for 
+parallelization should be given by programmer as a 
+pragma.
+
+<h3 id='i-6-1-2'>6.1.2. Loop analysis for parallelization</h3>
+
+  If a for-loop has such characteristics as its memory 
+areas accessed by each iteration do not intersect with 
+each other except for the areas accessed by induction 
+variables and reduction variables, then the loop can 
+be executed in parallel.  The loop analyzer of COINS 
+does such analysis (<a href='#Iwasawa'>Iwasawa</a>)
+for nested loops as described in this section.<br>
+<br>
+  A memory area is represented by a set of variables 
+in which the variables are located.  When a path of 
+control flow graph is picked up, 4 kinds of memory 
+areas will correspond to it, namely
+
+<pre>
+(a) USE  (use): may be referred in the path
+(b) EUSE (exposed use): may be referred before 
+         setting value in the path
+(c) MOD  (modify): value may be set in the path
+(d) DDEF (definitely defined): value is definitely set
+         in the path
+</pre>
+  As the first step, consider paths in a basic block.  
+If statement s1 precedes statement s2, then following 
+relations hold:
+<pre>
+    USE(s1:s2)  = USE(s1) + USE(s2)  
+    EUSE(s1:s2) = EUSE(s1) + (EUSE(s2) - DDEF(s1)) 
+    MOD(s1:s2)  = MOD(s1) + MOD(s2)
+    DDEF(s1:s2) = DDEF(s1) + DDEF(s2)
+</pre>
+where s1:s2 represent the path from s1 to s2, and + 
+means union, - means difference.  The same 
+relations hold between 2 adjacent basic blocks.  At 
+the join point of if-then-else statement, its memory 
+areas are computed as follows:
+<pre>
+   USE  = USE<sub>1</sub> + USE<sub>2</sub> 
+   EUSE = EUSE<sub>1</sub> + EUSE<sub>2</sub> 
+   MOD  = MOD<sub>1</sub> + MOD<sub>2</sub> 
+   DDEF = DDEF<sub>1</sub> * DDEF<sub>2</sub> 
+</pre>
+where the memory areas suffixed by 1 and 2 represent 
+memory areas corresponding to then-part and 
+else-part, respectively.  The operator * represents 
+intersection operation.<br>
+<br>
+
+  A for-loop of the form 
+<pre>
+   for (i = 0; i &lt; n; i = i + 1) { .... } 
+</pre>
+is considered to be a sequence of iterations so that at 
+the exit point of the for-loop, its memory areas are 
+computed as follows:
+<center>
+<img src="formula6.1.jpg" alt="formula6.1.jpg"><br>
+</center><p>
+where memory areas suffixed by i and k represent 
+those for i-th iteration and k-th iteration, 
+respectively.  Above formulas may be considered to 
+be got by expanding the loop.  If the loop contains a 
+subscripted variable with a subscript expression that 
+can not be analyzed, then the entire array of the 
+subscripted variable is assumed to be contained in 
+USE, EUSE, MOD and empty is assumed about the 
+array for DDEF.<br>
+<br>
+
+  Loops are analyzed in the order from inner-most 
+loops to outer-most loops.  As for the memory areas 
+for an inner loop, the memory areas at the exit point 
+of the inner loop are used.  Subscripted expressions 
+in the inner loop are classified into 
+invariant, induction, and un-analyzable as follows: 
+<pre>
+  Inner loop    Outer loop          Example 
+        view          view                            
+  invariant     invariant              c[m]
+                induction              a[j]
+                un-analyzable          b[k]
+  induction     invariant with range  aa[i]
+                induction with range  cc[m]
+                un-analyzable         bb[k]
+  un-analyzable un-analyzable
+</pre>
+where, the column Example shows examples of subscripted variables in 
+Figure 6.1.  For example, subscripted expressions 
+in Figure 6.1 are classified as shown by comments.
+<pre>
+/* Inner loop invariant subscripts */
+for (j = 0; j &lt; n; j++) {
+  k = x[j];
+  for (i = 0; i &lt; n; i++) {
+    a[j]  /* Outer loop induction subscript      */
+          /* if it is an induction variable      */
+          /* of the outer loop.                  */
+    b[k]  /* Outer loop un-analyzable subscript  */
+          /* if it is defined in the outer loop  */
+          /* and is not an induction variable of */ 
+          /* the outer loop.                     */
+    c[m]  /* Outer loop invariant subscript if   */
+          /* its operands are defined neither in */
+          /* the outer loop nor in the inner loop*/
+  }
+} 
+/* Inner loop induction subscripts */
+for (j = 0; j &lt; n; j++) {
+  k = x[j];
+  for (i = 0; i &lt; n; i++) {
+    aa[i]  /* Invariant subscript with range if  */
+           /* its initial, final, increment      */
+           /* values are all outer loop invariant*/
+    bb[k]  /* Outer loop un-analyzable subscript */
+           /* if some of its initial, final,     */
+           /* increment values are defined in    */ 
+           /* the outer loop and are not its     */
+           /* induction variable.                */
+  }
+  for (m = j; m &lt; n; m = m + 1) {
+    cc[m]  /* Outer loop induction subscript    */
+           /* with range if some of its initial */
+           /* or final values are outer loop    */
+           /* induction variable and the other  */
+           /* term and increment value are outer*/
+           /* loop invariant */
+  }
+}
+</pre>
+
+Figure 6.1 Classification of subscript expressions <br>
+<br>
+  If following memory areas are not empty for a loop, 
+they are considered as a hazard for do-all 
+parallelization:<br>
+<br>
+
+  Loop carried flow dependency:
+<center>
+<img src="formula6.2.jpg" alt="formula6.2.jpg"><br>
+</center>
+<p>
+  Loop carried anti-dependency:
+<center>
+<img src="formula6.3.jpg" alt="formula6.3.jpg"><br>
+</center>
+<p>
+  Loop carried output-dependency:
+
+<center>
+<img src="formula6.4.jpg" alt="formula6.4.jpg"><br>
+</center>
+<p>
+where the words loop carried flow dependency, 
+loop carried anti-dependency, loop carried 
+output-dependency are used in the same way as 
+<a href='#Bacon'>D. F. Bacon, et al.</a>.<br>
+<br>
+
+  A loop having loop carried output-dependency and 
+loop carried anti-dependency may be parallelized by 
+privatization as explained later if it does not contain 
+loop carried flow dependency variables.
+
+<h3 id='i-6-1-3'>6.1.3. Parallelization of  nested loops</h3>
+
+  Let's consider an example of nested loop shown in 
+Figure 6.2 where N is a constant defined by #define.
+<pre>
+  for (i = 0; i &lt; N; i++) {
+    x[0] = 0;
+    x[1] = 10;
+    for (j = 2; j &lt; N; j++) {
+      x[j] = c[i] * (x[j-1] + x[j-2]) / 2;
+      z[i][j] = x[j];
+    }
+  }
+</pre>
+
+  Figure 6.2 Nested loop 
+<br><br>
+The inner loop of this example has following 
+characteristics:
+<pre>
+   DDEF<sub>j</sub> = { z[i][j], x[j], j }
+   MOD<sub>j</sub>  = { z[i][j], x[j], j }
+   USE<sub>j</sub>  = { i, j, c[i], x[j], x[j-1], x[j-2] }
+   EUSE<sub>j</sub> = { i, j, c[i], x[j-1], x[j-2] }
+</pre>
+The loop carried flow-dependency has j but it is an 
+induction variable which is not a hazard for 
+parallelization.  As for the array x, there is anti-dependency  
+and output-dependency.  Thus the inner loop can 
+not be parallelized.  In the outer loop analysis, the 
+data flow information of the inner loop is expanded, 
+for example,
+<center>
+<img src="formula6.5.jpg" alt="formula6.5.jpg"><br>
+</center>
+<p>
+ 
+Thus, accessed memory areas for the entire inner 
+loop are 
+<pre>
+   DDEF = { z[i][2:N-1:1], x[2:N-1:1], j }
+   MOD  = { z[i][2:N-1:1], x[2:N-1:1], j }
+   USE  = { i, j, c[i], x[0:N-1:1] }
+   EUSE = { i, j, c[i], x[0], x[1] }
+</pre>
+where the notation [a:b:c] represents the subscript 
+range having start value a, final value b, and step 
+value c.<br>
+<br>
+
+  As for the outer loop, accessed memory areas of 
+i-th iteration are
+<pre>
+   DDEF<sub>i</sub> = { z[i][2:N-1:1], x[0:N-1:1], j, i }
+   MOD<sub>i</sub>  = { z[i][2:N-1:1], x[0:N-1:1], j, i }
+   USE<sub>i</sub>  = { i, j, c[i], x[0:N-1:1] }
+   EUSE<sub>i</sub> = { i, c[i] }
+</pre>
+The loop carried flow dependency set contains i but it 
+is an induction variable.  Both of the loop carried 
+anti-dependency set and the loop carried output 
+dependency set contain x[0:N-1:1].  It means that 
+the loop can not be parallelized straight forwardly. 
+The memory area x[0:N-1:1] is, however, included in 
+DDEF and not included in EUSE, meaning that the 
+area is firstly set and then used for all i, so that the 
+outer loop can be parallelized by privatizing 
+(allocating local variables for each thread) the array x.
+
+<h3 id='i-6-1-4'>6.1.4.  Framework for parallel execution</h3>
+
+  As it is already mentioned, COINS generates 
+parallelized machine code as well as OpenMP program 
+based on the loop analysis explained in above 
+sections.  In case of generating parallelized machine 
+code, a set of run time routines to control parallel 
+execution should be provided for COINS according to 
+a simple framework.  The kernel part of the 
+parallelizing framework is composed of functions to do 
+<pre>
+  (1) initiate,
+  (2) fork,
+  (3) join,
+  (4) get self Id,
+  (5) terminate,
+  (6) preprocess for do-all loop,
+  (7) postprocess for do-all loop.
+</pre>
+  Figure 6.3 shows some of 
+such functions.
+<pre>
+  int  coinsThreadInit( .... );
+  int  coinsThreadEnd();
+  int  coinsThreadFork( .... );
+  int  coinsThreadJoin( .... );
+  int  coinsThreadSelfId();
+  void coinsThreadPreprocessForDoAllLoop ( .... );
+  void coinsThreadPostprocess( .... );
+  int  coinsThreadForkForDoAll( .... ); 
+  void coinsThreadPreprocessForDoAllThread();
+  void coinsThreadPostprocessForDoAllThread();
+    ......
+</pre>
+  Figure 6.3 Run time routines for parallelization
+<br><br>
+
+  The framework might be thought as a small subset 
+of POSIX Thread but it is settled as small as possible 
+so that it is easily implemented.  It realizes parallel 
+execution irrespective of operating system is provided 
+or not for various execution environments.  Some of 
+these functions may be implemented in a few machine 
+instructions.  In such cases, inline assemble feature 
+(asm-statement in C language) will help to realize 
+parallelization with small overhead.
+
+<h3 id='i-6-1-5'>6.1.5.  Explanation using examples</h3>
+
+  The program in Figure 6.4 computes the length of a 
+curve whose x, y coordinates are given by arrays x 
+and y.  The left-most numbers show line numbers.
+<pre>
+ 1) #pragma optControl 
+        functionsWithoutSideEffect distance
+ 2) #pragma parallel doAllFunc main 
+ 3) #ifndef MAIN
+ 4) #define MAIN
+ 5) #endif
+ 6) #include &quot;coinsParallelFramework.h&quot;
+ 7) #include &lt;math.h>
+ 8) double distance(double px[],double py[],int pi);
+ 9) double setData(double px[], double py[],int pn);
+10) int printf(char*, ...);
+11) double x[10000], y[10000];
+12) int main() {
+13)   int i, n = 720;
+14)   double t, sum = 0.0;
+15) #pragma parallel init
+16)   setData(x, y, n);
+17) #pragma parallel doAll
+18)   for (i = 0; i &lt; n; i++) {
+19)     sum = sum + distance(x, y, i);
+20)   } 
+21)   printf(&quot;n ans = %f \n&quot; sum);
+22) #pragma parallel end
+23)   return 0;
+24) }
+</pre>
+  Figure 6.4 Program to be parallelized <br>
+<br>
+  Line 1 declares that the function distance has no 
+side effect and loops calling it can be parallelized.  
+Line 2 indicates the function to be analyzed.  Line 6 
+includes declarations of the parallelizing framework.  
+Line 15 initiates parallelization. Line 17 indicates a 
+candidate for-loop, and line 22 terminates 
+parallelization.<br>
+<br>
+  COINS transforms the loop to be parallelized to a 
+function and generates following sequence of 
+statements at the place of the loop.
+
+<pre>
+(1) Call coinsThreadPreprocessForDoAllLoop
+   that does preprocess for parallel execution and distributes 
+   value ranges of induction variable to threads 
+   according to the execution environment.
+(2) Prepare parameters to be passed for each thread.
+(3) Invoke threads to be executed in parallel.
+(4) Execute a loop statement that does operations for 
+   a value range of the induction variable to be executed 
+   as the master thread.
+(5) Call coinsThreadPostprocess
+   that does post process and join operation for the threads
+   in parallel execution.
+(6) Synthesize reduction values from values computed 
+   by threads executed.
+</pre>
+
+  The program in Figure 6.5 is the function 
+corresponding to the above for-loop transformed for 
+parallelization.  It is generated from the parallelized 
+HIR by HIR-to-C module of COINS and reformed to 
+improve readability, although COINS can generate 
+also machine code from the parallelized HIR.  Its 
+parameters (_indexFrom_0 and _indexTo_0) specify the 
+value range of the loop index i and up to 2 
+write-back places (sum_0 and _voidPtr0) of reduction 
+variables. The last parameter is not used in this case 
+because there is only one reduction variable sum.
+<pre>
+ 1) void *main_loop_0( int _threadId_0, 
+        long _indexFrom_0, long _indexTo_0, 
+        double *sum_0, void *_voidPtr_0 ) {
+ 2)   int i, n;
+ 3)   double sum;
+ 4)   coinsThreadPreprocessForDoAllThread();
+ 5)   sum = 0.0;
+ 6)   { i = 0; }
+ 7)   for ( i = _indexFrom_0;i &lt; _indexTo_0;
+            i = i + 1) {
+ 8)     sum = sum + (&amp distance)(x, y, i);
+ 9) _lab29:;
+10)   }
+11)   _lab33:;
+12)   *sum_0 = sum;
+13)   coinsThreadPostprocessForDoAllThread();
+14) }
+</pre>
+  Figure 6.5 Function to be executed by threads <br>
+<br>
+
+  For some cases, the loop analyzer may be unable 
+to discriminate that a given loop can be parallelized 
+or not.  Such loop can also be parallelized if 
+information required for parallelization is given by 
+pragma.  Figure 6.6 shows an example of such manual 
+parallelization.  In this case, the pragma in line 1 shows 
+that this loop does reduction operations getting 
+maximum value and minimum value, and 
+corresponding reduction variables are max and min. 
+<pre>
+ 1) #pragma parallel forceDoAll 
+        (reduction (&quot;max&quot; max) (&quot;min&quot; min))
+ 2)  max = x[0];
+ 3)  min = x[0];
+ 4)  for (i = 0; i &lt; n; i++) { 
+ 5)   if (x[i] &gt; max)
+ 6)     max = x[i];
+ 7)   if (x[i] &lt; min)
+ 8)     min = x[i];
+ 9)  }
+</pre>
+  Figure 6.6 Example of forced parallelization <br>
+</br>
+
+COINS generates function main_loop_1 in Figure 6.7 as 
+the function to be executed by threads.  The 
+write-back places of reduction values are min_0 and 
+max_0.  Initial values for the reduction variables 
+min and max are given as global variables _min_global_0 
+and _max_global_0 as they are seen in line 5.
+<pre>
+ 1) void * main_loop_1( int _threadId_0,
+       long _indexFrom_0, long _indexTo_0,
+       int * min_0,int * max_0 ) {
+ 2)  int i, max, min;
+ 3)  coinsThreadPreprocessForDoAllThread();
+ 4)  min = 0; max = 0;
+ 5)  min = _min_global_0; max = _max_global_0;
+ 6)  { i = (int )0; }
+ 7)  for (i= _indexFrom_0;i &lt; _indexTo_0;
+          i= i+1) {
+ 8)    if (_x_global_1[i] &gt; max) {
+ 9)     _lab77:; { max = _x_global_1[i]; } }
+10)    if (_x_global_1[i] &lt; min) {
+11)     _lab80:; { min = _x_global_1[i]; } }
+12)    _lab83:;
+13)  } _lab87:;
+14)  *min_0 = min; *max_0 = max;
+15)  coinsThreadPostprocessForDoAllThread();
+16) }
+</pre>
+  Figure 6.7 Function to be executed by threads <br>
+<br>
+
+<h3 id='i-6-1-6'>6.1.6. An example of parallelization</h3>
+
+  To show the applicability of COINS to embedded 
+systems, a low-priced FPGA board (Virtex-4 FX of 
+Xilinx) was used as an experimental environment.  
+Multiple CPU soft cores of MicroBlaze xilinx 
+architecture (<a href='#Xilinx'>MicroBlaze</a>)
+were implemented on it.  <br>
+A code generator for the CPU was implemented in 2 months 
+by writing TMD for MicroBlaze.<br>
+<br>
+  This system can achieve reasonable parallelization
+for applications whose memory load factor is not high.
+Laplacian filter programs are one kind of such applications 
+and they are used frequently in image processing.  <br>
+On the FPGA board with 3 CPU cores (clock: 75MHz), a Laplacian 
+filter program with a parallelizing-compiler-option 
+was executed in 2.7 seconds for an image data of 160 * 120 pixels. 
+When it is executed on 1 CPU, it took 7.5 seconds.  Thus, 
+it achieved 2.9 times speedup compared to the program 
+without parallelizing-compiler-option for this case.
+
+<h3 id='i-6-1-7'>6.1.7. Usage </h3>
+
+<h4 id='i-6-1-7-1'>6.1.7.1. Designate candidates for parallelization </h4>
+
+It is difficult to automatically judge whether a given loop 
+can be speeded up by parallelization or not. In the loop parallelization
+of COINS, progrgammer dwsignates candidates for parallelization
+by pragma. The parallelizing module of COINS analyzes the designated loops 
+and discriminates whether the parallelization is possible for the 
+loops and if possible, generates parallelized C program or 
+parallelized machine code.<br>
+<br>
+  A pragma of the form
+<pre>
+    #pragma parallel doAllFunc func1 func2 ...
+</pre>
+designates the functions func1, func2, ... for candidates for parallelization.<br>
+The pragma
+<pre>
+    #pragma parallel doAllFuncAll
+</pre>
+designates all functions in the given input pragram for parallelization.<br>
+As for functions that are not candidates, processing of parallelization
+is skipped.<br>
+<br>
+
+  Before a loop expected to be parallelized, the pragma
+<pre>
+    #pragma parallel doAll
+</pre>
+should be inserted. A loop encountered first after this pragma is
+treated as the candidate for parallelization.<br>
+One pragma should be written in one line.
+
+<h4 id='i-6-1-7-2'>6.1.7.2. Generation of parallelized C program </h4>
+
+To generate OpenMP program written in C, give a compile command 
+of the form
+<pre>
+  java coins.driver.Driver -coins:parallelDoAll=OpenMP foo.c
+</pre>
+It generates a C program with pragmas for OpenMP synthesizing 
+module name by adding &quot;loop&quot; to the input file name (foo-loop.c
+in this case). Users can execute the generated C program in parallel
+by giving it to soem OpenMP compiler.<br>
+(There may be other configuration options, such as environment variables,
+needed to execute the resultant code in parallel: see your OpenMP compiler
+manual.)
+
+<h4 id='i-6-1-7-3'>6.1.7.3. Generation of parallelized machine code </h4>
+
+To generate assembly language code executable in parallel, give a compile
+command of the form 
+<pre>
+  java coins.driver.Driver -S -coins:parallelDoAll=n foo.c
+</pre>
+where n is an integer number indicating maximum degree of parallelization.
+The assembly language program can be executed in parallel by linking with 
+execution time routines for parallelization. The execution time routines
+should be provided for corresponding execution environment according
+to the parallelizing framework written in the previous section
+(<a href='#i-6-1-4'>Framework for parallel execution</a>).<br>
+<br>
+  A command such as
+<pre>
+  java coins.driver.Driver -S -coins:parallelDoAll=n,hir2c foo.c
+</pre>
+will produce both of assembly language program and C program 
+that can be executed in parallel by linking with execution time 
+routines for parallelization.
+
+<h4 id='i-6-1-7-4'>6.1.7.4. Generation of parallelized execution module </h4>
+
+To output executable code using the OpenMP compiler, 
+give a compile command of the form
+<pre>
+  java coins.lparallel.LoopPara foo.c
+</pre>
+The LoopPara is a subclass of the COINS driver coins.driver.Driver.
+It passes the generated C program with OpenMP pragamas 
+to an OpenMP compiler named Omni (<a href='#Omni'>OpenMP Compiler Omni</a>)
+and generates executable module.
+
+
+<h2 id='i-6-2'>6.2. Coarse Grain Parallelizing Module</h2>
+
+<h3 id='i-6-2-1'>6.2.1.  Overview</h3>
+
+<h4 id='i-6-2-1-1'>6.2.1.1.  Design Concept</h4>
+
+    The coarse-grain parallelizing module is constructed for realizing a 
+    coarse-grain parallelizing compiler named CoCo in java.  The CoCo is the
+    research product and it is still at the infant stage as a parallelizing
+    compiler.  Therefore it contains many constraints for practical usage as
+    mentioned later.  We have found a lot of important issues which should be
+    solved as practical coarse-grain parallelizing compilers by implementing
+    the CoCo as an automatic parallelizing compiler.  The coarse-grain 
+    parallelizing module is a part of the COINS infrastructure, and then the
+    module components are available as a set of parts for coarse-grain 
+    parallelization.<p>
+
+    The CoCo analyzes an input C program and transforms it into a macro 
+    (coarse-grain) task graph with data/control flow dependence.  Then, the 
+    CoCo parallelizes the macro tasks by using OpenMP directives for SMP 
+    machines. This analysis and transformation are carried out on COINS HIR
+    (High-level Intermediate Representation).  The CoCo generates a parallel
+    program in HIR containing OpenMP directives as comments.  The HIR program
+    is translated into a C program with OpenMP directives by the HIR-to-C 
+    translator.  Finally, it is compiled by the Omni-OpenMP compiler and then 
+    executed in parallel on a SMP machine.<p>
+
+    Macro tasks correspond to basic blocks, loops and/or subroutines.  After an
+    input C program is divided into macro tasks, an execution starting
+    condition of each macro task is analyzed.  The execution starting condition
+    represents whether the macro task can be executed or not at a certain time.
+    A runtime macro task scheduler evaluates an execution starting condition of
+    each macro task at execution time, and dynamically assigns executable one
+    to a light load processor of a SMP machine.<p>
+
+    The coarse-grain parallelizing module is a tool set, which consists of the
+    following functions:
+<ol>
+<li>Divides an input C program into macro tasks based on basic blocks,</li>
+<li>Analyses an execution starting condition of each macro task,</li>
+<li>Embeds OpenMP directives for parallel execution at a macro task 
+           level,</li>
+<li>Schedules dynamically each macro task to a processor of a SMP 
+           machine. </li>
+ </ol>
+
+<h4 id='i-6-2-1-2'>6.2.1.2.  Data Structures</h4>
+
+    The coarse-grain parallelizing module utilizes a macro flow graph model. 
+    Nodes of the graph correspond macro tasks.  As for edges between nodes, 
+    there are two types of edges representing control flow and data flow 
+    dependences.<p>
+
+    An execution starting condition is represented in a boolean expression.  
+    The operators consist of 'logical AND' and/or 'logical OR'.  The operand 
+    conditions are as follows:
+<ol>
+<li>If macro tasks with data dependence have been executed or decided
+           not to be executed,</li>
+<li> If control flow dependence to a macro task has been decided.</li>
+</ol>
+
+<h4 id='i-6-2-1-3'>6.2.1.3.  Scheduler</h4>
+
+    The runtime macro task scheduler is independently attached to the main part
+    of an output program.  If an input program is named 'xxx.c', the scheduler
+    written in C language is located at the file named 'xxx-sch.c' at the same
+    directory.<p>
+
+<h3 id='i-6-2-2'>6.2.2.  Constraints in the current implementation</h3>
+
+    The current version of the coarse-grain parallelizing module, CoCo, has the
+    following constraints:
+<ol>
+<li>The coarse-grain parallelizing module parallelizes only a main 
+           function.  When an input program has several functions, the module
+           ignores the other functions.</li>
+<li>To execute a program in parallel efficiently, the module should 
+           adjust grain granularity of tasks such as 'loop unrolling'.  Up to
+           now, the module does not do that.</li>
+<li> A loop in a program is translated into a single macro task.  The 
+           module recognizes only reserved words in HIR such as 'while' and/or
+           'for' as loops.  Other types of loop are not translated into macro
+           tasks.</li>
+<li>The module finds out an exit macro task only if the task has no 
+           successors or includes return statements.  Other macro tasks which
+           include 'exit()' functions, for example, are not recognized as exit
+           ones.</li>
+<li>When there are some macro tasks which have no dependence with each
+           other, the execution order of macro tasks may be different from the
+           order of sequential execution.</li>
+</ol>
+<h3 id='i-6-2-3'>6.2.3.  Usage </h3>
+    The CoCo inserts OpenMP directives into a HIR program as comments for 
+    coarse-grain parallelizing.  The CoCo utilizes 'hir2c' module, translator 
+    from HIR to an OpenMP program written in C (OpenMP/C program),
+    since the back end of COINS does not support the 
+    OpenMP directives yet.  After a coarse-grain parallel OpenMP/C program is 
+    generated by hir2c, you must compile it by an OpenMP compiler in order to 
+    execute in parallel on a SMP machine.<p>
+
+    To obtain a coarse-grain parallel program, you should operate as follows:
+<ol>
+<li> Compile 'xxx.c' by COINS C compiler specifying the option 
+           '-coins:coarseGrainParallel'  or
+           '-coins:cgParallel'.
+<pre>
+ java -classpath ./classes Driver -coins:cgParallel xxx.c
+</pre>
+The generated OpenMP/C file will have suffix &quot;cgparallel&quot; in such way as
+xxx-cgparallel.c for source C file xxx.c.
+</li>
+<li>Compile the program with a runtime scheduler by Omni-OpenMP 'omcc'.
+<pre>
+  omcc xxx-cgparallel.c xxx-sch.c
+</pre></li>
+</ol>
+
+<h3 id='i-6-2-4'>6.2.4.  Options</h3>
+
+    There are several compile time options for the coarse-grain parallelizing
+    module.  For other options of the COINS Compiler Driver, see 
+<a href='../driver/driver-frame.html' target="_top">2. How to use the Compiler Driver</a>
+ or 
+ <a href='../cc/cc-frame.html' target="_top">3. How to use C Compiler</a>.
+<dl>
+<dt> -coins:trace=MDF.xxxx</dt><dd>
+    To output trace information of this module for debugging, and specify the 
+    trace level as follows:
+<pre>
+        2000 :  Output general debug information of the module.
+</pre></dd>
+
+<dt> -coins:stopafterhir2c</dt><dd>
+    Quit compilation of each compile unit just after generating a C program by 
+    'hir2c'.</dd>
+
+<dt> -coins:coarseGrainParallel<br>
+ -coins:cgParallel</dt><dd>
+    Use this module.</dd>
+</dl>
+
+
+<h2 id='i-6-3'>6.3 References </h2>
+<ol>
+<li id='Aho'>
+[1] A. V. Aho, M. S. Lam, R. Sethi, J. D. Ullman: 
+  Compilers - Principles, Techniques, &amp Tools, Second Edition, 
+  Addison Wesley (2006).
+</li>
+<li id='Suzuki'>
+[2] M. Suzuki, N. Fujinami, T. Fukuoka, T. Watanabe, I. Nakata:
+   SIMD optimization in COINS compiler infrastructure, 
+   Proc. of IWIA 2005, pp. 131-140, (January 2005).
+</li>
+<li id='Iwasawa'>
+[3] K. Iwasawa:
+   Automatic parallelization method of loops by conditional region analysis, 
+   Proc. of the 16th IASTED International Conference Applied Informatics,
+   pp. 310-312, (1998).
+</li>
+<li id='Watanabe'>
+[4] Tan Watanabe, Tetsuro Fujise, Koichiro Mori, Kyoko Iwasawa, Ikuo Nakata:
+Design assists for embedded systems in the COINS Compiler Infrastructure,
+Proc. of IWIA 2007, pp. 60-69 (Jan. 2007).
+</li>
+<li id='Chandra'>
+[5] R. Chandra, L. Dagum, D. Kohr, D. Maydan, J. McDonald, R. Menon: 
+   Parallel Programming in OpenMP, Morgan Kaufmann Publishers (2001).
+</li>
+<li id='Bacon'>
+[6] D. F. Bacon, S. L. Graham, O. J. Sharp:
+   Compiler transformations for high-performance computing,
+   ACM Computing Surveys, Vol. 26, No. 4, pp. 345-420
+   (Dec. 1994).
+</li>
+<li id='Xilinx'>
+[7] Xilinx, Inc., 
+   MicroBlaze Architecture,
+   http://www.xilinx.com/.
+</li>
+<li id='Omni'>
+[8] Omni OpenMP Compiler Project:
+   OpenMP Compiler Omni,
+   http://phase.hpcc.jp/Omni/
+</li>
+
+</ol>
+
+  </body>
+</html>

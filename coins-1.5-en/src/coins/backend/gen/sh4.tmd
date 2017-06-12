@@ -1,0 +1,3595 @@
+;; -----------------------------------------------------------------------
+;;%   Copyright (C) 2007 Association for the COINS Compiler Infrastructure 
+;;%       (Read COPYING for detailed information.)             
+;;------------------------------------------------------------------------ 
+;;-*-Lisp-*-
+;;; Target machine description for SuperH-4
+
+;;  Note
+;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Target machine information
+
+;; Machine types
+(def *type-address* I32)
+(def *type-bool* I32)
+
+;; Tree Rewriting
+
+; CONVUF to CONVSF + ADD
+(defrewrite (CONVUF F64 _)
+  (to (eval "rewriteCONVUF($0, pre)"))
+  (phase early))
+
+; __builtin_va_start: body of va_start
+(defrewrite (CALL (STATIC I32 "__builtin_va_start") (LIST _) (LIST _))
+  (to (SET I32 $2 (ADD I32 (REG I32 "%r14")
+		       (INTCONST I32 (eval "makeVaStart($1)")))))
+  (phase early))
+
+;; alloca: allocate memory on stack
+(defrewrite (CALL (STATIC I32 "alloca") (LIST _) (LIST _))
+  (to
+   (pre (SET I32 (REG I32 "%r15")
+             (SUB I32 (REG I32 "%r15")
+                  (BAND I32 (ADD I32 $1 (INTCONST I32 7)) (INTCONST I32 -8)))))
+   (SET I32 $2 (ADD I32 (REG I32 "%r15") (STATIC I32 ".stackRequired"))))
+  (phase early))
+
+; Rewrite FLOATCONST to static
+(foreach @t (F32 F64)
+   (defrewrite (FLOATCONST @t)
+     (to (MEM @t (STATIC I32 (eval "module.constToData($0)"))))
+     (phase late)))
+
+;;CONVIT
+(defrewrite (CONVIT I32 (CONVSX I64 _))
+  (to (CONVSX I32 $1))
+  (phase late))
+
+(defrewrite (CONVIT I32 (CONVZX I64 _))
+  (to (CONVZX I32 $1))
+  (phase late))
+
+;; CONVFU
+(defrewrite (CONVFU)
+  (to (eval "rewriteCONVFU($0)"))
+  (phase early))
+
+;; MOD
+(foreach @op (MODU MODS)
+ (defrewrite (@op _ _)
+   (to (eval "rewriteMOD($0,pre)"))
+    (phase early)))
+
+;; Translate MUL to shift
+(foreach @t (I32 I16 I8)
+  (defrewrite (MUL @t)
+   (to (norescan (eval "rewriteMUL($0)")))
+    (phase early)))
+
+;; Translate DIV
+(foreach @op (DIVU)
+  (foreach @t (I32 I16 I8)
+    (defrewrite (@op @t)
+     (to (norescan (eval "rewriteDIV($0,pre)")))
+     (phase early))))
+
+;; CONVFU
+;(defrewrite (REG F32)
+;  (to (eval "rewriteCONVFLOAT($0,pre)"))
+;  (phase early))
+
+;; 64 bit Shift
+(defrewrite (LSHS I64 _ _)
+  (cond "$2.type == I64")
+  (to (LSHS I64 $1 (CONVIT I32 $2)))
+  (phase late))
+
+(defrewrite (RSHS I64 _ _)
+  (cond "$2.type == I64")
+  (to (RSHS I64 $1 (CONVIT I32 $2)))
+  (phase late))
+
+(defrewrite (RSHU I64 _ _)
+  (cond "$2.type == I64")
+  (to (RSHU I64 $1 (CONVIT I32 $2)))
+  (phase late))
+
+;; JUMPN
+;(defrewrite (JUMPC)
+;  (to (norescan (eval "rewriteJumpc($0)")))
+;  (phase late) )
+
+
+;; Prologue
+(defrewrite (PROLOGUE)
+  (to (norescan (eval "rewritePrologue($0, post)")))
+  (phase late))
+
+;; Epilogue
+(defrewrite (EPILOGUE)
+  (to (norescan (eval "rewriteEpilogue($0, pre)")))
+  (phase late))
+
+;; Call
+(defrewrite (CALL)
+  (to (eval "rewriteCall($0, pre, post)"))
+  (phase late))
+
+;; JUMPN
+(defrewrite (JUMPN)
+  (to (eval "rewriteJumpn($0, pre)"))
+  (phase late) )
+
+;; Aggregate copy
+(defrewrite (SET)
+  (cond "Type.tag($0.type) == Type.AGGREGATE")
+  (to (eval "rewriteAggregateCopy($0, pre)"))
+  (phase late))
+
+
+;; SYMTAB entry for all registers
+
+(def *real-reg-symtab*
+     (SYMTAB
+      (foreach @n (ll0 ll2 ll4 ll6 ll8 ll10 ll12 ll14)
+        ("%r@n" REG I64 4 0))
+      (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+	("%r@n" REG I32 4 0))
+      (foreach @n (0 2 4 6 8 10 12 14)
+       ("%fr@n" REG F64 4 0))))
+
+(foreach (@l @h)  ((0 1) (2 3) (4 5) (6 7) (8 9) (10 11) (12 13)) 
+     (def (REG I32 "%r@l") (SUBREG I32 (REG I64 "%rll@l") 0))
+     (def (REG I32 "%r@h") (SUBREG I32 (REG I64 "%rll@l") 1)))
+
+;; SYMTAB entry for external library reference used in code generation.
+(def *cmplib-xref-symtab*
+     (SYMTAB
+      ;; void *memcpy(void *to, void *from, size_t n)
+      ("memcpy" STATIC UNKNOWN 4 "text" XREF)))
+
+;; Definition of symbols representing registers.
+;; All general registers available for register allocator.
+(def *reg-I64* ((foreach @n (ll0 ll2 ll4 ll6 ll8 ll10 ll12)
+                       (REG I64 "%r@n"))))
+(def *reg-I32* ( (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13)
+		  (REG I32 "%r@n"))))
+(def *reg-I32-notR0* ((foreach @n (1 2 3 4 5 6 7 8 9 10 11 12 13)
+			       (REG I32 "%r@n"))))
+(def *reg-I32-notR2R3* ((foreach @n (0 1 4 5 6 7 8 9 10 11 12 13)
+			       (REG I32 "%r@n"))))
+(def *reg-I32-notR0R2R3* ((foreach @n (1 4 5 6 7 8 9 10 11 12 13)
+			       (REG I32 "%r@n"))))
+
+(def *reg-I16* ( (foreach @n (0 1 2 3 4 5 6 7)
+			  (SUBREG I16 (REG I32 "%r@n") 0))))
+
+(def *reg-I8* ( (foreach @n (0 1 2 3 4 5 6 7)
+			 (SUBREG I8 (REG I32 "%r@n") 0))))
+
+(def *reg-F32* ( (foreach @n (0 2 4 6 8 10 12 14)
+			  (SUBREG F32 (REG F64 "%fr@n") 0))))
+
+(def *reg-F64* ( (foreach @n (0 2 4 6 8 10 12 14)
+			  (REG F64 "%fr@n"))))
+
+
+
+(def *reg-I32-R01* ((REG I32 "%rll0")))
+(def *reg-I32-R45* ((REG I32 "%rll4")))
+(def *reg-I32-R67* ((REG I32 "%rll6")))
+(def *reg-I32-R0* ((REG I32 "%r0")))
+(def *reg-I32-R1* ((REG I32 "%r1")))
+(def *reg-I32-R2* ((REG I32 "%r2")))
+(def *reg-I32-R3* ((REG I32 "%r3")))
+(def *reg-I32-R4* ((REG I32 "%r4")))
+(def *reg-I32-R5* ((REG I32 "%r5")))
+(def *reg-I32-R6* ((REG I32 "%r6")))
+(def *reg-I32-R7* ((REG I32 "%r7")))
+(def *reg-I32-R8* ((REG I32 "%r8")))
+(def *reg-I32-R9* ((REG I32 "%r9")))
+(def *reg-I32-R10* ((REG I32 "%r10")))
+(def *reg-I32-R11* ((REG I32 "%r11")))
+(def *reg-I32-R12* ((REG I32 "%r12")))
+(def *reg-I32-R13* ((REG I32 "%r13")))
+(def *reg-I32-R14* ((REG I32 "%r14")))
+(def *reg-I32-R15* ((REG I32 "%r15")))
+(def *reg-I32-FR0* ((SUBREG F32 (REG F64 "%fr0") 0)))
+(def *reg-I32-FR1* ((SUBREG F32 (REG F64 "%fr0") 1)))
+(def *reg-I32-FR2* ((SUBREG F32 (REG F64 "%fr2") 0)))
+(def *reg-I32-FR3* ((SUBREG F32 (REG F64 "%fr2") 1)))
+(def *reg-I32-FR4* ((SUBREG F32 (REG F64 "%fr4") 0)))
+(def *reg-I32-FR5* ((SUBREG F32 (REG F64 "%fr4") 1)))
+(def *reg-I32-FR6* ((SUBREG F32 (REG F64 "%fr6") 0)))
+(def *reg-I32-FR7* ((SUBREG F32 (REG F64 "%fr6") 1)))
+(def *reg-I32-FR8* ((SUBREG F32 (REG F64 "%fr8") 0)))
+(def *reg-I32-FR9* ((SUBREG F32 (REG F64 "%fr8") 1)))
+(def *reg-I32-FR10* ((SUBREG F32 (REG F64 "%fr10") 0)))
+(def *reg-I32-FR11* ((SUBREG F32 (REG F64 "%fr10") 1)))
+(def *reg-I32-FR12* ((SUBREG F32 (REG F64 "%fr12") 0)))
+(def *reg-I32-FR13* ((SUBREG F32 (REG F64 "%fr12") 1)))
+(def *reg-I32-FR14* ((SUBREG F32 (REG F64 "%fr14") 0)))
+(def *reg-I32-FR15* ((SUBREG F32 (REG F64 "%fr14") 1)))
+
+;; regset clobbered by CALL
+
+(def *reg-call-clobbers*
+     ((foreach @n (0 1 2 3 4 5 6 7)
+        (REG I32 "%r@n"))
+      (foreach @n (0 2 4 6)
+	 (REG F64 "%fr@n"))))
+
+;; Default register set for each nonterminals:
+(defregset regq *reg-I64*)	;64bit register
+(defregset regl *reg-I32*)	;32bit register, signedness is undefined
+(defregset regh *reg-I16*)	;signed 16bit, upper 16bit are signs
+(defregset regb *reg-I8*)	;signed 8bit, upper 24bit are signs
+
+(defregset regf *reg-F32*)	;float register
+(defregset regd *reg-F64*)	;double register
+
+
+;; Default register set for register variables.
+(defregsetvar
+  (I64 *reg-I64*) (I32 *reg-I32*) (I16 *reg-I16*) (I8 *reg-I8*)
+  (F64 *reg-F64*) (F32 *reg-F32*))
+
+
+;; Start symbol
+(defstart void)
+  
+  
+;; Nonterminals representing registers:
+;;  xreg* can appear on first operand of SET. (l-value)
+;;  reg* appear only on right side
+;; Supposed that all half/byte register variables are signed.
+
+(defrule _xregb (REG I8))
+(defrule _xregb (SUBREG I8))
+(defrule _xregh (REG I16))
+(defrule _xregh (SUBREG I16))
+(defrule _xregl (REG I32))
+(defrule _xregl (SUBREG I32)
+ (cond "$0.isPhysicalRegister()"))
+(defrule _xregq (REG I64))
+(defrule _xregq (SUBREG I64))
+(defrule _xregf (REG F32))
+(defrule _xregf (SUBREG F32))
+(defrule _xregd (REG F64))
+(defrule _xregd (SUBREG F64))
+(defrule xregb _xregb (value (prereg $1)))
+(defrule xregh _xregh (value (prereg $1)))
+(defrule xregl _xregl (value (prereg $1)))
+(defrule xregq _xregq (value (prereg $1)))
+(defrule xregf _xregf (value (prefreg $1 f)))
+(defrule xregd _xregd (value (prefreg $1 d)))
+(defrule regb xregb)
+(defrule regh xregh)
+(defrule regl xregl)
+(defrule regq xregq)
+(defrule regf xregf)
+(defrule regd xregd)
+
+;; Nonterminals representing small integer numbers:
+(defrule con (INTCONST _))
+(defrule _ucon6 (INTCONST _)
+  (cond "0 <= ((LirIconst)$0).unsignedValue() && ((LirIconst)$0).unsignedValue() <= 59"))
+(defrule _ucon8 (INTCONST _)
+  (cond "0 <= ((LirIconst)$0).unsignedValue() && ((LirIconst)$0).unsignedValue() <= 255"))
+(defrule _scon8 (INTCONST _)
+  (cond "-128 <= ((LirIconst)$0).signedValue() && ((LirIconst)$0).signedValue() <= 127"))
+(defrule _con5  (INTCONST _)
+  (cond "0 <= ((LirIconst)$0).signedValue() && ((LirIconst)$0).signedValue() <= 31"))
+
+;; Nonterminals representing large integer numbers:
+(defrule _scon16 (INTCONST _)
+  (cond "(-129 >= ((LirIconst)$0).signedValue() && ((LirIconst)$0).signedValue() >= -32768) || 
+         ( 128 <= ((LirIconst)$0).signedValue() && ((LirIconst)$0).signedValue() <=  32767)"))
+(defrule _scon32 (INTCONST _)
+  (cond "-32769 >= ((LirIconst)$0).signedValue() || ((LirIconst)$0).signedValue() >=  32768"))
+(defrule _scon64 (INTCONST _)
+  (cond "-2147483648 > ((LirIconst)$0).signedValue() || ((LirIconst)$0).signedValue() >  2147483647"))
+
+(defrule _scon _scon8)
+(defrule _scon _scon16)
+(defrule _scon _scon32)
+(defrule _scon _scon64)
+(defrule scon _scon (value (precon $1)))
+
+;; Nonterminals representing integer constants.
+(defrule ucon6 _ucon6 (value (precon $1)))
+(defrule con5 _con5 (value (precon $1)))
+(defrule ucon8 _ucon8 (value (precon $1)))
+(defrule scon8 _scon8 (value (precon $1)))
+
+(defrule sta (STATIC I32))
+(defrule asmcon _scon16)
+(defrule asmcon _scon32)
+(defrule asmcon _scon64)
+(defrule asmcon sta)
+;(defrule asmcon (ADD I32 asmcon scon) (value (+ $1 $2)))
+;(defrule asmcon (SUB I32 asmcon scon) (value (- $1 $2)))
+
+;; Nonterminals representing addressing modes used in load/store.
+(defrule addr regl);  register direct
+(defrule addr scon8); signed immediate constant
+(defrule addr ucon8); Unsigned immediate constant
+(defrule addr2 regl)
+(defrule addr2 (ADD I32 regl ucon6) (value (+ $1 $2)))
+
+
+;; Nonterminal representing addressing mode for subprogram call.
+(defrule fun regl)
+
+;; Nonterminal representing register or small integer constant.
+(defrule rc regl)
+(defrule rc scon8)
+;(defrule rc ucon8)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Instruction definitions
+;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Assignment and load
+;; Constant
+(foreach @s (l h b)
+   (defrule reg@s rc
+     (code (mov $1 (prereg $0)))
+     (cost 1)))
+
+(defrule regl asmcon
+  (code (_set (prereg $0) $1))
+  (cost 1))
+
+(defrule regq rc
+  (code (mov $1 (prereg $0))
+	(mov #0 (addregnumb (prereg $0) 1)))
+  (cost 2))
+
+(defrule regq con
+  (code (_set64 (prereg $0) $1))
+  (cost 3))
+
+; Assign to register
+; [long long] <- [long long]
+; [long ] <- [long ]
+; [short] <- [short]
+; [byte ] <- [byte ]
+; [float] <- [float]
+
+(defrule void (SET I64 xregq regq)
+  (code (mov $2 $1)
+	(mov (addregnumb $2 1) (addregnumb $1 1)))
+  (cost 1))
+
+(foreach (@t @s) ((I32 l) (I16 h) (I8 b))
+  (defrule void (SET @t xreg@s reg@s)
+    (code (mov $2 $1))
+    (cost 1)))
+
+; [long] <- [long long subregister]
+(defrule regl (SUBREG I32 xregq 0)
+  (code (mov $1 (prereg $0)))
+  (cost 1))
+(defrule regl (SUBREG I32 xregq 1)
+  (code (mov (addregnumb $1 1) (prereg $0)))
+  (cost 1))
+
+; [long long subregister] <- [long]
+(defrule void (SET I32 (SUBREG I32 xregq 0) regl)
+  (code (mov $2 $1))
+  (cost 1))
+(defrule void (SET I32 (SUBREG I32 xregq 1) regl)
+  (code (mov $2 (addregnumb $1 1)))
+  (cost 1))
+
+; [long] <- [long long]
+(defrule void (SET I32 regl regq)
+  (code (mov $2 $1))
+  (cost 1))
+; [long long] <- [long]
+(defrule void (SET I32 regq regl)
+  (code (mov $2 $1)
+	(mov #0 (addregnumb $1 1)))
+  (cost 1))
+
+; [float] <- [float]
+(defrule void (SET F32 xregf regf)
+  (cond "equal_register($1,$2)==0")
+  (cost 0))
+(defrule void (SET F64 xregd regd)
+  (cond "equal_register($1,$2)==0")
+  (cost 0))
+
+(defrule void (SET F32 xregf regf)
+  (code (makefcode_arg2 F fmov $2 $1))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+
+; [double] <- [double]
+(defrule void (SET F64 xregd regd)
+  (code (makefcode_arg2 D fmov $2 $1))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+
+; [long] <- [float] Register copy
+(defrule void (SET F32 xregl regf)
+  (code (makefcode_arg2 F flds $2 fpul)
+        (makefcode_arg2 F sts fpul $1))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+(defrule void (SET I32 xregl regf)
+  (code (makefcode_arg2 F flds $2 fpul)
+        (makefcode_arg2 F sts fpul $1))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+
+; [float] <- [long] Register copy
+(defrule void (SET I32 xregf regl)
+  (code (makefcode_arg2 F lds $2 fpul)
+        (makefcode_arg2 F fsts fpul $1))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+
+; [long] <- [double] Register copy
+(defrule void (SET F64 xregl regd)
+  (code (makefcode_arg2 F flds (addregnumb (prefreg $2 f) 0) fpul)
+        (makefcode_arg2 F sts fpul (addregnumb $1 1))
+	(makefcode_arg2 F flds (addregnumb (prefreg $2 f) 1) fpul)
+        (makefcode_arg2 F sts fpul (addregnumb $1 0)))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+
+; [double] <- [long]  Register copy
+(defrule void (SET F64 xregd regl)
+  (code (makefcode_arg2 D lds (addregnumb $2 1) fpul)
+        (makefcode_arg2 D fsts fpul (addregnumb (prefreg $1 f) 0))
+	(makefcode_arg2 D lds (addregnumb $2 0) fpul)
+        (makefcode_arg2 D fsts fpul (addregnumb (prefreg $1 f) 1)))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 4))
+(defrule void (SET F64 xregf regl)
+  (code (makefcode_arg2 F lds (prefreg $2 f) fpul)
+        (makefcode_arg2 F fsts fpul $1)
+	(makefcode_arg2 F lds (addregnumb (prefreg $2 f) 1) fpul)
+        (makefcode_arg2 F fsts fpul (addregnumb $1 1)))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 4))
+
+; [double] <- [float] Conversion
+(defrule void (SET F64 xregd regf)
+  (code (makefcode_arg2 D flds $2 fpul)
+        (makefcode_arg2 D fcnvsd fpul (prefreg $1 d)))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 2))
+
+; [float] <- [double]  Conversion
+(defrule void (SET F32 xregf regd)
+  (code (makefcode_arg2 D fcnvds (prefreg $2 d) fpul)
+        (makefcode_arg2 D fsts fpul $1))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 2))
+
+; [float] <- [double] For assignment
+(defrule void (SET F64 xregf regd)
+  (code (makefcode_arg2 F fmov (prefreg $2 f) $1)
+        (makefcode_arg2 F fmov (prefreg (addregnumb $2 1) f) (addregnumb $1 1)))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 2))
+
+;;;
+;;; Load from memory
+;;;
+; [long long]
+(foreach @n (0 2 4 6 8 10 12); If a register used for accessing memory is 
+                             ; the same to the register to be assigned, 
+        ; then contents of the register is destroied. In this case, 
+        ; it is necessary to use other register.
+  (defrule regq (MEM I64 addr2)
+    (code (mov $1 r@n)
+	  (mov.l (mem r@n) (prereg $0))  
+	  (mov.l (mem (+ r@n 4)) (addregnumb (prereg $0) 1)))
+    (cond "equal_register($0,$1)==0 && equal_register_string($1,\"%r@n\")!=0")
+    (clobber (REG I32 "%r@n"))
+    (cost 3)))
+(defrule regq (MEM I64 addr2)
+  (code (mov.l (mem $1) (prereg $0))  
+	(mov.l (mem (+ $1 4)) (addregnumb (prereg $0) 1)))
+  (cond "equal_register($0,$1)!=0")
+  (cost 2))
+
+(defrule regl (SUBREG I32 (MEM I64 addr2) 1)
+  (code (mov.l (mem $1) (prereg $0)))
+  (cost 1))
+(defrule regl (SUBREG I32 (MEM I64 addr2) 0)
+  (code (mov.l (mem (+ $1 4)) (prereg $0)))
+  (cost 1))
+
+; [long]
+(defrule regl (MEM I32 addr2)
+  (code (mov.l (mem $1) (prereg $0)))
+  (cost 1))
+
+;[short][byte]
+(foreach (@t @code @s) ((I16 mov.w h) (I8 mov.b b))
+  (defrule reg@s (MEM @t addr)
+    (code (@code (mem $1) (prereg $0)))
+    (cost 1)))
+
+;[float]
+(defrule regf (MEM F32 regl)
+  (code (makefcode_arg2 F fmov.s (mem $1) (prereg $0)))
+  (regset ($1 *reg-I32-notR2R3*))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+
+;[double]
+(defrule regd (MEM F64 regl)
+  (code (makefcode_arg2 F mov #4 r0)
+	(makefcode_arg2 F fmov.s (mem $1)        (addregnumb (prefreg (prereg $0) f) 1))
+	(makefcode_arg2 F fmov.s (mem (+ $1 r0)) (addregnumb (prefreg (prereg $0) f) 0)))
+  (regset ($1 *reg-I32-notR0R2R3*))
+  (clobber (REG I32 "%r0"))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 3))
+
+;;;
+;;; Store to memory
+;;;
+; [long long]
+(defrule void (SET I64 (MEM I64 addr2) regq)
+  (code (mov.l (prereg $2) (mem $1))
+	(mov.l (addregnumb (prereg $2) 1) (mem (+ $1 4))))
+  (cost 2))
+
+;[long]
+(defrule void (SET I32 (MEM I32 addr2) regl)
+  (code (mov.l $2 (mem $1)))
+  (cost 1))
+
+;[short][byte]
+(foreach (@t @code @s) ((I16 mov.w h) (I8 mov.b b))
+  (defrule void (SET @t (MEM @t addr) reg@s)
+    (code (@code $2 (mem $1)))
+    (cost 1)))
+
+;[float]
+(defrule void (SET F32 (MEM F32 regl) regf)
+  (code (makefcode_arg2 F fmov.s $2 (mem $1)))
+  (regset ($1 *reg-I32-notR2R3*))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 1))
+
+(defrule void (SET F64 (MEM F64 regl) regd)
+  (code (makefcode_arg2 F mov  #4 r0)
+	(makefcode_arg2 F fmov.s (prefreg (addregnumb $2 1) f) (mem $1))
+	(makefcode_arg2 F fmov.s (prefreg (addregnumb $2 0) f) (mem (+ $1 r0))))
+  (regset ($1 *reg-I32-notR0R2R3*))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (clobber (REG I32 "%r0"))
+  (cost 3))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Jump instruction
+
+(defrule label (LABEL _))
+
+;; Unconditional jump
+(defrule void (JUMP label)
+  (code (makebranch bra $1) (nop))
+  (cost 1))
+
+;; Conditional jump
+;;  Comparison of the type  x == 0
+(foreach (@op @b @j) ((EQ tst bt) (NE tst bf))
+  (defrule void (JUMPC (TST@op I32 regl scon8) label label)
+    (cond "((LirIconst)$2).signedValue()==0")
+    (code (@b $1 $1)
+          (makebranch @j $3))
+    (cost 3)))
+
+;; Comparison with constant
+(defrule void (JUMPC (TSTEQ I32 regl scon8) label label)
+  (code (cmp/eq $2 $1)
+        (makebranch bt $3))
+  (regset ($1 *reg-I32-R0*))
+  (cost 3))
+
+;; Other type of comparison
+(foreach (@op @b @j) ((EQ cmp/eq bt) (NE cmp/eq bf) (GTS cmp/gt bt)  (GES cmp/ge bt))
+  (defrule void (JUMPC (TST@op I32 regl regl) label label)
+    (code (@b $2 $1)
+	  (makebranch @j $3))
+    (cost 3)))
+
+(foreach (@op @b @j) ((LTS cmp/gt bt)  (LES cmp/ge bt))
+  (defrule void (JUMPC (TST@op I32 regl regl) label label)
+    (code (@b $1 $2)
+	  (makebranch @j $3))
+    (cost 3)))
+
+(foreach (@op @b @j) ((LTU cmp/hi bf)  (LEU cmp/hs bf))
+  (defrule void (JUMPC (TST@op I32 regl regl) label label)
+    (code (@b $2 $1)
+	  (@j $3))
+    (cost 3)))
+
+(foreach (@op @b @j) ((GTU cmp/hi bt)  (GEU cmp/hs bt))
+  (defrule void (JUMPC (TST@op I32 regl regl) label label)
+    (code (@b $1 $2)
+	  (makebranch @j $3))
+    (cost 3)))
+
+;;
+;; 64bit comparison and jump
+;;
+(defrule void (JUMPC (TSTEQ I32 regq regq) label label)
+  (code (cmp/eq $1 $2)
+        (makebranch bf $4)
+        (cmp/eq (addregnumb $1 1) (addregnumb $2 1))
+        (makebranch bt $3))
+  (cost 8))
+(defrule void (JUMPC (TSTNE I32 regq regq) label label)
+  (code (cmp/eq $1 $2)
+        (makebranch bf $3)
+        (cmp/eq (addregnumb $1 1) (addregnumb $2 1))
+        (makebranch bf $3))
+  (cost 8))
+(defrule void (JUMPC (TSTGTS I32 regq regq) label label)
+  (code (cmp/gt $2 $1)
+        (makebranch bf $4)
+        (cmp/gt (addregnumb $2 1) (addregnumb $1 1))
+        (makebranch bt $3))
+  (cost 8))
+(defrule void (JUMPC (TSTGES I32 regq regq) label label)
+  (code (cmp/gt $1 $2)
+        (makebranch bf $4)
+        (cmp/gt (addregnumb $1 1) (addregnumb $2 1))
+        (makebranch bt $3))
+  (cost 8))
+(defrule void (JUMPC (TSTLTS I32 regq regq) label label)
+  (code (cmp/gt $1 $2)
+        (makebranch bf $4)
+        (cmp/gt (addregnumb $1 1) (addregnumb $2 1))
+        (makebranch bt $3))
+  (cost 8))
+(defrule void (JUMPC (TSTLES I32 regq regq) label label)
+  (code (cmp/gt $2 $1)
+        (makebranch bf $4)
+        (cmp/gt (addregnumb $2 1) (addregnumb $1 1))
+        (makebranch bt $3))
+  (cost 8))
+
+;;
+;; Branch instruction for floating point registers
+;;
+;;  "equal to" and "greater then" have direct correspondence with SH4 instruction
+(foreach (@op @b @j) ((EQ eq bt) (NE eq bf) (LTS gt bt))
+ (foreach (@type @r @t) ((F32 f F) (F64 d D))
+   (defrule void (JUMPC (TST@op I32 reg@r reg@r) label label)
+    (code (makefcode_arg2 @t fcmp/@b $1 $2) (makebranch @j $3))
+    (cost 3))))
+(foreach (@op @b) ((GTS gt))
+ (foreach (@type @r @t) ((F32 f F) (F64 d D))
+   (defrule void (JUMPC (TST@op I32 reg@r reg@r) label label)
+    (code (makefcode_arg2 @t fcmp/@b $2 $1) (makebranch bt $3))
+    (cost 3))))
+
+;; >= is implementd by using eq and greater.
+(foreach (@op @b) ((LES gt))
+ (foreach (@type @r @t) ((F32 f F) (F64 d D))
+   (defrule void (JUMPC (TST@op I32 reg@r reg@r) label label)
+    (code (makefcode_arg2 @t fcmp/eq $2 $1) (makebranch bt $3) (fcmp/@b $1 $2) (makebranch bt $3) (nop))
+    (cost 3))))
+(foreach (@op @b) ((GES gt))
+ (foreach (@type @r @t) ((F32 f F) (F64 d D))
+   (defrule void (JUMPC (TST@op I32 reg@r reg@r) label label)
+    (code (makefcode_arg2 @t fcmp/eq $2 $1) (makebranch bt $3) (fcmp/@b $2 $1) (makebranch bt $3) (nop))
+    (cost 3))))
+
+;; For unsigned value comparison, get absolute value.
+(foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+  (foreach @m (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+    (defrule void (JUMPC (TSTGTU I32 regf regf) label label)
+    (code (fabs $1) (fabs $2) (fcmp/@b $1 $2) (makebranch bt $3) (nop))
+    (regset ($1 *reg-I32-FR@n*) ($2 *reg-I32-FR@m*))
+    (clobber (REG F32 "%fr@n") (REG F32 "%fr@m"))
+    (cost 3))))
+(foreach @n (0 2 4 6 8 10 12 14)
+  (foreach @m (0 2 4 6 8 10 12 14)
+    (defrule void (JUMPC (TSTLTU I32 regd regd) label label)
+    (code (fabs $1) (fabs $2) (fcmp/@b $1 $2) (makebranch bt $3) (nop))
+    (regset ($1 *reg-I32-FR@n*) ($2 *reg-I32-FR@,*))
+    (clobber (REG F32 "%fr@n") (REG F32 "%fr@m"))
+    (cost 3))))
+;; >= is implemented in the same way as signed comparison using eq.
+(foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+  (foreach @m (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+    (defrule void (JUMPC (TSTGTU I32 regf regf) label label)
+    (code (fabs $1) (fabs $2) (fcmp/eq $1 $2) (makebranch bt $3) (fcmp/@b $1 $2) (makebranch bt $3) (nop))
+    (regset ($1 *reg-I32-FR@n*) ($2 *reg-I32-FR@m*))
+    (clobber (REG F32 "%fr@n") (REG F32 "%fr@m"))
+    (cost 3))))
+(foreach @n (0 2 4 6 8 10 12 14)
+  (foreach @m (0 2 4 6 8 10 12 14)
+    (defrule void (JUMPC (TSTLTU I32 regd regd) label label)
+    (code (fabs $1) (fabs $2) (fcmp/eq $1 $2) (makebranch bt $3) (fcmp/@b $1 $2) (makebranch bt $3) (nop))
+    (regset ($1 *reg-I32-FR@n*) ($2 *reg-I32-FR@m*))
+    (clobber (REG F32 "%fr@n") (REG F32 "%fr@m"))
+    (cost 3))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Arithmetic and logical operations
+; [long long]
+(foreach (@op @code1 @code2) 
+	 ((ADD addv addc) (SUB subv subc) (BAND and and) (BOR or or) (BXOR xor xor))
+	 (defrule regq (@op I64 regq regq)
+	   (code (@code1 $2 (prereg $0)) 
+		 (@code2 (addregnumb $2 1) (addregnumb (prereg $0) 1)))
+	   (eqreg ($1 $0))
+	   (cost 2)))
+(defrule regq (BNOT I64 regq)
+  (code (not (prereg $1))
+	(not (addregnumb $1 1)))
+  (eqreg ($1 $0))
+  (cost 2))
+(defrule regq (NEG I64 regq)
+  (code (neg  (addregnumb (prereg $1) 1))
+        (negc $1))
+  (eqreg ($1 $0))
+  (cost 2))
+
+(foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+ (defrule regq (MUL I64 regq regq)
+   (code (dmuls.l $1 $2)
+	 (sts macl (prereg $0))
+	 (mul.l (addregnumb $1 1)  (addregnumb $2 1))
+	 (sts macl (addregnumb (prereg $0) 1))
+	 (sts mach r@n)
+	 (add r@n (addregnumb (prereg $0) 1)))
+   (eqreg ($1 $0))
+   (regset ($0 *reg-I32-notR@n*))
+   (cost 7)))
+
+(foreach (@op @sign) ((DIVS S) (DIVU U))
+  (defrule regq (@op I64 regq regq)
+    (code (prediv64 @sign (prereg $0) $1 $2))
+    (eqreg ($1 $0))
+    (regset ($0 *reg-I32-R01*)
+	    ($1 *reg-I32-R45*)
+	    ($2 *reg-I32-R67*))
+    (clobber (REG I32 "%r0")
+	     (REG I32 "%r1")
+	     (REG I32 "%r2")
+	     (REG I32 "%r3")
+	     (REG I32 "%r4")
+	     (REG I32 "%r5")
+	     (REG I32 "%r6")
+	     (REG I32 "%r7"))
+    (cost 60)))
+
+; Other operations
+(defrule void (BAND I32 scon8 scon8); and #0,#0 is used as NOP
+  (cond "((LirIconst)$1).signedValue() == 0 && ((LirIconst)$2).signedValue() == 0")
+    (code (nop))
+    (cost 1))
+
+(defrule regl (SUB I32 regl scon)
+  (cond "((LirIconst)$2).signedValue() >= -127 && ((LirIconst)$2).signedValue() <= 128")
+  (code (add (minus $2) (prereg $0)))
+  (eqreg ($1 $0))
+  (cost 1))
+
+(foreach (@op @code) ((ADD add) (SUB sub))
+  (defrule regl (@op I32 regl rc)
+    (code (@code $2 (prereg $0)))
+    (eqreg ($1 $0))
+    (cost 1)))
+(foreach (@op @code) ((BAND and) (BOR or) (BXOR xor))
+  (defrule regl (@op I32 regl scon8)
+    (code (@code $2 (prereg $0)))
+    (regset ($0 *reg-I32-R0*))
+    (eqreg ($1 $0))
+    (cost 1)))
+
+;;;[float]
+(foreach (@op @code) ((ADD fadd) (SUB fsub))
+  (defrule regf (@op F32 regf regf)
+    (code (makefcode_arg2 F @code $2 (prereg $0)))
+    (eqreg ($1 $0))
+    (clobber (REG I32 "%r2") (REG I32 "%r3"))
+    (cost 1)))
+
+;;;[double]
+(foreach (@op @code) ((ADD fadd) (SUB fsub))
+  (defrule regd (@op F64 regd regd)
+    (code (makefcode_arg2 D @code $2 (prefreg (prereg $0) d)))
+    (eqreg ($1 $0))
+    (clobber (REG I32 "%r2") (REG I32 "%r3"))
+    (cost 1)))
+
+(foreach (@op @code) ((BAND and) (BOR or) (BXOR xor))
+  (defrule regl (@op I32 regl regl)
+    (code (@code $2 (prereg $0)))
+    (eqreg ($1 $0))    
+    (cost 1)))
+(foreach (@op @code) ((NEG neg) (BNOT not))
+  (defrule regl (@op I32 regl)
+    (code (@code $1 (prereg $0)))
+    (eqreg ($1 $0))
+    (cost 1)))
+
+;; Shift instruction
+(foreach (@op @code) ((LSHS shll) (RSHU shlr))
+  (defrule regl (@op I32 regl con5)
+    (code (@code (prereg $0)))
+    (cond "((LirIconst)$2).signedValue()==1")
+    (eqreg $1 $0)
+    (cost 1)))
+(foreach (@op @code) ((LSHS shll2) (RSHU shlr2))
+  (defrule regl (@op I32 regl con5)
+    (code (@code (prereg $0)))
+    (cond "((LirIconst)$2).signedValue() == 2")
+    (eqreg $1 $0)
+    (cost 1)))
+(foreach (@op @code @tcode) ((LSHS shll2 shll) (RSHU shlr2 shlr))
+  (defrule regl (@op I32 regl con5)
+    (code (@code (prereg $0)) (@tcode (prereg $0)))
+    (cond "((LirIconst)$2).signedValue() == 3")
+    (eqreg $1 $0)
+    (cost 1)))
+(foreach (@op @code) ((LSHS shll2) (RSHU shlr2))
+  (defrule regl (@op I32 regl con5)
+    (code (@code (prereg $0)) (@code (prereg $0)))
+    (cond "((LirIconst)$2).signedValue() == 4")
+    (eqreg $1 $0)
+    (cost 1)))
+(foreach (@op @code) ((LSHS shll8) (RSHU shlr8))
+  (defrule regl (@op I32 regl con5)
+    (code (@code (prereg $0)))
+    (cond "((LirIconst)$2).signedValue() == 8")
+    (eqreg $1 $0)
+    (cost 1)))
+(foreach (@op @code @tcode) ((LSHS shll8 shll) (RSHU shlr8 shlr))
+  (defrule regl (@op I32 regl con5)
+    (code (@code (prereg $0)) (@tcode (prereg $0)))
+    (cond "((LirIconst)$2).signedValue() == 9")
+    (eqreg $1 $0)
+    (cost 1)))
+(foreach (@op @code) ((LSHS shll16) (RSHU shlr16))
+  (defrule regl (@op I32 regl con5)
+    (code (@code (prereg $0)))
+    (cond "((LirIconst)$2).signedValue() == 16")
+    (eqreg $1 $0)
+    (cost 1)))
+(foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)
+  (foreach (@op @code) ((RSHU shld) (RSHS shad))
+    (defrule regl (@op I32 regl regl)
+      (code (neg $2 $2)
+	    (@code $2 (prereg $0)))
+      (eqreg $1 $0)
+      (regset ($2 *reg-I32-R@n*))
+      (clobber (REG I32 "%r@n"))
+      (cost 2))))
+(foreach (@op @code) ((LSHS shld))
+  (defrule regl (@op I32 regl regl)
+    (code (@code $2 (prereg $0)))
+    (eqreg $1 $0)
+    (cost 1)))
+
+(defrule regl (DIVS I32 regl regl)
+  (code (prediv S (prereg $0) $1 $2))
+  (regset ($0 *reg-I32-R0*)
+	  ($1 *reg-I32-R4*) 
+	  ($2 *reg-I32-R5*))
+  (clobber (REG I32 "%r0")
+	   (REG I32 "%r1")
+	   (REG I32 "%r2")
+	   (REG I32 "%r3")
+	   (REG I32 "%r4")
+	   (REG I32 "%r5")
+	   (REG I32 "%r6")
+           (REG I32 "%r7"))
+  (cost 30))
+
+(defrule regl (DIVU I32 regl regl)
+  (code (prediv U (prereg $0) $1 $2))
+  (regset ($0 *reg-I32-R0*)
+	  ($1 *reg-I32-R4*) 
+	  ($2 *reg-I32-R5*))
+  (clobber (REG I32 "%r0")
+	   (REG I32 "%r1")
+	   (REG I32 "%r2")
+	   (REG I32 "%r3")
+	   (REG I32 "%r4")
+	   (REG I32 "%r5")
+	   (REG I32 "%r6")
+           (REG I32 "%r7"))
+  (cost 30))
+
+(defrule regl (MUL I32 regl regl)
+  (code (mul.l $1 $2)
+	(sts macl (prereg $0)))
+  (cost 3))
+
+(foreach (@op @code) ((ADD fadd) (SUB fsub) (MUL fmul) (DIVS fdiv))
+  ;; ADD, SUB, MUL, DIVS for float/double
+  (foreach (@type @sd @rd @typ) ((F32 f f F) (F64 d d D))
+    (defrule reg@rd (@op @type reg@rd reg@rd)
+      (code (makefcode_arg2 @typ @code $2 (prefreg $0 @rd)))
+      (eqreg ($1 $0))
+      (cost 1))))
+
+(defrule regd (NEG F64 regd)
+  ;; neg for F64
+  (code (fneg (prefreg $0 d)))
+  (eqreg ($1 $0))
+  (cost 1))
+
+(defrule regf (NEG F32 regf)
+  ;; neg for F64
+  (code (fneg (prefreg $0 f)))
+  (eqreg ($1 $0))
+  (cost 1))
+
+;;; Type Conversions
+(defrule regq (CONVSX I64 regl)
+  (code (mov $1 (prereg $0))
+	(mov $1 (addregnumb (prereg $0) 1))
+	(shlr16 (addregnumb (prereg $0) 1))
+	(shlr16 (addregnumb (prereg $0) 1)))
+  (cost 1))
+(defrule regq (CONVSX I64 regh)
+  (code (exts.w $1 (prereg $0))
+	(exts.w $1 (addregnumb (prereg $0) 1))
+	(shlr16 (addregnumb (prereg $0) 1))
+	(shlr16 (addregnumb (prereg $0) 1)))
+  (cost 1))
+(defrule regq (CONVSX I64 regb)
+  (code (exts.b $1 (prereg $0))
+	(exts.b $1 (addregnumb (prereg $0) 1))
+	(shlr16 (addregnumb (prereg $0) 1))
+	(shlr16 (addregnumb (prereg $0) 1)))
+  (cost 1))
+
+(defrule regl (CONVSX I32 regh)
+  (code (exts.w $1 (prereg $0)))
+  (cost 1))
+
+(defrule regl (CONVSX I32 regb)
+  (code (exts.b $1 (prereg $0)))
+  (cost 1))
+
+(defrule regh (CONVSX I16 regb)
+  (code (exts.w $1 (prereg $0))
+	(exts.b (prereg $0) (prereg $0)))
+  (cost 2))
+
+(defrule regq (CONVZX I64 regl)
+  (code (mov $1 (prereg $0))
+	(mov 0 (addregnumb (prereg $0) 1)))
+  (cost 1))
+(defrule regq (CONVZX I64 regh)
+  (code (extu.w $1 (prereg $0))
+	(mov 0 (addregnumb (prereg $0) 1)))
+  (cost 1))
+(defrule regq (CONVZX I64 regb)
+  (code (extu.b $1 (prereg $0))
+	(mov 0 (addregnumb (prereg $0) 1)))
+  (cost 1))
+
+(defrule regl (CONVZX I32 regh)
+  (code (extu.w $1 (prereg $0)))
+  (cost 1))
+
+(defrule regl (CONVZX I32 regb)
+  (code (extu.b $1 (prereg $0)))
+  (cost 1))
+
+(defrule regh (CONVZX I16 regb)
+  (code (extu.w $1 (prereg $0))
+	(extu.b (prereg $0) (prereg $0)))
+  (cost 1))
+
+(defrule regl (CONVIT I32 regq)
+  (code (mov $1 (prereg $0)))
+  (cost 1))
+(defrule regh (CONVIT I16 regq)
+  (code (mov $1 (prereg $0))
+	(shll16 (prereg $0))
+        (shlr16 (prereg $0)))
+  (cost 2))
+(defrule regb (CONVIT I8 regq)
+  (code (mov $1 (prereg $0))
+        (and #255 (prereg $0)))
+  (regset ($0 *reg-I32-R0*))
+  (cost 1))
+
+(defrule regh (CONVIT I16 regl)
+  (code (exts.w $1 $0))
+  (cost 1))
+
+(defrule regb (CONVIT I8 regl)
+  (code (exts.b $1 (prereg $0)))
+  (cost 1))
+
+(defrule regb (CONVIT I8 regh)
+  (code (exts.w $1 (prereg $0))
+	(exts.b (prereg $0) (prereg $0)))
+  (cost 2))
+
+(defrule regd (CONVFX F64 regf)
+  (code (makefcode_arg2 D flds $1 fpul) 
+        (makefcode_arg2 D fcnvsd fpul (prefreg $0 d)))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 2))
+
+(defrule regf (CONVFT F32 regd)
+  (code (makefcode_arg2 D fcnvds $1 fpul) 
+	(makefcode_arg2 D fsts fpul (prefreg $0 f)))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 2))
+
+; [double] to [signed int]
+(defrule regl (CONVFS I32 regd)
+  (code (makefcode_arg2 D ftrc $1 fpul)
+        (sts fpul (prereg $0)))
+  (regset ($0 *reg-I32-notR2R3*))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 2))
+
+; [float] to [signed int]
+(defrule regl (CONVFS I32 regf)
+  (code (makefcode_arg2 F ftrc $1 fpul)
+        (sts fpul (prereg $0)))
+  (regset ($0 *reg-I32-notR2R3*))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 2))
+
+(defrule regf (CONVSF F32 regl)
+  (code (makefcode_arg2 F lds $1 fpul)
+        (makefcode_arg2 F float fpul (prefreg (prereg $0) f)))
+  (regset ($1 *reg-I32-notR2R3*))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 6))
+
+
+(defrule regd (CONVSF F64 regl)
+  (code (makefcode_arg2 D lds $1 fpul)
+        (makefcode_arg2 D float fpul (prefreg (prereg $0) d)))
+  (regset ($1 *reg-I32-notR2R3*))
+  (clobber (REG I32 "%r2") (REG I32 "%r3"))
+  (cost 6))
+
+;; (defcode convuf-...)
+
+
+;; function returning scaler values
+(defrule void (SET I32 regl sta)
+  (code (mov.l (func $2) $1))
+  (cost 1))
+
+(defrule void (CALL fun)
+  (cond "$0.opt.locate(\"&reta\") == null")
+  (code (change_fpscr_arg1 0 jsr (mem $1)) (nop))
+  (cost 2))
+
+;; function returning aggregates
+(defrule void (CALL fun)
+  (cond "$0.opt.locate(\"&reta\") != null")
+  (code (change_fpscr_arg1 0 jsr (mem $1)) (nop))
+  (cost 2))
+
+;; PARALLEL with only one instruction
+(defrule void (PARALLEL void))
+
+%%
+import coins.backend.ana.LoopAnalysis;
+import coins.backend.cfg.BasicBlk;
+import coins.backend.cfg.FlowGraph;
+import coins.backend.sym.Label;
+import coins.backend.lir.LirLabelRef;
+import coins.backend.Storage;
+import coins.backend.ModuleElement;
+import coins.backend.LocalTransformer;
+import coins.backend.Transformer;
+
+%State methods
+
+private boolean is13bitConst(long value) {
+  return -4096L <= value && value < 4096L;
+}
+
+private int equal_register(LirNode p1,LirNode p2){
+  LirSymRef reg1, reg2;
+
+  if (p1.opCode==Op.MEM) p1 = p1.kid(0);
+  if (p2.opCode==Op.MEM) p2 = p2.kid(0);
+
+  if (p1.opCode != Op.REG) return 2;
+  if (p2.opCode != Op.REG) return 2;
+
+  reg1 = (LirSymRef)p1;
+  reg2 = (LirSymRef)p2;
+
+  //if (p1.opCode == Op.REG) reg1 = (LirSymRef)p1;
+  //else                     reg1 = (LirSymRef)(p1.kid(0));
+  //if (p2.opCode == Op.REG) reg2 = (LirSymRef)p2;
+  //else                     reg2 = (LirSymRef)(p2.kid(0));
+
+  if (reg1.symbol.name == reg2.symbol.name) return 0;
+
+  return 1;
+
+}
+
+private int equal_register_string(LirNode p1,String p2){
+  LirSymRef reg1;
+
+  if (p1.opCode == Op.MEM) p1 = p1.kid(0);
+  if (p1.opCode != Op.REG) return 2;
+
+  reg1 = (LirSymRef)p1;
+  if (reg1.symbol.name.compareTo(p2)==0){
+    return 0;
+  }
+  return 1;
+}
+
+private boolean fpscr_cmp(String s){
+  if ((s.charAt(0) == 'F' && fpscr_ctrl==1) ||
+      (s.charAt(0) == 'D' && fpscr_ctrl==2)){
+    return true;
+  }
+  return false;
+}
+
+private boolean dbug_fpscr_cmp(String s,LirNode p){
+  if ((s.charAt(0) == 'F' && fpscr_ctrl==1) ||
+      (s.charAt(0) == 'D' && fpscr_ctrl==2)){
+    return true;
+  }
+  return false;
+}
+
+private boolean unalignedDouble(LirNode p) {
+  if (p.opCode == Op.ADD
+      && p.kid(0).opCode == Op.REG
+      && p.kid(1).opCode == Op.INTCONST) {
+    LirSymRef reg = (LirSymRef)p.kid(0);
+    if (reg.symbol.name.equals("%r14") || reg.symbol.name.equals("%r15"))
+      return (((LirIconst)p.kid(1)).value % 8 != 0);
+  }
+  return false;
+}
+
+%CodeGenerator methods
+/* FPSCRE control */
+static int fpscr_ctrl;
+
+/* Code size in a block */
+static int code_size_inblock;
+
+int frameSize(Function f) {
+  int loc = 0;
+  int off = 0;
+  for (BiLink p = f.localSymtab.symbols().first(); !p.atEnd(); p = p.next()) {
+    SymAuto var = (SymAuto)p.elem();
+    if (var.storage == Storage.FRAME) {
+      int diff = var.offset() - off;
+      off = var.offset();
+
+      if (diff%4!=0) loc = loc + (diff/4)*4-4;
+      else           loc = loc + diff;
+    }
+  }
+  return -loc;
+}
+
+int getOffset(Function f, String s) {
+  int loc = 0;
+  int off = 0;
+  for (BiLink p = f.localSymtab.symbols().first(); !p.atEnd(); p = p.next()) {
+    SymAuto var = (SymAuto)p.elem();
+    if (var.storage == Storage.FRAME) {
+      int diff = var.offset() - off;
+      String s2 = p.elem().toString();
+      off = var.offset();
+
+      if (diff%4!=0) loc = loc + (diff/4)*4-4;
+      else           loc = loc + diff;
+      if (s.compareTo(s2)==0) return loc;
+    }
+  }
+  return 0;
+}
+
+
+int getStringCodeSize(String line)
+{
+  int i, size = 0;
+  String each_line[] = line.split("\n");
+
+  for (i = 0 ; i < each_line.length ; i++) {
+    if (each_line[i].matches(".*:.*"))            size += 0;//Label
+    else if (each_line[i].matches(".*[.]long.*")) size += 4;//long
+    else                                          size += 2;// otehrs
+  }
+ return size;
+}
+
+// Override for code splitting.
+String emitObjectX(Object x, boolean top) {
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  int pos, size;
+  String line = "", s_line="", l_line="";
+  int line_length;
+  String  tmp_line;
+
+  if (x instanceof ImList){
+    line = emitList((ImList)x, top);// Emit temporally.
+
+    if ((((ImList)x).elem()).toString().compareTo("makebranch")==0){
+      String op = ((ImList)x).elem2nd().toString();
+      String target = ((ImList)x).elem3rd().toString();
+      int jadr = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;// from-position of jump.
+      int tadr = at.pre_cana.seekLabelAddress(target);// target label address
+      boolean jump_rewriteFlag = false;
+
+      if (at.rewriteJumpEnable){// See if replacement of jump is necessary or not.
+        // When jump-target is too far.
+        if (op.compareTo("bra")==0 && Math.abs(tadr - jadr)>=4080){
+          Label lb = func.newLabel();
+          String def_name = lb.name();
+          def_name = at.regConstLabel(def_name, ".long",target);
+          line = "\tmov.l\tr0,@-r15\n" + 
+                 "\tmov.l\t" + def_name + ",r0\n" +
+                 "\tjmp\t@r0\n" +
+                 "\tmov.l\t@r15+,r0";
+          jump_rewriteFlag = true;
+        }
+        else if (op.compareTo("bt")==0 && Math.abs(tadr - jadr)>=250){
+          Label lb = func.newLabel();
+          String def_name = lb.name();
+          def_name = at.regConstLabel(def_name, ".long",target);
+          line = "\tbf\t.LCT" +  at.label_count_for_cs + "\n" +
+                 "\tmov.l\tr0,@-r15\n" + 
+                 "\tmov.l\t" + def_name + ",r0\n" +
+                 "\tjmp\t@r0\n" +
+                 "\tmov.l\t@r15+,r0\n" +
+                 ".LCT" + at.label_count_for_cs + ":";
+          at.label_count_for_cs += 1;
+          jump_rewriteFlag = true;
+        }
+        else if (op.compareTo("bf")==0 && Math.abs(tadr - jadr)>=250){
+          Label lb = func.newLabel();
+          String def_name = lb.name();
+          def_name = at.regConstLabel(def_name, ".long",target);
+          line = "\tbt\t.LCT" +  at.label_count_for_cs + "\n" +
+                 "\tmov.l\tr0,@-r15\n" + 
+                 "\tmov.l\t" + def_name + ",r0\n" +
+                 "\tjmp\t@r0\n" +
+                 "\tmov.l\t@r15+,r0\n" +
+                 ".LCT" + at.label_count_for_cs + ":";
+          at.label_count_for_cs += 1;
+          jump_rewriteFlag = true;
+        }
+        else line = emitList((ImList)x, top);
+
+        if (jump_rewriteFlag){
+          // Record the position of instruction because label is
+          // required to get constant data.
+          at.cana.setReqLabOpAddress(at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock,".long");
+        }
+      }// at.rewriteJumpEnable 
+      else line = emitList((ImList)x, top);
+    }
+  }
+  else if (x instanceof LirNode){ // obsoleted
+    line = emitLir((LirNode)x);
+  }
+  else{
+    line = x.toString();
+  }
+
+  // See the size of code emitted.
+  int tmp_code_size = code_size_inblock;
+  size = 0;
+  if (top){
+    size = getStringCodeSize(line);
+  }
+
+  // See the emitted constant label.
+  boolean  sflag, lflag;
+  String nbName = at.cana.getNowBlock();
+  pos = code_size_inblock + at.cana.seekLabelAddress(nbName);
+  sflag = (top && size > 0 && at.cana.getReqLabOpAddress(".short") > -1 && at.outLabelEnable==true &&
+           (pos - at.cana.getReqLabOpAddress(".short")) > (496-size));
+
+  // Emit.
+  tmp_line = "";
+  if (sflag){
+     at.cana.clearReqLabOpAddress(".short");
+     tmp_line += at.outLabel(label_short_const);
+  }
+  size = 0;
+  if (top){
+    size = getStringCodeSize(line+tmp_line);
+  }
+  lflag= (top && size > 0 && at.cana.getReqLabOpAddress(".long") > -1 && at.outLabelEnable==true &&
+	      (pos - at.cana.getReqLabOpAddress(".long")) > (1004-(label_long_const.dataSize)/2-size));
+  if (lflag){
+      at.cana.clearReqLabOpAddress(".long");
+      tmp_line += at.outLabel(label_long_const);
+  }
+  if (sflag || lflag){
+     line += "\n\tbra\t.LCS"+(at.label_count_for_cs+1)+"\n\tnop\n";
+     line += tmp_line;
+     line += ".LCS"+(at.label_count_for_cs+1)+":\n";
+     at.label_count_for_cs += 1;
+  }
+  // Recompute the size of code.
+  code_size_inblock = tmp_code_size;
+  size = 0;
+  if (top){
+    code_size_inblock += getStringCodeSize(line);    
+  }
+
+  return line;
+}
+
+/* Class for label definition */
+static class LabelRegister{
+  String label_name;
+  String type;
+  String value;
+
+  // If a label can be added to an object, then return LabelRegister
+  // after the addition of the label.
+  // Return null if label can not be added.
+  // p - array of objects for which label is to be added
+  // x - index of addition point 
+  // name - label name
+  // type - tyoe of object data (long, short, etc. )
+  // value - object data
+  static String addLabel(RegistLabel p, String name, String type, String value){
+    LabelRegister ret[] = new LabelRegister[p.count+1];
+    String     gl[];
+    int        i;
+    int        flag;
+
+    // Do not add if the label already appeared.
+    flag = -1;
+    for (i = 0 ; i < p.count ; i++) {
+      ret[i] = p.regist_label[i];
+      if (ret[i].value.compareTo(value)==0) flag = i;
+    }
+    if (flag>=0) return ret[flag].label_name;
+    
+    //  If the same name is used in other subprogram as a label,
+    //  then append a number to the label name.
+    gl = new String[regist_global_label_count+1];
+    for (i = 0 ; i < regist_global_label_count ; i++) {
+      gl[i] = regist_global_label[i];
+      if (regist_global_label[i].compareTo(name)==0){
+        name = name + (regist_global_label_count +1);
+      }
+    }
+    gl[regist_global_label_count] = name;
+    regist_global_label = gl;
+    regist_global_label_count += 1;
+    
+    ret[p.count] = new LabelRegister();
+    ret[p.count].label_name = name;
+    ret[p.count].type = type;
+    ret[p.count].value = value;
+    
+    if (type.compareTo(".long")==0)       p.dataSize += 4;
+    else if (type.compareTo(".short")==0) p.dataSize += 2;
+
+    p.regist_label = ret;
+    p.count += 1;
+    return name;
+  }
+
+  static String getType(String x){
+    String ret;
+    long val;
+    val = Long.parseLong(x);
+    ret = ".byte";
+    if ((val >= 128 && val <= 32767) || 
+        (val <= -129 && val >= -32768)) {
+      ret = ".short";
+    }
+    else if (val >= 32768 || val <= -32769){
+      ret = ".long";
+    }
+
+    return ret;    
+  }
+
+  static String getOp(String x){
+    String ret;
+    long val;
+    val = Long.parseLong(x);
+    ret = "\tmov.b";
+    if ((val >= 128 && val <= 32767) || 
+        (val <= -129 && val >= -32768)) {
+      ret = "\tmov.w";
+    }
+    if (val >= 32768 || val <= -32769){
+      ret = "\tmov.l";
+    }
+    
+    return ret;    
+  }
+}
+static int stackshift = 0;
+
+// Class to register a label appeared.
+static class RegistLabel{
+  int count;
+  int dataSize;// Size of constant date to be emitted.
+               // By the emittion of 4 byte constant, other constants
+               // located from there becomes 2 byte far because the size
+               // of each instruction is 2 bytes.
+               // This is used for that processing.
+  LabelRegister regist_label[];
+
+  RegistLabel(){
+    count = 0;
+    dataSize = 0;
+    regist_label = null;
+  }
+}
+
+static RegistLabel label_long_const = new RegistLabel();// for long constants
+static RegistLabel label_short_const = new RegistLabel();// for short constants
+
+// Array of character strings to record the name of label that has appeared.
+static String regist_global_label[];
+static int regist_global_label_count = 0;
+
+ImList regCallClobbers = $def(*reg-call-clobbers*);
+
+// Class for processing information required for code split analysis.
+//   What is a label ?
+//     Label represents the position of constant data or the address of block.
+//     The representation if PC-relative.
+class CodeAnalysisInfo{
+  private String  nowBlockName;// name of the current block
+  private int     short_pos;// label position of short type
+  private int     long_pos; // label position of long type
+
+  // variables used to represent label name and jump position 
+  private int    lab_count;
+  private String lab_name[];
+  private int    lab_pos[];
+  private int    lab_data_size[];
+  int    jmp_count;
+  private int    jmp_hash[];
+  private int    jmp_pos[];
+
+  int final_code_size;
+  int stable_code_size;
+
+  CodeAnalysisInfo(){
+    lab_count = 0;
+    lab_name = new String[lab_count];
+    lab_pos  = new int[lab_count];
+
+    jmp_count = 0;
+    jmp_hash = new int[jmp_count];
+    jmp_pos  = new int[jmp_count];
+
+    short_pos = -1;
+    long_pos = -1;
+    stable_code_size = 0;
+    nowBlockName = null;
+  }
+  //***************************************************** block processing
+  // Record the name of current block under emittion.
+  public void setNowBlock(String name)
+  {
+    nowBlockName = name;
+  }
+  // Return the name of the current block under emittion.
+  public String getNowBlock()
+  {
+     return nowBlockName;
+  }
+  // Set the address of instruction that requires label.
+  void setReqLabOpAddress(int pos, String type)//setLabel
+  {
+    if (getReqLabOpAddress(type)>-1) return;
+    if (type.compareTo(".short")==0) short_pos = pos;
+    if (type.compareTo(".long")==0) long_pos = pos;
+    return;
+  }
+  // Get the address of instruction that requires label.
+  int  getReqLabOpAddress(String type)//getLabelAddress
+  {
+    if (type.compareTo(".short")==0) return short_pos;
+    if (type.compareTo(".long")==0)  return long_pos;
+    return -1;
+  }
+  // Initiate the address of instruction that requires label.
+  void clearReqLabOpAddress(String type)//clearLabel
+  {
+    if (type.compareTo(".short")==0) short_pos = -1;
+    if (type.compareTo(".long")==0)  long_pos = -1;
+  }
+  //***************************************************** jump processing
+  // Record the position of jump
+  public void registJump(ImList lst, int pos){
+    int i;
+    int  tmp_hash[] = new int[jmp_count+1];
+    int  tmp_pos[]  = new int[jmp_count+1];
+    for (i = 0 ; i < jmp_count ; i++){
+      tmp_hash[i] = jmp_hash[i];
+      tmp_pos[i] = jmp_pos[i];
+    }
+    tmp_hash[jmp_count] = lst.hashCode();
+    tmp_pos[jmp_count] = pos;
+    jmp_hash = tmp_hash;
+    jmp_pos = tmp_pos;
+
+    jmp_count += 1;
+  }
+  // Return the position of jump
+  public int seekJumpAddress(ImList lst){
+    int i;
+    for (i = 0 ; i < jmp_count ; i++){
+      if (jmp_hash[i] == lst.hashCode()) return jmp_pos[i];
+    }
+    return -1;
+  }
+  //********************************* process of relations between labal and 
+  //                                  constant/block
+  // Register a label (record its block and code position)
+  public void registLabel(String name, int pos){
+    int i;
+    String tmp_name[] = new String[lab_count+1];
+    int    tmp_pos[]  = new int[lab_count+1];
+    int    tmp_data_size[] = new int[lab_count+1];
+    for (i = 0 ; i < lab_count ; i++){
+      tmp_name[i] = lab_name[i];
+      tmp_pos[i] = lab_pos[i];
+      tmp_data_size[i] = lab_data_size[i];
+    }
+    tmp_name[lab_count] = name;
+    tmp_pos[lab_count] = pos;
+    tmp_data_size[i] = 0;
+    lab_name = tmp_name;
+    lab_pos = tmp_pos;
+    lab_data_size = tmp_data_size;
+    lab_count += 1;
+  }
+  // Return the position of label
+  public int seekLabelAddress(String name){
+    int i;
+    if (name==null) return -1;
+    for (i = 0 ; i < lab_count ; i++){
+      if (name.compareTo(lab_name[i])==0) return lab_pos[i];
+    }
+    return -1;
+  }
+  // Return the size of constants required in the block specified.
+  public int getLabelDataSize(String name){
+    int i, colon = name.indexOf(':');
+    for (i = 0 ; i < lab_count ; i++){
+      if (name.compareTo(lab_name[i])==0) return lab_data_size[i];
+    }
+    return -1;
+  }
+  // Return the position of the label located next to the specified label.
+  public int seekNextLabelAddress(String name){
+    int i, colon = name.indexOf(':');
+    for (i = 0 ; i < lab_count ; i++){
+      if (name.compareTo(lab_name[i])==0){
+        if ((i+1)==lab_count) return -1;
+        return lab_pos[i+1];
+      }
+    }
+    return -1;
+  }
+  // Return the name of the label located next to the specified label.
+  public String seekNextLabelName(String name){
+    int i, colon = name.indexOf(':');
+    for (i = 0 ; i < lab_count ; i++){
+      if (name.compareTo(lab_name[i])==0){
+        if ((i+1)==lab_count) return null;
+        return lab_name[i+1];
+      }
+    }
+    return null;
+  }
+}
+
+//
+// Code generation methods used to compute code size.
+//
+BiList preBuildCode(Function f) {
+  initLabeling(lir);
+  BiList asmList = new BiList();
+  BiList list = f.lirList();
+    for (BiLink q = list.first(); !q.atEnd(); q = q.next()) {
+      LirNode ins = (LirNode)q.elem();
+      switch (ins.opCode) {
+      case Op.DEFLABEL:
+        String lab_name = ((Label)( ((LirLabelRef)(ins.kid(0))).label ) ).name();
+        asmList.add(ImList.list("deflabel", lab_name));
+	break;
+      case Op.PROLOGUE:
+        asmList.add(ImList.list("prologue", func));
+        break;
+
+      case Op.EPILOGUE:
+        String rettype = "normal";
+        if (ins.nKids() >= 2 && Type.tag(ins.kid(1).type) == Type.AGGREGATE)
+          rettype = "aggregate";
+        asmList.add(ImList.list("epilogue", func, rettype));
+        break;
+
+      case Op.LINE:
+        asmList.add(ImList.list("line", ins.kid(0)));
+        break;
+
+      default:
+      try {
+        // If PARALLEL has only one operand, peel it
+        if (ins.opCode == Op.PARALLEL && nActualOperands(ins) <= 1) ins = ins.kid(0);
+
+        labelTree(ins);
+        Match tree = reduce(ins, startNT()).skipNonOpRules();
+        tree = tree.removeSet(false);
+        ImList codeList = tree.quiltCode();
+        for (ImList s = codeList; !s.atEnd(); s = s.next()) {
+          asmList.add(s.elem());
+        }
+
+      } catch(NoMatchException e) {
+        debOut.println();
+        debOut.println("No Match for " + ins);
+        debOut.println("State:");
+        printLabel(ins, "");
+        throw new Error("compilation aborted.");
+      }
+      break;
+    }
+  }
+
+  return asmList;
+}
+
+// Methods to analyse code size.
+// Get the position of label and rewrite jump instruction if required
+// using code information previously obtained.
+static BiList list;
+boolean codeSizeAnalysis(Function f) {
+  SH4Attr  at = (SH4Attr)getFunctionAttr(f);
+
+  // Make instruction list only for the first time.
+  // It is not good to change the instruction list for each scan 
+  // because hash value is used in comparing jump instruction.
+  // It is unnecessary to change the instruction list.
+  if (at.pass==0) list = preBuildCode(f);
+
+  // Replace old code analysis information by new one.
+  if (at.cana==null) at.pre_cana = new CodeAnalysisInfo();
+  else               at.pre_cana = at.cana;
+  at.cana = new CodeAnalysisInfo(); 
+
+  // Start the analysis
+  int i, size;
+  size = 0;
+  for (BiLink p = list.first() ; !p.atEnd(); p = p.next()) {
+    String sOp = (String)((ImList)p.elem()).elem();
+    if (sOp.compareTo("prologue")==0){
+      size = 0;
+      code_size_inblock = 0;
+
+      String sTarget = "pro:"+((ImList)p.elem()).elem2nd().toString();
+      at.cana.registLabel(sTarget, size);
+      at.cana.setNowBlock(sTarget);
+
+      int  stack_size = frameSize(f) + at.stackRequired;
+      if (stack_size > 128){
+	String name, lab , type, op;
+       
+	Label lb = func.newLabel();
+	lab = lb.name();
+	type = LabelRegister.getType(String.valueOf(size));
+	op = LabelRegister.getOp(String.valueOf(size));
+       
+	name = at.regConstLabel(lab, type, String.valueOf(size));
+	// Record the position of instruction because a label is required
+        // to get constant data.
+	at.cana.setReqLabOpAddress(0,type);
+      }
+      continue;// Attention !
+               // If emitObjectX is executed without writing continue statement,
+               // codeSizeAnalysis() will be recursively called.
+    }
+    if (sOp.compareTo("deflabel")==0) {
+      String sTarget = ((ImList)p.elem()).elem2nd().toString();
+      at.cana.registLabel(sTarget, size);//at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock);
+      at.cana.setNowBlock(sTarget);
+      code_size_inblock = 0;
+      fpscr_ctrl = 0;
+      continue;
+    }
+    String line = emitObjectX(p.elem(), true);
+    // Compute the size of code.
+    int pos = 0;
+    String each_line[] = line.split("\n");
+
+    for (i = 0 ; i < each_line.length ; i++) {
+      if (each_line[i].matches(".*:.*"))            pos += 0;//Label
+      else if (each_line[i].matches(".*[.]long.*")) pos += 4;//long
+      else                                          pos += 2;// others
+    }
+    size += pos;
+
+    if (sOp.compareTo("epilogue")==0){// EPILOGUE
+      String sTarget = "epi:" + ((ImList)p.elem()).elem2nd().toString();
+      at.cana.registLabel(sTarget, size);
+      continue;
+    }
+  }
+
+  // Analyze the depth of nest.
+//  at.lpa = (LoopAnalysis)func.require(LoopAnalysis.analyzer);
+//  for (i = 0 ; i < at.lpa.loopHeader.length ; i++){
+//    if (at.lpa.isLoop[i]){
+//      for (BiLink insp = at.lpa.kids[i].first(); !insp.atEnd(); insp = insp.next()) {
+//        BasicBlk blk = (BasicBlk)insp.elem();
+//        //System.out.println(at.lpa.nestLevel[i] +":" + blk.label());
+//      }
+//    }
+//  }
+  at.cana.final_code_size = size;
+
+  if (at.cana.final_code_size<at.pre_cana.final_code_size){
+    at.cana = at.pre_cana;
+  }
+  if (at.cana.final_code_size==at.pre_cana.final_code_size){
+    at.cana.stable_code_size = at.pre_cana.stable_code_size + 1;
+  }
+  else at.cana.stable_code_size = 0;
+
+  if (at.cana.stable_code_size==2) return true;
+  return false;
+}
+
+/** Sparc's function attribute **/
+static class SH4Attr extends FunctionAttr {
+
+  /** Maximum stack space used by call. **/
+  int    stackRequired;
+  int    stackShift;
+  int    callNumber;
+  int    funcNumber;// Number of user-functions appeared.
+  int    use_r8, use_r9, use_r10, use_r11, use_r12, use_r13;
+  int    use_fr8, use_fr10, use_fr12, use_fr14;
+  
+  boolean varArgFunction;
+  boolean preBuildFlag;
+  private int data_size;// Size of data representing constants and function addresses.
+  private int code_size;// Size of instruction part.
+  static int DIVSUSE = 0;
+  static int DIVUUSE = 0;
+  static int DIVS64USE = 0;
+  static int DIVU64USE = 0;
+  static int emit_func_count = 0;
+
+  // Name of user-function
+  private String  ufunc_name[];
+  private int     ufunc_count = 0;
+  void registUsrFunction(String s){
+    int i;
+    String tmp[];
+    for (i = 0 ; i < ufunc_count ; i++){// The case where the same one appeared.
+      if (ufunc_name[i].compareTo(s)==0) return;
+    }
+    tmp = new String [ufunc_count + 1];
+    for (i = 0 ; i < ufunc_count ; i++){
+      tmp[i] = ufunc_name[i];
+    }
+    tmp[ufunc_count] = s;
+    ufunc_count += 1;
+    ufunc_name = tmp;
+  }
+  boolean isRegistUsrFunction(String s){
+    int i;
+    for (i = 0 ; i < ufunc_count ; i++){
+      if (ufunc_name[i].compareTo(s)==0) return true;
+    }
+    return false;
+  }
+
+  // Variables and methods used for code splitting
+  private LoopAnalysis lpa;// Loop analysis
+  public int pass;
+  public static CodeAnalysisInfo cana; // Code analysis
+  public static CodeAnalysisInfo pre_cana; // Code analysis
+
+  SH4Attr(Function func) {
+    super(func);
+    cana = null;
+    pre_cana = null;
+    stackRequired = 0;
+    callNumber = 0;
+    stackShift = 0;
+    funcNumber = 0;
+    code_size = 0;
+    data_size = 0;
+    label_count_for_cs = 0;
+    shiftCount = 0;
+    pass = 0;
+  }
+ 
+  // Determine if this LirNode is floating point instruction or not.
+  //  return 1 if float, 2 if double, 0 if not floating point
+  public int isFloatingOperation(LirNode node){
+    int ret = 0;
+    if (node.type == Type.type(Type.FLOAT,32)) ret=1;
+    if (node.type == Type.type(Type.FLOAT,64)) ret=2;
+    
+    if(ret > 0){
+      if (node.opCode == Op.SET) return ret;
+      if (node.opCode == Op.ADD) return ret;
+      if (node.opCode == Op.SUB) return ret;
+    }
+    return 0;
+  }
+
+  // Number of calls for the function.
+  // callNumber holds the result.
+  public void getFunctionCount(){
+    BiList list = func.lirList(); 
+    for (BiLink q = list.first(); !q.atEnd(); q = q.next()) {
+      LirNode ins = (LirNode)q.elem();
+      if (ins.opCode == Op.CALL) callNumber += 1;
+      if (ins.opCode == Op.DIVS) callNumber += 1;
+      if (ins.opCode == Op.DIVU) callNumber += 1;
+
+      callNumber += recallFunc(ins);
+    }
+  }
+  private int recallFunc(LirNode node)// recursive method.
+  {
+    LirNode q;
+    int     i , kids, count = 0;
+    if (node == null) return count;
+    kids = node.nKids();
+    for (i = 0 ; i < kids ; i++){
+      q = node.kid(i);
+      if (q == null) break;
+      if (q.opCode == Op.CALL) count += 1;
+      if (q.opCode == Op.DIVS) count += 1;
+      if (q.opCode == Op.DIVU) count += 1;
+
+      count += recallFunc(q);
+    }
+    return count;
+  }
+
+  // Count the number of user-functions in the program.
+  // funcNumber holds the result.
+  public void getFunctionNumber(){
+    for (BiLink q = func.module.elements.first(); !q.atEnd(); q = q.next()) {
+      ModuleElement ins = (ModuleElement)q.elem();
+
+      if (ins.getClass().getName().compareTo("coins.backend.Function")==0) {
+        registUsrFunction(ins.symbol.name);
+        funcNumber += 1;
+      }
+    }
+  }
+
+  // Register a constant data and
+  // compute the size of constant data required in each block.
+  public String regConstLabel(String name, String type, String value){
+    String ret = "Unknown";
+    if (type.compareTo(".short")==0) {
+        ret = LabelRegister.addLabel(label_short_const, name, type, value);
+    }
+    if (type.compareTo(".long")==0) {
+        ret = LabelRegister.addLabel(label_long_const, name, type, value);
+    }
+    return ret;
+  }
+  // Emit the constant data corresponding to the labels registered.
+  // blockName -  name of the block located immediately after the position of emit.
+  private int    shiftAddress[];// Hold the address position for emitted data.
+                                // Instructions in the succeeding part are 
+                                // shifted by the length of the data. 
+                                // It is necessary to adjust it.
+  private int    shiftCount;//
+  private int    label_count_for_cs;// Count thte number of jump labels 
+                                    // used in code splitting.
+  boolean        outLabelEnable;    // Label emittion is permitted or not.
+  boolean        rewriteJumpEnable;// Jump instruction should be changed or not.
+
+  public String outLabel(RegistLabel rl)
+  {
+    String ret="";
+    int i;
+    if (outLabelEnable==false) return ret;
+    if (rl.count > 0){// Emit label for constant value.
+      if ((rl.regist_label[0].type).indexOf(".short")>=0) ret = ret + "\t.align\t1\n";
+      if ((rl.regist_label[0].type).indexOf(".long")>=0)  ret = ret + "\t.align\t2\n";
+
+      for (i = 0 ; i < rl.count ; i++){ 
+         ret = ret + rl.regist_label[i].label_name + ":\n\t" 
+                   + rl.regist_label[i].type + "\t"
+                   + rl.regist_label[i].value + "\n";
+      }
+      rl.count = 0;
+      rl.dataSize = 0;
+    }
+    return ret;
+  }
+
+  public String getLabel(RegistLabel rl)
+  {
+    String ret="";
+    int i;
+    if (outLabelEnable==false) return ret;
+    if (rl.count > 0){// Emit label for constant value.
+      if ((rl.regist_label[0].type).indexOf(".short")>=0) ret = ret + "\t.align\t1\n";
+      if ((rl.regist_label[0].type).indexOf(".long")>=0)  ret = ret + "\t.align\t2\n";
+
+      for (i = 0 ; i < rl.count ; i++){ 
+         ret = ret + rl.regist_label[i].label_name + ":\n\t" 
+                   + rl.regist_label[i].type + "\t"
+                   + rl.regist_label[i].value + "\n";
+      }
+    }
+    return ret;
+  }
+
+  // Check if registers to be saved are used or not.
+  // If used, set the value of use_rx to 1.
+  public void getReserveRegisterInfo(){
+    BiList list = func.lirList(); 
+    use_r8=use_r9=use_r10=use_r11=use_r12=use_r13=0;
+    use_fr8=use_fr10=use_fr12=use_fr14=0;
+    stackShift=1;
+    for (BiLink q = list.first(); !q.atEnd(); q = q.next()) {
+      LirNode ins = (LirNode)q.elem();
+      int     i , n;
+      n = ins.nKids();
+      for (i = 0 ; i < n ; i++){
+        if (ins.kid(i).opCode == Op.REG){
+          LirSymRef reg2 = (LirSymRef)ins.kid(i);
+          if (reg2.symbol.name == "%r8") {use_r8=1;}
+          if (reg2.symbol.name == "%r9") {use_r9=1;}
+          if (reg2.symbol.name == "%r10") {use_r10=1;}
+          if (reg2.symbol.name == "%r11") {use_r11=1;}
+          if (reg2.symbol.name == "%r12") {use_r12=1;}
+          if (reg2.symbol.name == "%r13") {use_r13=1;}
+          if (reg2.symbol.name == "%fr8") {use_fr8=1;}
+          if (reg2.symbol.name == "%fr10") {use_fr10=1;}
+          if (reg2.symbol.name == "%fr12") {use_fr12=1;}
+          if (reg2.symbol.name == "%fr14") {use_fr14=1;}
+        }
+      }
+    }
+  }
+}
+
+FunctionAttr newFunctionAttr(Function func) {
+  return new SH4Attr(func);
+}
+                                                             
+static final int I32 = Type.type(Type.INT, 32);
+static final int I16 = Type.type(Type.INT, 16);
+static final int I8 = Type.type(Type.INT, 8);
+static final int F64 = Type.type(Type.FLOAT, 64);
+static final int F32 = Type.type(Type.FLOAT, 32);
+
+/** Return offset for va_start position. **/
+int makeVaStart(LirNode arg) {
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+  at.varArgFunction = true;
+
+  LirNode node = null;
+  for (BiLink p = func.firstInstrList().first(); !p.atEnd(); p = p.next()) {
+    node = (LirNode)p.elem();
+    if (node.opCode == Op.PROLOGUE)
+      break;
+  }
+  int n = node.nKids();
+  int offset = 64 + 4;
+  for (int i = 1; i < n; i++) {
+    LirNode x = node.kid(i);
+    offset += (Type.bytes(x.type) + 3) & -4;
+    if (equalArg(arg, x))
+      return offset;
+  }
+  /* error("va_start: bad argument") */
+  return 64 + 4;
+}
+
+boolean equalArg(LirNode x, LirNode y) {
+  if (x.opCode == Op.MEM)
+    x = x.kid(0);
+  if (y.opCode == Op.MEM)
+    y = y.kid(0);
+  return ((LirSymRef)x).symbol == ((LirSymRef)y).symbol;
+}
+
+
+void printBasicBlk(BasicBlk blk)
+{
+  PrintWriter out = new PrintWriter(System.out, true);
+  out.println("(DEFLABEL \"" + blk.label() + "\")");
+  for (BiLink insp = blk.instrList().first();  !insp.atEnd(); insp = insp.next()) {
+      Symbol fp = func.module.globalSymtab.get("%r15");
+      LirNode node = lir.node
+                     (Op.ADD, I32, lir.symRef(fp), lir.iconst(I32, (long)(10)));
+  }
+
+}
+
+/*
+LirNode loopAnalysysTest(LirNode node, BiList pre, BiList post) {
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  PrintWriter out = new PrintWriter(System.out, true);
+  int      i;
+
+  if(at.lpa != null) return node;
+  at.lpa = (LoopAnalysis)func.require(LoopAnalysis.analyzer);
+  
+  for (i = 0 ; i < at.lpa.loopHeader.length ; i++){
+   if (at.lpa.isLoop[i]){
+    System.out.println(i +":" + at.lpa.nestLevel[i]);
+    for (BiLink insp = at.lpa.kids[i].first(); !insp.atEnd(); insp = insp.next()) {
+        BasicBlk blk = (BasicBlk)insp.elem();
+        System.out.println(blk.label());
+    }
+   }
+  }
+
+  return node;
+}*/
+
+/** Return early time pre-rewriting sequence. **/
+/*public Transformer[] earlyRewritingSequence() {
+  return new Transformer[] {
+    AggregateByReference.trig,
+    AggregatePropagation.trig,
+    localEarlyRewritingTrig
+  };
+}*/
+
+LirNode rewriteCONVFLOAT(LirNode node, BiList pre) {
+  LirNode temp =  func.newTemp(F64);
+
+  pre.add(lir.node(Op.SET, F64, temp, node));
+  return temp;
+}
+
+// Change MUL instruction to shift instruction.
+LirNode rewriteMUL(LirNode node) {
+  LirNode mul = node.kid(1);
+  int i;
+  // See if constant or not.
+  if (mul.opCode == Op.INTCONST){
+    long x = ((LirIconst)mul).signedValue();
+    if (x>0 && (x & (x-1))==0 && x!=1) {// See if power of 2 other than 1 or not.
+      for (i = 1 ; i < 32; i++){ 
+	if ((x>>i)==1) {
+	  x = i;
+	  break;
+        }
+      }
+      return lir.node(Op.LSHS, node.type, node.kid(0) ,lir.node(Op.INTCONST, node.type, x));
+    }
+  }
+  return node;
+}
+
+// Change CONVFU to CONVFS instruction
+LirNode rewriteCONVFU(LirNode node) {
+  LirNode conv = node.kid(0);
+  return lir.node(Op.CONVFS, node.type, node.kid(0));
+}
+
+// Change DIV to shift instruction
+LirNode rewriteDIV(LirNode node, BiList pre) {
+  String func_name;
+  LirNode dividend = node.kid(0);// divident
+  LirNode divisor = node.kid(1);// divider
+  int i;
+  // Check if the divider is constant or not.
+  if (divisor.opCode == Op.INTCONST){
+    long x = ((LirIconst)divisor).signedValue();
+    if (x>0 && (x & (x-1))==0 && x!=1) {// Check if power of 2 other than 1.
+      for (i = 1 ; i < 32; i++){ 
+	if ((x>>i)==1) {
+	  x = i;
+	  break;
+        }
+      }
+      return lir.node(Op.RSHU, node.type, node.kid(0) ,lir.node(Op.INTCONST, node.type, x));
+    }
+  }
+  return node;
+}
+
+// Rewrite MOD by using multiplication and subtraction.
+LirNode rewriteMOD(LirNode node, BiList pre) {
+  LirNode div = ToRegister(node.kid(0),pre);
+  LirNode mul = ToRegister(node.kid(1),pre);
+  LirNode temp1 =  func.newTemp(node.type);
+  LirNode temp2 =  func.newTemp(node.type);
+  int  op;
+  if (node.opCode==Op.MODS) op = Op.DIVS;
+  else                      op = Op.DIVU;
+
+  pre.add(lir.node(Op.SET, node.type, temp1, lir.node(op , node.type, div, mul)));
+  pre.add(lir.node(Op.SET, node.type, temp2, lir.node(Op.MUL, node.type, temp1, mul)));
+
+  return lir.node(Op.SUB, node.type, div ,temp2);
+}
+
+LirNode ToRegister(LirNode iReg, BiList iOut)
+{
+  if(iReg.opCode == Op.REG){
+    return iReg;
+  }
+
+  LirNode temp = func.newTemp(iReg.type);
+  iOut.add(lir.node(Op.SET, iReg.type, temp, iReg));
+
+  return temp;
+}
+
+/** Rewrite CONVUF **/
+LirNode rewriteCONVUF(LirNode node, BiList pre) {
+  LirNode src = node.kid(0);
+  if (src.opCode != Op.REG) {
+    src = func.newTemp(src.type);
+    pre.add(lir.node(Op.SET, src.type, src, node.kid(0)));
+  }
+  LirNode dst = func.newTemp(node.type);
+  pre.add(lir.node
+          (Op.SET, dst.type, dst, lir.node
+           (Op.CONVSF, dst.type, src)));
+  Label tlabel = func.newLabel();
+  Label flabel = func.newLabel();
+  pre.add(lir.node
+          (Op.JUMPC, Type.UNKNOWN, lir.node
+           (Op.TSTGES, I32, src, lir.iconst(src.type, 0)),
+           lir.labelRef(tlabel), lir.labelRef(flabel)));
+  pre.add(lir.node
+          (Op.DEFLABEL, Type.UNKNOWN, lir.labelRef(flabel)));
+  pre.add(lir.node
+          (Op.SET, dst.type, dst, lir.node
+           (Op.ADD, dst.type, dst,
+            lir.fconst(dst.type, (double)0x100000000L))));
+  pre.add(lir.node
+          (Op.DEFLABEL, Type.UNKNOWN, lir.labelRef(tlabel)));
+  return dst;
+}
+
+/** Rewrite FRAME node to target machine form. **/
+static int offset_calc = -0x7FFFFFFF;
+
+LirNode rewriteFrame(LirNode node) {
+  Symbol fp = func.module.globalSymtab.get("%r15");
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  int size = frameSize(func) + at.stackRequired;
+  int off = ((SymAuto)((LirSymRef)node).symbol).offset();
+  int diff = 0;
+
+  if (offset_calc < off) diff = off;
+  else                   diff = off - offset_calc;
+  offset_calc = off;
+
+  if ((off % 4) != 0) off = (off/4)*4-4;
+  String s = ((LirSymRef)node).symbol.toString();
+  off = getOffset(func , s);
+  return lir.node
+    (Op.ADD, node.type, lir.symRef(fp), lir.iconst(I32, (long)(size + off)));
+}
+
+
+
+/** Early time pre-rewriting of LIR. **/
+public void earlyRewritingMachineDep(Module module) {
+  //module.apply(AggregateByReference.trig);
+}
+
+
+/** Late time pre-rewriting of LIR. **/
+/*public void lateRewritingMachineDep(Module module) {
+  module.apply(NamingFloatConst.trig);
+  }*/
+
+static final int MAXREGPARAM = 4;
+static final int MAXREGPARAM_F = 8;
+static final int BASEREGPARAM = 4;
+
+void peepHoleOpt(BiList list) {
+
+}
+
+LirNode rewriteJumpc(LirNode node) {
+  LirNode cond = node.kid(0);
+
+  switch(cond.opCode){
+  case Op.TSTGES:
+    cond = lir.node(Op.TSTLTS, I32, cond.kid(1), cond.kid(0));
+    break;
+  case Op.TSTLES:
+    cond = lir.node(Op.TSTGTS, I32, cond.kid(1), cond.kid(0));
+    break;
+  case Op.TSTGEU:
+    cond = lir.node(Op.TSTLTU, I32, cond.kid(1), cond.kid(0));
+    break;
+  case Op.TSTLEU:
+    cond = lir.node(Op.TSTGTU, I32, cond.kid(1), cond.kid(0));
+    break;
+  default:
+    cond = lir.node(cond.opCode, I32, cond.kid(1), cond.kid(0));
+  }
+  node.setSrc(0,cond);
+  return node;
+}
+
+/** Rewrite PROLOGUE **/
+LirNode rewritePrologue(LirNode node, BiList post) {
+  BiLink sync = post.first();
+  LirNode base = regnode(I32, "%r14");
+
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+  at.callNumber = 0;
+  at.getFunctionCount();
+  at.getFunctionNumber();
+
+  if (at.varArgFunction) {
+    post.add(lir.node
+             (Op.SET, I32, nthStack(I32, 0, base), regnode(I32, "%r4")));
+    post.add(lir.node
+             (Op.SET, I32, nthStack(I32, 1, base), regnode(I32, "%r5")));
+    post.add(lir.node
+             (Op.SET, I32, nthStack(I32, 2, base), regnode(I32, "%r6")));
+    post.add(lir.node
+             (Op.SET, I32, nthStack(I32, 3, base), regnode(I32, "%r7")));
+  }
+  int j;
+  int n = node.nKids();
+  int paramCounter = 0;
+  int intRegisterCount = 0;
+  int[] useFloatingRegister = new int[MAXREGPARAM_F];// Usage of floating point registers
+  int stackCount = 0;
+  boolean enableFloatingRegister = true;
+
+  // Initiate the usage state of floating point registers.
+  for (j = 0; j < MAXREGPARAM_F ; j++) useFloatingRegister[j] = 0;
+
+  for (int i = 1; i < n; i++) {
+    LirNode arg = node.kid(i);
+
+    switch (Type.tag(arg.type)) {
+    case Type.INT:
+      if (Type.bits(arg.type) <= 32) {
+        if (intRegisterCount < MAXREGPARAM){
+	  post.add(lir.node(Op.SET, arg.type, arg,
+				    nthParam(arg.type, "r", BASEREGPARAM+intRegisterCount++)));
+	  paramCounter += 1;
+	}
+        else {
+	  post.add(lir.node(Op.SET, arg.type, arg,
+				    nthStack(arg.type, 1+stackCount++, base)));
+	}
+      }
+      else {// long long
+        if (intRegisterCount < MAXREGPARAM){
+          post.add(lir.node(Op.SET, I32, lowlong(arg),
+                                    nthParam(I32, "r", BASEREGPARAM+intRegisterCount++)));
+          paramCounter += 1;
+        }
+        else {
+          post.add(lir.node(Op.SET, I32, lowlong(arg),
+                                    nthStack(I32, 1+stackCount++, base)));
+        }
+	if (intRegisterCount < MAXREGPARAM){
+          post.add(lir.node(Op.SET, I32, highlong(arg),
+                                    nthParam(I32, "r", BASEREGPARAM+intRegisterCount++)));
+          paramCounter += 1;
+        }
+        else {
+          post.add(lir.node(Op.SET, I32, highlong(arg),
+                                    nthStack(I32, 1+stackCount++, base)));
+        }
+      }
+      break;
+    case Type.FLOAT:
+      if (Type.bits(arg.type) <= 32) {// Float
+        for (j = 0 ; j < MAXREGPARAM_F ; j+=2)
+	       if (useFloatingRegister[j] == 0) break;
+        if (enableFloatingRegister==true && j < MAXREGPARAM_F){
+	   useFloatingRegister[j] = 1;
+           post.add(lir.node(Op.SET, arg.type, arg,
+                                  nthParam(arg.type, "fr", BASEREGPARAM+j)));
+	   paramCounter += 1;
+        }
+	else if (enableFloatingRegister==false && intRegisterCount < MAXREGPARAM){
+           post.add(lir.node(Op.SET, F32, arg,
+                                  nthParam(arg.type, "r", BASEREGPARAM+intRegisterCount++)));
+	   paramCounter += 1;
+	}
+        else
+	   post.add(lir.node(Op.SET, arg.type, arg,
+                                  nthStack(arg.type, 1+stackCount++, base)));
+      } else {// Double
+        for (j = 0 ; j < MAXREGPARAM_F ; j+=2)
+	       if (useFloatingRegister[j] == 0 && useFloatingRegister[j+1] == 0) break;
+        if (enableFloatingRegister==true && j < MAXREGPARAM_F){
+	  useFloatingRegister[j] = 1;
+	  useFloatingRegister[j+1] = 1;
+          post.add(lir.node(Op.SET, arg.type, arg,
+                            nthParam(I32, "fr", BASEREGPARAM+j)));
+	  paramCounter+= 1;
+        }
+        else if (enableFloatingRegister==false && intRegisterCount+1 < MAXREGPARAM){
+          post.add(lir.node(Op.SET, arg.type, arg,
+                            nthParam(I32, "r", BASEREGPARAM+intRegisterCount)));
+          intRegisterCount += 2;
+	  paramCounter+= 1;
+        }
+	else if (enableFloatingRegister==false && intRegisterCount+1 == MAXREGPARAM){
+          // Floating register is not used and only one integer register is available.
+          post.add(lir.node(Op.SET, F32, 
+			    lir.node(Op.SUBREG, F32, arg, lir.iconst(I32, 0)),
+                            nthParam(I32, "r", BASEREGPARAM+intRegisterCount)));
+          post.add(lir.node(Op.SET, F32, 
+			    lir.node(Op.SUBREG, F32, arg, lir.iconst(I32, 1)),
+			    nthStack(arg.type, 1+stackCount, base)));
+	  intRegisterCount += 1;
+	  stackCount += 1;
+	  paramCounter += 2;
+	}
+        else{
+	  //if (stackCount == 0 && intRegisterCount == MAXREGPARAM){
+          // There remains no available register.
+	  //  stackCount += 1;
+	  //}	
+	  post.add(lir.node(Op.SET, F64, arg,
+                            nthStack(F64, 1+stackCount,  base)));
+	  stackCount += 2;
+        }
+      }
+      break;
+    case Type.AGGREGATE:
+      int size = Type.bytes(arg.type)/4;
+      for (j = 0 ; j < size ; j++){
+        LirNode  temp = lir.node(Op.MEM, I32, lir.node(Op.ADD, I32, arg.kid(0), lir.iconst(I32, j*4)));
+	if (intRegisterCount < MAXREGPARAM){
+          post.add(lir.node(Op.SET, I32, temp,
+                                nthParam(I32, "r", BASEREGPARAM+intRegisterCount++)));
+	  paramCounter += 1;
+	}
+	else {
+          post.add(lir.node(Op.SET, I32, temp,
+                                nthStack(I32, 1+stackCount++, base)));
+	}
+      }
+      break;
+    }
+  }
+  // Put new PROLOGUE operator.
+  int argc = paramCounter;
+  LirNode[] argv = new LirNode[argc + 1];
+  argv[0] = node.kid(0);
+  for (int i = 0; i < argc ; i++){
+    argv[i+1] = nthParam(I32, "r", i);
+  }
+  return lir.node(Op.PROLOGUE, Type.UNKNOWN, argv);
+  
+}
+
+//***** Rewrite Call *******//
+LirNode rewriteCall(LirNode node, BiList pre, BiList post) {
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+  BiList list1 = new BiList();
+  BiList list2 = new BiList();
+  BiList list3 = new BiList();
+  boolean reta = false;
+  LirNode base = regnode(I32, "%r15");
+
+  LirNode callee = node.kid(0);
+  LirNode args = node.kid(1);
+  LirNode ret = null;
+
+  if (node.kid(2).nKids() > 0) ret = node.kid(2).kid(0);
+
+  // callee
+  if (isComplex(callee)) {
+    LirNode copy = func.newTemp(callee.type);
+    list1.add(lir.node(Op.SET, callee.type, copy, callee));
+    node.setKid(0, copy);
+  }
+
+  // value returned: in case of aggregate
+  if (ret != null && Type.tag(ret.type) == Type.AGGREGATE) {
+    list1.add(lir.node
+              (Op.SET, I32, lir.node(Op.MEM, I32, base), ret.kid(0)));
+    reta = true;
+  }
+  // parameters
+  int i, j;
+  int n = args.nKids();
+  int intRegisterCount = 0;
+  int[] useFloatingRegister = new int[MAXREGPARAM_F];// Floating register usage status.
+  int stackCount = 0;
+  int paramCounter = 0;
+  int expandStack = 0;
+
+  // libc, libm should not use floating registers.
+  boolean enableFRegister = true;
+  String funcName = ((LirSymRef)node.kid(0)).symbol.name;
+
+  if (at.isRegistUsrFunction("printf")==false && funcName.compareTo("printf")==0) enableFRegister=false;
+  if (at.isRegistUsrFunction("sin")==false && funcName.compareTo("sin")==0) enableFRegister=false;
+  if (at.isRegistUsrFunction("cos")==false && funcName.compareTo("cos")==0) enableFRegister=false;
+  if (at.isRegistUsrFunction("atof")==false && funcName.compareTo("atof")==0) enableFRegister=false;
+  if (at.isRegistUsrFunction("sqrt")==false && funcName.compareTo("sqrt")==0) enableFRegister=false;
+
+  // Initiate the status of floating point registers.
+  for (i = 0 ; i < MAXREGPARAM_F ; i++) useFloatingRegister[i] = 0;
+
+  for (i = 0; i < n; i++) {
+    LirNode arg = args.kid(i);
+    switch (Type.tag(arg.type)) {
+    case Type.INT:
+      {
+        LirNode inst;
+	LirNode src = arg;
+        if (Type.bits(arg.type) <= 32) {
+          if (intRegisterCount < MAXREGPARAM) {
+	    inst = lir.node(Op.SET, arg.type,
+				    nthParam(arg.type, "r", BASEREGPARAM+intRegisterCount++),src);
+	  } else {
+            inst = lir.node(Op.SET, arg.type,
+				    nthStack(arg.type, stackCount++, base), arg);
+	  }
+	  if (inst.kid(0).opCode == Op.MEM) list1.add(inst);
+	  else{
+	    list3.add(inst);
+	    paramCounter += 1;
+	  }
+	}
+	else {// long long 
+	  LirNode temp;
+	  for (j = 0 ; j < 2 ; j++){
+	    if (j==0) temp = lowlong(src);
+	    else      temp = highlong(src);
+
+	    if (intRegisterCount < MAXREGPARAM) {
+	      inst = lir.node(Op.SET, I32,
+				      nthParam(I32, "r", BASEREGPARAM+intRegisterCount++),temp);
+	    } else {
+	      inst = lir.node(Op.SET, I32,
+				      nthStack(I32, stackCount++, base), temp);
+	    }
+
+	    if (inst.kid(0).opCode == Op.MEM) list1.add(inst);
+	    else{
+	      list3.add(inst);
+	      paramCounter += 1;
+	    }
+	  }
+	}
+        break;
+      }
+    case Type.FLOAT:
+      {
+        LirNode temp, temp2;
+        if (Type.bits(arg.type) <= 32) {//Float
+          for (j = 0 ; j < MAXREGPARAM_F ; j+=2)
+		 if (useFloatingRegister[j]==0) break;
+          temp = func.newTemp(F32);
+          list2.add(lir.node(Op.SET, F32, temp, arg));
+          if (enableFRegister==true && j < MAXREGPARAM_F){
+            useFloatingRegister[j] = 1;
+	    list3.add(lir.node(Op.SET, F32,
+                       nthParam(F32 , "fr", BASEREGPARAM+j), temp));
+	    paramCounter += 1;
+          }
+          else if (enableFRegister==false && intRegisterCount < MAXREGPARAM) {
+            list3.add(lir.node(Op.SET, F32,
+                       nthParam(F32 , "r", BASEREGPARAM+intRegisterCount++), temp));
+	    paramCounter += 1;
+          }
+          else{
+            list3.add(lir.node(Op.SET, F32,
+                         nthStack(F32 , stackCount++ , base), temp));
+	    paramCounter += 1;
+          }
+        }
+        else {//Double
+          for (j = 0 ; j < MAXREGPARAM_F ; j+=2)
+                 if (useFloatingRegister[j]==0 && useFloatingRegister[j+1]==0) break;
+
+          if (enableFRegister==true && j < MAXREGPARAM_F){
+            // 8 bytes can be assigned as floating point registers.
+	    useFloatingRegister[j] = 1;
+	    useFloatingRegister[j+1] = 1;
+	    temp = func.newTemp(F64);
+	    list2.add(lir.node(Op.SET, F64, temp , arg));
+            list3.add(lir.node(Op.SET, F64,
+                               nthParam(F64 , "fr", BASEREGPARAM+j),temp));
+	    paramCounter += 1;
+          }
+          else if (enableFRegister==false && intRegisterCount+1 < MAXREGPARAM) {
+            // 8 bytes can be assigned as integer registers.
+            temp = func.newTemp(F64);
+            list2.add(lir.node(Op.SET, F64, temp , arg));
+            list3.add(lir.node(Op.SET, F64,
+                               nthParam(I32 , "r", BASEREGPARAM+intRegisterCount),temp));
+            intRegisterCount += 2;
+	    paramCounter += 1;
+          }
+	  else if (enableFRegister==false && intRegisterCount+1 == MAXREGPARAM){
+            // Only one integer register can be assigned.
+	    temp = func.newTemp(F64);
+	    list2.add(lir.node(Op.SET, F64, temp , arg));
+            list2.add(lir.node(Op.SET, F64, nthStack(F64 , stackCount , base) , temp));
+            list3.add(lir.node(Op.SET, I32, nthParam(I32 , "r", BASEREGPARAM+intRegisterCount),
+			       nthStack(I32 , stackCount , base)));
+            list3.add(lir.node(Op.SET, I32, nthStack(I32 , stackCount , base), nthStack(I32 , stackCount+1 , base)));
+            intRegisterCount += 1;
+	    stackCount += 1;
+            paramCounter += 2;
+	    expandStack = 1;// Make an expansion area when a parameter is 
+                            // to be placed in the stack. Stack overflow
+                            // will occur if not.
+	  }
+          else{
+	    temp = func.newTemp(F64);
+	    list2.add(lir.node(Op.SET, F64, temp , arg));
+	    list3.add(lir.node(Op.SET, F64,
+			       nthStack(F64 , stackCount , base), temp));
+	    paramCounter += 1;
+            stackCount += 2;
+          }
+        }
+        break;
+      }
+    case Type.AGGREGATE:
+    {
+      int size = Type.bytes(arg.type)/4;
+      for (j = 0 ; j < size ; j++){
+        LirNode  temp = lir.node(Op.MEM, I32, lir.node(Op.ADD, I32, arg.kid(0), lir.iconst(I32, j*4)));
+        if (intRegisterCount < MAXREGPARAM) {
+  	  list3.add(lir.node
+		      (Op.SET, I32,
+			     nthParam(I32, "r", BASEREGPARAM+intRegisterCount++), temp));
+	paramCounter += 1;
+        } else {
+          LirNode inst = lir.node
+            (Op.SET, I32,
+             nthStack(I32, stackCount++, base), temp);
+          if (inst.kid(0).opCode == Op.MEM) list1.add(inst);
+          else {
+            list3.add(inst);
+            paramCounter += 1;
+          }
+        }
+      }
+      break;
+    }
+    default:
+      throw new CantHappenException("Unexpected CALL parameter" + node);
+    }
+  }
+
+  int required = (stackCount+expandStack)*4;
+  if (required > at.stackRequired) at.stackRequired = required;
+  int m = paramCounter;
+  j = 0;
+  LirNode[] newargv = new LirNode[m];
+  for (BiLink p = list3.first(); !p.atEnd(); p = p.next()) {
+    LirNode ins;
+    ins = (LirNode)p.elem();
+    newargv[j++] = ins.kid(0);
+  }
+
+  try{
+    node = lir.node
+        (Op.PARALLEL, Type.UNKNOWN, noRescan(lir.operator
+         (Op.CALL, Type.UNKNOWN,
+          node.kid(0),
+        lir.node(Op.LIST, Type.UNKNOWN, newargv),
+        node.kid(2),
+        reta ? ImList.list("&reta", new Integer(Type.bytes(ret.type)))
+        : ImList.list())),lir.decodeLir(new ImList("CLOBBER", regCallClobbers), func, module));
+  } catch (SyntaxError e) {
+    throw new CantHappenException();
+  }
+
+  pre.concatenate(list1);
+  pre.concatenate(list2);
+  pre.concatenate(list3);
+
+  // value returned
+  if (ret != null) {
+    switch (Type.tag(ret.type)) {
+    case Type.INT:
+      {
+        LirNode reg = regnode(ret.type, "%r0");
+        LirNode tmp = func.newTemp(ret.type);
+        post.add(lir.node(Op.SET, ret.type, tmp, reg));
+        post.add(lir.node(Op.SET, ret.type, ret, tmp));
+        node.kid(0).kid(2).setKid(0, reg);
+        break;
+      }
+    case Type.FLOAT:
+      {
+        if (enableFRegister==true){
+          LirNode reg = regnode(ret.type, "%fr0");
+          LirNode tmp = func.newTemp(ret.type);
+          post.add(lir.node(Op.SET, ret.type, tmp, reg));
+          post.add(lir.node(Op.SET, ret.type, ret, tmp));
+          node.kid(0).kid(2).setKid(0, reg);
+        }
+	else {
+          LirNode reg = regnode(ret.type, "%r0");
+          LirNode tmp = func.newTemp(ret.type);
+          post.add(lir.node(Op.SET, ret.type, tmp, reg));
+          post.add(lir.node(Op.SET, ret.type, ret, tmp));
+          node.kid(0).kid(2).setKid(0, reg);
+	}
+        break;
+      }
+    case Type.AGGREGATE:
+      // no action needed
+      break;
+    }
+  }
+
+  return node;
+}
+
+private LirNode regnode(int type, String name) {
+  if (Type.tag(type) == Type.INT) {
+    LirNode master = lir.symRef(module.globalSymtab.get(name));
+    if (type == I32)
+      return master;
+    else if (type == I16)
+      return lir.node
+        (Op.SUBREG, I16, master, lir.untaggedIconst(I32, 0));
+    else if (type == I8)
+      return lir.node
+        (Op.SUBREG, I8, master, lir.untaggedIconst(I32, 0));
+  }
+  else if (Type.tag(type) == Type.FLOAT) {
+    LirNode master = lir.symRef(module.globalSymtab.get(name));
+    if (type == F64)
+      return master;
+    else if (type == F32)
+      return lir.node
+        (Op.SUBREG, F32, master, lir.untaggedIconst(I32, 0));
+  }
+  return null;
+}
+
+LirNode lowlong(LirNode exp) {
+  if (exp.opCode == Op.REG)
+    return lir.node(Op.SUBREG, I32, exp, lir.iconst(I32, 0));
+  else if (exp.opCode == Op.MEM && exp.type == I64)
+    return lir.node(Op.MEM, I32, lir.node
+                    (Op.ADD, I32, exp, lir.iconst(I32, 4)));
+  else
+    return lir.node(Op.CONVIT, I32, exp);
+}
+
+LirNode highlong(LirNode exp) {
+  if (exp.opCode == Op.REG)
+    return lir.node(Op.SUBREG, I32, exp, lir.iconst(I32, 1));
+  else if (exp.opCode == Op.MEM && exp.type == I64)
+    return lir.node(Op.MEM, I32, exp);
+  else
+    return lir.node(Op.CONVIT, I32, lir.node
+                    (Op.RSHU, I64, exp, lir.iconst(I32, 32)));
+}
+
+private LirNode nthParam(int type, String pref, int counter) {
+  return regnode(type, "%" + pref + counter);
+}
+
+private LirNode nthStack(int type, int counter, LirNode base) {
+  return lir.node
+    (Op.MEM, type,
+     lir.node
+     (Op.ADD, I32, base,
+      lir.iconst(I32, counter * 4 + adjustForBigEndian(type))));
+}
+
+private int adjustForBigEndian(int type) {
+  if (type == I8)
+    return 3;
+  else if (type == I16)
+    return 2;
+  else
+    return 0;
+}
+
+private LirNode syncParam(int counter, LirNode base) {
+  return lir.node
+    (Op.SET, I32, nthStack(I32, counter, base),
+     nthParam(I32, "r", counter));
+}
+
+private LirNode unSyncParam(int counter, LirNode base) {
+  return lir.node
+    (Op.SET, I32, nthParam(I32, "r", counter),
+     nthStack(I32, counter, base));
+}
+
+/** Rewrite AGGREGATE COPY **/
+LirNode rewriteAggregateCopy(LirNode node, BiList pre) {
+  if (node.kid(0).opCode != Op.MEM || node.kid(1).opCode != Op.MEM || node.kid(1).type != node.type)
+    throw new CantHappenException("Malformed aggregate copy");
+  if (node.kid(0).type != node.type) debOut.println("Warning: copying objects whose sizes are different");
+  int bytes = Type.bytes(node.type);
+  if (bytes != 0) {
+    int addrType = Type.type(Type.INT, 32);
+    int elemType = Type.type(Type.INT, 32);
+    LirNode dst = node.kid(0).kid(0);
+    LirNode src = node.kid(1).kid(0);
+    LirNode srcPtr = func.newTemp(addrType);
+    LirNode dstPtr = func.newTemp(addrType);
+    pre.add(lir.node(Op.SET, addrType, srcPtr, src));
+    pre.add(lir.node(Op.SET, addrType, dstPtr, dst));
+    if (bytes < 32){//INLINECOPYSIZE) {
+      for (int j = 0; j < bytes; j+=4) {
+        pre.add
+          (lir.node
+           (Op.SET, elemType,
+            lir.node
+            (Op.MEM, elemType,
+             (j == 0 ? dstPtr : lir.node
+              (Op.ADD, addrType, dstPtr, lir.iconst(addrType, j)))),
+            lir.node
+            (Op.MEM, elemType,
+             (j == 0 ? srcPtr : lir.node
+              (Op.ADD, addrType, srcPtr, lir.iconst(addrType, j))))));
+      }
+    } else {
+      Label loopTop = func.newLabel();
+      Label loopExit = func.newLabel();
+      LirNode counter = func.newTemp(addrType);
+      pre.add(lir.node(Op.SET, addrType, counter,
+                        lir.iconst(addrType, bytes)));
+      pre.add(lir.node(Op.DEFLABEL, addrType, lir.labelRef(loopTop)));
+      pre.add
+        (lir.node
+         (Op.SET, elemType,
+          lir.node(Op.MEM, elemType, dstPtr),
+          lir.node(Op.MEM, elemType, srcPtr)));
+      pre.add
+        (lir.node
+         (Op.SET, addrType, srcPtr,
+          lir.node(Op.ADD, addrType, srcPtr, lir.iconst(addrType, 4))));
+      pre.add
+        (lir.node
+         (Op.SET, addrType, dstPtr,
+          lir.node(Op.ADD, addrType, dstPtr, lir.iconst(addrType, 4))));
+      pre.add
+        (lir.node
+         (Op.SET, addrType, counter,
+          lir.node(Op.SUB, addrType, counter, lir.iconst(addrType, 4))));
+      pre.add
+        (lir.node
+         (Op.JUMPC, 0,
+          lir.node(Op.TSTNE, addrType, counter, lir.iconst(addrType, 0)),
+          lir.labelRef(loopTop), lir.labelRef(loopExit)));
+      pre.add(lir.node(Op.DEFLABEL, addrType, lir.labelRef(loopExit)));
+    }
+  }
+  node = (LirNode)pre.last().elem();
+  pre.last().unlink();
+
+  return node;
+}
+
+/** Rewrite EPILOGUE **/
+LirNode rewriteEpilogue(LirNode node, BiList pre) {
+  if (node.nKids() < 2) return node;
+
+  LirNode ret = node.kid(1);
+  LirNode reg;
+
+  switch (Type.tag(ret.type)) {
+  case Type.INT:
+    reg = regnode(ret.type, "%r0");
+    pre.add(lir.node(Op.SET, ret.type, reg, ret));
+    return lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0), reg);
+  case Type.FLOAT:
+    reg = regnode(ret.type, "%fr0");
+    pre.add(lir.node(Op.SET, ret.type, reg, ret));
+
+    return lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0), reg);
+  case Type.AGGREGATE:
+    reg = regnode(I32, "%r0");
+    pre.add(lir.node
+             (Op.SET, I32, reg, lir.node(Op.MEM, reg.type, 
+			        lir.node(Op.ADD, I32, regnode(I32, "%r14"),lir.iconst(reg.type, 4)))));
+    pre.add(lir.node
+             (Op.SET, ret.type,
+		  lir.node(Op.MEM, ret.type, reg) , ret));
+    return node; // keep original info for final code emission
+  }
+
+  return null;
+}
+
+/** Return true if node is a complex one. **/
+boolean isComplex(LirNode node) {
+  switch (node.opCode) {
+  case Op.INTCONST:
+  case Op.REG:
+  case Op.STATIC:
+  case Op.FRAME:
+    return false;
+  default:
+    return true;
+  }
+}
+
+boolean is8bitConst(LirNode node)
+{
+  if (((LirIconst)node).signedValue()<=127 &&
+      ((LirIconst)node).signedValue()>=-128) return true;
+  return false;
+}
+
+/*
+ * Code building macros.
+ */
+
+/* Code emission macros.
+ *  Patterns not defined below will be converted to:
+ *   (foo bar baz) --> foo   bar,baz   or foo(bar,baz)
+ */
+/** Return aggregate size & 0xfff. **/
+%defbuild(_getaggsize x) {
+  LirNode node = (LirNode)x;
+
+  ImList p = node.opt.locate("&reta");
+  if (p == null){
+    throw new CantHappenException("missing aggregate size");
+  }
+  int size = ((Integer)p.elem2nd()).intValue();
+  return new Integer(size & 0xfff);
+}
+
+%defbuild(SUBREG x) {
+  Symbol reg = ((LirSymRef)x.kid(0)).symbol;
+  int dtype = x.type;
+  int offset = (int)((LirIconst)x.kid(1)).value;
+
+  if (dtype == F32 && offset == 1)
+    return "%f" + (Integer.parseInt(reg.name.substring(2)) + 1);
+  else if (reg.type == I64) {
+    if (offset == 0)// %rll
+      return "%r" + reg.name.substring(4);
+    else
+      return "%r" + (Integer.parseInt(reg.name.substring(4)) + 1);
+  }
+  else
+    return (reg.name).substring(1);
+}
+
+%defemit(prereg x) {// Remove the heading character % of register name.
+  String s = x.toString();
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+
+  if (s.charAt(0) == '%') s = s.substring(1);
+  if (s.charAt(0) == 'r' && 
+      s.charAt(1) == 'l' && 
+      s.charAt(2) == 'l') s = "r" + s.substring(3);
+  return s;
+}
+
+%defemit(prefreg x y) { // Remove the heading character % of register name.
+  String s = x.toString();
+  if (s.charAt(0) == '%') s = s.substring(1);
+  if (s.charAt(0) == 'f') s = s.substring(1);
+  if (s.charAt(0) == 'd') s = s.substring(1);
+  return y + s;
+}
+
+%defemit(makebranch code arg){// Select proper branch instruction.
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+  String  ret = "";
+
+  if (code.compareTo("bra")==0){  //BRA
+    ret = ret + "\t" + code + "\t" + arg;
+  }
+  else if (code.compareTo("bt")==0){   //BT
+    ret = ret + "\t" + code + "\t" + arg;
+  }
+  else if (code.compareTo("bf")==0){    //BF
+    ret = ret + "\t" + code + "\t" + arg;
+  }
+  return ret;
+}
+
+
+%defemit(makecode_arg1 code arg1) {// Generate code size
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+  String  ret = "";
+  
+  if (code.compareTo("jsr")==0){//JSR
+    ret = ret + "\t" + code + "\t" + arg1;
+  }
+  else if (code.compareTo("bra")==0){  //BRA
+
+  }
+  else if (code.compareTo("bt")==0){   //BT
+    ret = ret + "\t" + code + "\t" + arg1;
+  }
+  else if (code.compareTo("bf")==0){    //BF
+    ret = ret + "\t" + code + "\t" + arg1;
+  }
+
+  return ret;
+}
+
+%defemit(makecode_arg2 code arg1 arg2) {// Generate code size
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+  String  ret = "";
+  if (code.compareTo("mov")==0 ||  //MOV
+      code.compareTo("mov.b")==0 ||//MOV.B
+      code.compareTo("mov.w")==0 ||//MOV.W
+      code.compareTo("mov.l")==0 ||//MOV.L
+      code.compareTo("exts.b")==0 ||//EXTS.B
+      code.compareTo("exts.w")==0 ||//EXTS.W
+      code.compareTo("exts.l")==0 ||//EXTS.L
+      code.compareTo("extu.b")==0 ||//EXTU.B
+      code.compareTo("extu.w")==0 ||//EXTU.W
+      code.compareTo("extu.l")==0 ||//EXTU.L
+      code.compareTo("cmp/eq")==0 ||//CMP/EQ
+      code.compareTo("cmp/gt")==0 ||//CMP/GT
+      code.compareTo("cmp/ge")==0 ||//CMP/GE
+      code.compareTo("cmp/hs")==0 ||//CMP/HS
+      code.compareTo("cmp/hi")==0 ||//CMP/HI
+      code.compareTo("sts")==0 ||//STS
+      code.compareTo("add")==0 || //ADD
+      code.compareTo("sub")==0 || //SUB
+      code.compareTo("or")==0 ||  //OR
+      code.compareTo("and")==0 || //AND
+      code.compareTo("xor")==0){  //XOR
+    ret = ret + "\t" + code + "\t" + arg1 + "," + arg2;
+  }
+  else if (code.compareTo("_set")==0){
+    ret = ret + emitList(ImList.list(code, arg1, arg2), true);
+  }
+  return ret;
+}
+
+
+%defemit(change_fpscr_arg1 s code arg){// fpscr  register switching
+  fpscr_ctrl = Integer.parseInt(s);
+  return "\t" + code + "\t" + arg;
+}
+
+%defemit(makefcode_arg2 mode code arg1 arg2) {// fpscr register switching
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  String   ret = "";
+  int mode_numb = 0;
+
+  if (mode.compareTo("F")==0) mode_numb = 1;
+  else if (mode.compareTo("D")==0) mode_numb = 2;
+
+  if (mode_numb==1 && fpscr_ctrl!=mode_numb){
+    String name;
+    Label lb = func.newLabel();
+    String def_name = lb.name();
+
+    name = at.regConstLabel(def_name, ".long","0xFFE7FFFF");
+
+    int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+    // Record the instruction position because a label is required to get constant data.
+    at.cana.setReqLabOpAddress(pos,".long");
+
+    ret = "\tsts\tfpscr,r2\n";
+    ret = ret + "\tmov.l\t" + name + ",r3\n";
+    ret = ret + "\tand\tr3,r2\n";
+    ret = ret + "\tlds\tr2,fpscr\n";
+    fpscr_ctrl = 1;
+  }
+  else if (mode_numb==2 && fpscr_ctrl!=mode_numb){
+    String name;
+    Label lb = func.newLabel();
+    String def_name = lb.name();
+    
+    name = at.regConstLabel(def_name, ".long","0x00080000");
+    
+    int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+    // Record the instruction position because a label is required to get constant data.
+    at.cana.setReqLabOpAddress(pos,".long");
+    
+    ret = "\tsts\tfpscr,r2\n";
+    ret = ret + "\tmov.l\t" + name + ",r3\n";
+    ret = ret + "\tor\tr3,r2\n";
+    ret = ret + "\tlds\tr2,fpscr\n";
+    fpscr_ctrl = 2;
+  }
+  return ret+"\t"+code+"\t"+arg1+","+arg2;
+}
+
+%defemit(addregnumb x y) {// Add y to the register number x.
+  String s = x.toString();
+  String pre,numb;
+  int    l = 9999;
+  if (l > s.indexOf("0") && s.indexOf("0")>-1) l = s.indexOf("0");
+  if (l > s.indexOf("1") && s.indexOf("1")>-1) l = s.indexOf("1");
+  if (l > s.indexOf("2") && s.indexOf("2")>-1) l = s.indexOf("2");
+  if (l > s.indexOf("3") && s.indexOf("3")>-1) l = s.indexOf("3");
+  if (l > s.indexOf("4") && s.indexOf("4")>-1) l = s.indexOf("4");
+  if (l > s.indexOf("5") && s.indexOf("5")>-1) l = s.indexOf("5");
+  if (l > s.indexOf("6") && s.indexOf("6")>-1) l = s.indexOf("6");
+  if (l > s.indexOf("7") && s.indexOf("7")>-1) l = s.indexOf("7");
+  if (l > s.indexOf("8") && s.indexOf("8")>-1) l = s.indexOf("8");
+  if (l > s.indexOf("9") && s.indexOf("9")>-1) l = s.indexOf("9");
+
+  pre = s.substring(0,l);
+  numb = s.substring(l);
+  numb = String.valueOf(Integer.parseInt(numb)+Integer.parseInt(y));
+
+  return pre + numb;
+}
+
+/** Expand _set macro s.t. copying 32bit constant x to y. **/
+%defemit(_set64 x y) {
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  String def_name, name1, name2;
+  Label lb;
+  long v = Long.parseLong(y);
+
+  lb = func.newLabel();
+  def_name = lb.name();
+  name1 = at.regConstLabel(def_name, ".long", String.valueOf(v & 0xffffffffL));
+  lb = func.newLabel();
+  def_name = lb.name();
+  name2 = at.regConstLabel(def_name, ".long", String.valueOf(((v >> 32) & 0xffffffffL)));
+
+  int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+    // Record the instruction position because a label is required to get constant data.
+  at.cana.setReqLabOpAddress(pos,".long");
+
+  return "\tmov.l\t"+ name1 +","+ x +"\n" +
+	 "\tmov.l\t"+ name2 +","+ emitList(ImList.list("addregnumb", x, "1"), true);
+}
+%defemit(_set x y) {
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  String s, sx, sy;
+  String type, op;
+  String def_name, name;
+  sx = x.toString();
+  sy = y.toString();
+
+  if (sx.charAt(0)=='%') sx = sx.substring(1);
+
+  type = LabelRegister.getType(String.valueOf(sy));
+  s = LabelRegister.getOp(String.valueOf(sy));
+  Label lb = func.newLabel();
+  def_name = lb.name();
+  name = at.regConstLabel(def_name, type, String.valueOf(sy));
+  
+  int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+    // Record the instruction position because a label is required to get constant data.
+  at.cana.setReqLabOpAddress(pos,type);
+
+  return s + "\t" + name + "," + sx;
+}
+
+%defemit(minus x) { 
+  String s;
+  int    n;
+
+  s = x.toString();
+  if (s.charAt(0) == '#'){
+    s = s.substring(1);
+    n = Integer.parseInt(s);
+    n = n * -1;
+    s = "#" + String.valueOf(n);
+  }
+  return s;
+}
+
+%defemit(prediv sign x y z) {// Divide instruction
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  String ret, name;
+  if (sign.charAt(0)=='S')      at.DIVSUSE = 1;
+  else if (sign.charAt(0)=='U') at.DIVUUSE = 1;
+  else                          return "ERROR";
+
+  // Add divide-function.
+  // After the addition, get the name used in the code  because a new name
+  // will be genarated when the same name appeared already.
+  Label lb = func.newLabel();
+  String def_name = lb.name();
+  if (sign.charAt(0)=='S') name = at.regConstLabel(def_name , ".long", "_divs");
+  else                     name = at.regConstLabel(def_name , ".long", "_divu");
+  // Register the label as it is generated.
+  int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+  // Record the instruction position because a label is required to get constant data.
+  at.cana.setReqLabOpAddress(pos,".long");
+
+  ret = "\tmov.l\t"+ name + ",r0\n"; 
+  ret += "\tjsr\t@r0\n\tnop\n";
+
+  return ret;
+}
+
+%defemit(prediv64 sign x y z) {// Divide instruction
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  String ret, name;
+  if (sign.charAt(0)=='S')      at.DIVS64USE = 1;
+  else if (sign.charAt(0)=='U') at.DIVU64USE = 1;
+  else                          return "ERROR";
+
+  // Add divide-function.
+  // After the addition, get the name used in the code  because a new name
+  // will be genarated when the same name appeared already.
+  Label lb = func.newLabel();
+  String def_name = lb.name();
+  if (sign.charAt(0)=='S') name = at.regConstLabel(def_name , ".long", "_divs64");
+  else                     name = at.regConstLabel(def_name , ".long", "_divu64");
+  // Register the label as it is generated.
+  int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+  // Record the instruction position because a label is required to get constant data.
+  at.cana.setReqLabOpAddress(pos,".long");
+
+  ret = "\tmov.l\t"+ name + ",r0\n"; 
+  ret += "\tjsr\t@r0\n\tnop\n";
+
+  return ret;
+}
+
+%defemit(+ x y) {
+  if (y.charAt(0) == '-')
+    return x + y;
+  else
+    return x + "+" + y;
+}
+
+%defemit(- x y) {
+  if (y.charAt(0) == '-')
+    return x + "+" + y.substring(1);
+  else
+    return x + "-" + y;
+}
+
+%defemit(precon x) { 
+    String arg = x.toString();
+    return "#" + arg;
+}
+
+%defemit(func x) { 
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  LabelRegister p[];
+  String     name;
+
+  Label lb = func.newLabel();
+  String def_name = lb.name();
+  name = at.regConstLabel(def_name,  ".long", x.toString());
+  // Register the label as it is generated.
+  int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+  // Record the instruction position because a label is required to get constant data.
+  at.cana.setReqLabOpAddress(pos,".long");
+
+  return name;
+}
+
+/* %defemit(high x) { return "%hi(" + x + ")"; } */
+/* %defemit(low x) { return "%lo(" + x + ")"; } */
+
+%defemit(dreg-low x) {
+  return "%f" + (Integer.parseInt(x.substring(2)) + 1);
+}
+
+%defemit(dframe-low x) {
+  return x + "+4";
+}
+
+%defemit(mem x) { 
+    SH4Attr at = (SH4Attr)getFunctionAttr(func);
+    String  s1, s2;
+    int     mid, len;
+    int     n;
+
+    mid = x.indexOf("+");
+    if (mid == -1) return "@" + x;
+    len = x.length();
+    s1 = x.substring(0, mid);
+    s2 = x.substring(mid+1, len);
+    
+    if (s2.charAt(0) == '#') {
+      String pre, post;
+      s2 = s2.substring(1);
+      mid = s2.indexOf("+");
+      if (mid == -1) return "@(" + s2 + "," + s1 + ")";
+      len = s2.length();
+      pre = s2.substring(0, mid);
+      post = s2.substring(mid+1, len);
+      n = (Integer.parseInt(pre)+Integer.parseInt(post));
+      s2 = Integer.toString(n);
+    }
+    return "@(" + s2 + "," + s1 + ")"; 
+}
+
+
+%defemit(prologue =f) {
+  Function func = (Function)f;
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  String   ret;
+  int      size = frameSize(func) + at.stackRequired;
+  BiList   list = func.lirList(); 
+
+  // Preparation
+  // Examine the usage status of registers r8 - r13 and fr8 - fr15.
+  //at.code_count_flag = 0;// Do not count until the first label appeares.
+  at.getFunctionCount();
+  at.getReserveRegisterInfo();
+  stackshift=at.stackShift*4;
+  code_size_inblock = 0;
+
+
+  // Analysis of code size information.
+  fpscr_ctrl = 0;
+  code_size_inblock = 0;
+  at.outLabelEnable = true;// Permit label emittion.
+  at.rewriteJumpEnable = false;// Leave jump instructions unchanged
+                               // if the jump target is out of range.
+  at.preBuildFlag = true;
+  at.pass = 0;
+  label_long_const.count = 0;
+  label_short_const.count = 0;
+  codeSizeAnalysis(func);
+
+  do {
+    fpscr_ctrl = 0;
+    code_size_inblock = 0;
+    at.outLabelEnable = true;// Permit label emittion.
+    at.rewriteJumpEnable = true;// Rewrite the jump instruction
+                                // whose jump target is out of range.
+    at.pass += 1;
+    label_long_const.count = 0;
+    label_short_const.count = 0;
+  }while (codeSizeAnalysis(func)==false);
+
+  // Start to do final emittion.
+  fpscr_ctrl = 0;
+  code_size_inblock = 0;
+  at.preBuildFlag = false;
+  at.outLabelEnable = true;// Permit label emittion.
+  at.rewriteJumpEnable = true;// Rewrite the jump instruction 
+                              // whose jump target is out of range.
+  label_long_const.count = 0;
+  label_short_const.count = 0;
+
+  // Replace the old code analysis information by new one.
+  at.pre_cana = at.cana;
+  at.cana = new CodeAnalysisInfo(); 
+
+  if (size%4 > 0){
+    int  mod;
+    mod = size%4;
+    size += (4-mod);
+  }
+  at.cana.registLabel("pro:"+f.toString(), 0);
+  at.cana.setNowBlock("pro:"+f.toString());
+
+  ret = "";
+  ret = ret + "\tmov.l\tr14,@-r15\n";
+  ret = ret + "\tmov\tr15,r14\n";
+  if (at.use_r8>0) ret = ret + "\tmov.l\tr8,@-r15\n";
+  if (at.use_r9>0) ret = ret + "\tmov.l\tr9,@-r15\n";
+  if (at.use_r10>0) ret = ret + "\tmov.l\tr10,@-r15\n";
+  if (at.use_r11>0) ret = ret + "\tmov.l\tr11,@-r15\n";
+  if (at.use_r12>0) ret = ret + "\tmov.l\tr12,@-r15\n";
+  if (at.use_r13>0) ret = ret + "\tmov.l\tr13,@-r15\n";
+  if (at.use_fr8>0) ret = ret + "\tfmov.s\tfr8,@-r15\n\tfmov.s\tfr9,@-r15\n";
+  if (at.use_fr10>0) ret = ret + "\tfmov.s\tfr10,@-r15\n\tfmov.s\tfr11,@-r15\n";
+  if (at.use_fr12>0) ret = ret + "\tfmov.s\tfr12,@-r15\n\tfmov.s\tfr13,@-r15\n";
+  if (at.use_fr14>0) ret = ret + "\tfmov.s\tfr14,@-r15\n\tfmov.s\tfr15,@-r15\n";
+
+  if (at.callNumber > 0) {stackshift+=4;ret = ret + "\tsts.l\tpr,@-r15\n";}
+  if (size>0){
+    if (size <= 128) ret = ret + "\tadd\t#-"+ size + ",r15\n";
+    else {
+       LabelRegister p[];
+       String name, lab , type, op;
+       
+       Label lb = func.newLabel();
+       lab = lb.name();
+       type = LabelRegister.getType(String.valueOf(size));
+       op = LabelRegister.getOp(String.valueOf(size));
+       
+       name = at.regConstLabel(lab, type, String.valueOf(size));
+       
+       int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+       // Record the instruction position because a label is required to get constant data.
+       at.cana.setReqLabOpAddress(pos,type);
+       
+       ret = ret + op + "\t" + name + ",r1\n";
+       ret = ret + "\tsub\tr1,r15\n";
+    }
+  }
+  return ret;
+}
+
+%defemit(epilogue =f rettype) {
+  Function func = (Function)f;
+  SH4Attr  at = (SH4Attr)getFunctionAttr(func);
+  int      size = at.stackRequired + frameSize(func);
+  BiList   list = func.lirList(); 
+  code_size_inblock = 0;
+
+  at.cana.setNowBlock("epi:"+f.toString());  
+  if (size%4 > 0){
+    int  mod;
+    mod = size%4;
+    size += (4-mod);
+  }
+  int i;
+  String ret = "";
+  if (size>0){
+    if (size < 128) ret = ret + "\tadd\t#"+ size + ",r15\n";
+    else {
+      LabelRegister p[];
+      String name ,lab , type, op;
+
+      Label lb = func.newLabel();
+      String def_name = lb.name();
+      type = LabelRegister.getType(String.valueOf(size));
+      op = LabelRegister.getOp(String.valueOf(size));
+      name = at.regConstLabel(def_name, type, String.valueOf(size));
+      // Register a label as it is generated.
+      int pos = at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock;
+       // Record the instruction position because a label is required to get constant data.
+      at.cana.setReqLabOpAddress(pos,type);
+
+      ret = ret + op + "\t" + name + ",r3\n";
+      ret = ret + "\tadd\tr3,r15\n";
+    }
+  }
+  if (at.callNumber > 0) ret = ret + "\tlds.l\t@r15+,pr\n";
+  if (at.use_fr14>0) ret = ret + "\tfmov.s\t@r15+,fr14\n\tfmov.s\t@r15+,fr15\n";
+  if (at.use_fr12>0) ret = ret + "\tfmov.s\t@r15+,fr12\n\tfmov.s\t@r15+,fr13\n";
+  if (at.use_fr10>0) ret = ret + "\tfmov.s\t@r15+,fr10\n\tfmov.s\t@r15+,fr11\n";
+  if (at.use_fr8>0) ret = ret + "\tfmov.s\t@r15+,fr8\n\tfmov.s\t@r15+,fr9\n";
+  if (at.use_r13 > 0) ret = ret + "\tmov.l\t@r15+,r13\n";
+  if (at.use_r12 > 0) ret = ret + "\tmov.l\t@r15+,r12\n";
+  if (at.use_r11 > 0) ret = ret + "\tmov.l\t@r15+,r11\n";
+  if (at.use_r10 > 0) ret = ret + "\tmov.l\t@r15+,r10\n";
+  if (at.use_r9 > 0) ret = ret + "\tmov.l\t@r15+,r9\n";
+  if (at.use_r8 > 0) ret = ret + "\tmov.l\t@r15+,r8\n";
+  ret = ret + "\tmov.l\t@r15+,r14\n";
+  ret = ret + "\trts\n\tnop\n";
+  if (at.outLabelEnable){
+    ret = ret + at.outLabel(label_short_const);
+    ret = ret + at.outLabel(label_long_const);
+  }
+  if (at.preBuildFlag==false) {
+    at.emit_func_count += 1;
+    if (at.DIVSUSE==1 && at.emit_func_count == at.funcNumber){
+      // sigend division function (32 bit)
+      ret += "\n\t.align\t2\n";
+      ret += "\t.global\t_divs\n";
+      ret += "\t.type\t_divs,@function\n";
+      ret += "_divs:\n";
+      ret += "\tmov\tr4,r1\n";
+      ret += "\trotcl\tr1\n";
+      ret += "\tsubc\tr0,r0\n";
+      ret += "\txor\tr3,r3\n";
+      ret += "\tsubc\tr3,r4\n";
+      ret += "\tdiv0s\tr5,r0\n";
+
+      for (i = 0 ; i < 8 ; i++){
+        ret += "\trotcl\tr4\n";   // 4*8 = 32 times
+	ret += "\tdiv1\tr5,r0\n";
+	ret += "\trotcl\tr4\n";
+	ret += "\tdiv1\tr5,r0\n";
+	ret += "\trotcl\tr4\n";
+	ret += "\tdiv1\tr5,r0\n";
+	ret += "\trotcl\tr4\n";
+	ret += "\tdiv1\tr5,r0\n";
+      }
+      ret += "\trotcl\tr4\n";
+      ret += "\taddc\tr3,r4\n"; 
+      ret += "\trts\n";
+      ret += "\tmov\tr4,r0\n";
+    }
+    if (at.DIVUUSE==1 && at.emit_func_count == at.funcNumber){
+      // Unsigned division function (32 bit)
+      ret += "\n\t.align\t2\n";
+      ret += "\t.global\t_divs\n";
+      ret += "\t.type\t_divs,@function\n";
+      ret += "_divs:\n";
+      ret += "\tmov\tr4,r1\n";
+      ret += "\trotcl\tr1\n";
+      ret += "\tsubc\tr0,r0\n";
+      ret += "\txor\tr3,r3\n";
+      ret += "\tsubc\tr3,r4\n";
+      ret += "\tdiv0s\tr5,r0\n";
+      
+      for (i = 0 ; i < 8 ; i++){
+	ret += "\trotcl\tr4\n";   // 4*8 = 32 times
+	ret += "\tdiv1\tr5,r0\n";
+	ret += "\trotcl\tr4\n";
+	ret += "\tdiv1\tr5,r0\n";
+	ret += "\trotcl\tr4\n";
+	ret += "\tdiv1\tr5,r0\n";
+	ret += "\trotcl\tr4\n";
+	ret += "\tdiv1\tr5,r0\n";
+      }
+      ret += "\trotcl\tr4\n";
+      ret += "\trts\n";
+      ret += "\tmov\tr4,r0\n";
+    }
+    if (at.DIVS64USE==1 && at.emit_func_count == at.funcNumber){
+      // Signed division function (64 bit)
+    }
+    if (at.DIVU64USE==1 && at.emit_func_count == at.funcNumber){
+      // Unsigned division function (64 bit)
+      ret += "\n\t.align\t2\n";
+      ret += "\t.global\t_divu64\n";
+      ret += "\t.type\t_divu64,@function\n";
+      ret += "_divu64:\n";
+      ret += "\tmov\tr4,r1\n";
+      ret += "\trotcl\tr1\n";
+      ret += "\tsubc\tr0,r0\n";
+      ret += "\tdiv0u\n";
+      for (i = 0 ; i < 8 ; i++){
+        ret += "\trotcl\tr5\n";   // 4*8 = 32 times
+	ret += "\tdiv1\tr6,r4\n";
+	ret += "\trotcl\tr5\n";
+	ret += "\tdiv1\tr6,r4\n";
+	ret += "\trotcl\tr5\n";
+	ret += "\tdiv1\tr6,r4\n";
+	ret += "\trotcl\tr5\n";
+	ret += "\tdiv1\tr6,r4\n";
+      }
+      for (i = 0 ; i < 8 ; i++){
+        ret += "\trotcl\tr5\n";   // 4*8 = 32 times
+	ret += "\tdiv1\tr7,r4\n";
+	ret += "\trotcl\tr5\n";
+	ret += "\tdiv1\tr7,r4\n";
+	ret += "\trotcl\tr5\n";
+	ret += "\tdiv1\tr7,r4\n";
+	ret += "\trotcl\tr5\n";
+	ret += "\tdiv1\tr7,r4\n";
+      }
+      ret += "\trotcl\tr5\n";
+      ret += "\tmov\tr5,r1\n";
+      ret += "\trts\n";
+      ret += "\tmov\tr4,r0\n";
+    }
+  }
+  return ret + "                ";
+
+}
+
+
+%defemit(deflabel x) { 
+  SH4Attr at = (SH4Attr)getFunctionAttr(func);
+  String ret="";
+
+  fpscr_ctrl = 0;
+  at.cana.registLabel(x, at.cana.seekLabelAddress(at.cana.getNowBlock())+code_size_inblock);
+  at.cana.setNowBlock(x);
+  code_size_inblock = 0;
+
+  return ret + x + ":" + " #" + (at.cana.seekLabelAddress(x));
+}
+
+%defemit(line x) { return "!line " + x; }
+
+void emitComment(PrintWriter out, String comment) {
+  out.println("# " + comment);
+}
+
+void emitBeginningOfModule(PrintWriter out) {
+  /* do nothing */
+}
+
+void emitEndOfModule(PrintWriter out) {
+  /* do nothing */
+}
+
+void emitBeginningOfSegment(PrintWriter out, String segment) {
+  out.println("\t" + segment);
+}
+
+void emitEndOfSegment(PrintWriter out, String segment) {
+  /* do nothing */
+}
+
+void emitDataLabel(PrintWriter out, String label) {
+  out.println(label + ":");
+}
+
+void emitCodeLabel(PrintWriter out, String label) {
+  out.println(label + ":");
+}
+
+
+
+/** Emit data align **/
+void emitAlign(PrintWriter out, int align) {
+    out.println("\t.align\t2");// + align);
+}
+
+/** Emit data common **/
+void emitCommon(PrintWriter out, SymStatic symbol, int bytes) {
+  if (symbol.linkage == "LDEF")
+    out.println("\t.local\t" + symbol.name);
+  out.println("\t.common\t" + symbol.name + "," + bytes + ","
+              + symbol.boundary);
+}
+
+/** Emit linkage information of symbol */
+void emitLinkage(PrintWriter out, SymStatic symbol) {
+    if (symbol.linkage == "XDEF"){
+	out.println("\t.global\t" + symbol.name);
+	out.println("\t.type\t" + symbol.name + ",@function");
+    }
+}
+
+
+/** Emit data zeros **/
+void emitZeros(PrintWriter out, int bytes) {
+  out.println("\t.skip\t" + bytes);
+}
+
+
+
+/** Emit data **/
+void emitData(PrintWriter out, int type, LirNode node) {
+System.out.println(">>" + node + "/" + type + ":" + I64);
+  if (type == I32) {
+    out.println("\t.long\t" + lexpConv.convert(node));
+  }
+  else if (type == I64) {
+    long v = ((LirIconst)node).signedValue();
+    out.println("\t.long\t" + ((v >> 32) & 0xffffffffL));
+    out.println("\t.long\t" +  (v & 0xffffffffL));
+  }
+  else if (type == I16) {
+    out.println("\t.short\t" + ((LirIconst)node).signedValue());
+  }
+  else if (type == I8) {
+    out.println("\t.byte\t" + ((LirIconst)node).signedValue());// + "/" + node.toString());
+  }
+  else if (type == F64) {
+    double value = ((LirFconst)node).value;
+    long bits = Double.doubleToLongBits(value);
+    out.println("\t.long\t0x" + Long.toString(bits & 0xffffffffL, 16) + " ! " + value);
+    out.println("\t.long\t0x" + Long.toString((bits >> 32) & 0xffffffffL, 16));
+  }
+  else if (type == F32) {
+    double value = ((LirFconst)node).value;
+    long bits = Float.floatToIntBits((float)value);
+    out.println("\t.long\t0x" + Long.toString(bits & 0xffffffffL, 16)
+                + " ! " + value);
+  }
+  else {
+    throw new CantHappenException("unknown type: " + type);
+  }
+}

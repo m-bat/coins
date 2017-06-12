@@ -1,0 +1,1223 @@
+;; -----------------------------------------------------------------------
+;;%   Copyright (C) 2007 Association for the COINS Compiler Infrastructure 
+;;%       (Read COPYING for detailed information.)             
+;;------------------------------------------------------------------------ 
+;;-*-Lisp-*-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Target machine description for Alpha, alpha.tmd since 2005-08-24
+;; Ver 0.6.2 update 2007-01-12 by Tomohiro TSUKAMOTO and Kenji KISE
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Machine types
+(def *type-address* I64)
+(def *type-bool* I64)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Real Register Set
+(def *real-reg-symtab*
+     (SYMTAB
+      (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 fp 16 17
+                     18 19 20 21 22 23 24 25 26 27 28 gp sp)
+               ("%@n" REG I64 8 0))
+      (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17
+                     18 19 20 21 22 23 24 25 26 27 28 29 30)
+               ("%f@n" REG F64 8 0))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Register Definition for Register Allocation
+
+(def *reg-I64* ( (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 16 17 
+                                18 19 20 21 22 23 24 28)
+                          (REG I64 "%@n"))))
+(def *reg-I32* ( (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 16 17
+                                18 19 20 21 22 23 24 28)
+                          (SUBREG I32 (REG I64 "%@n") 0))))
+(def *reg-I16* ( (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 16 17 
+                                18 19 20 21 22 23 24 28)
+                          (SUBREG I16 (REG I64 "%@n") 0))))
+(def *reg-I08* ( (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 16 17
+                                18 19 20 21 22 23 24 28)
+                          (SUBREG I8  (REG I64 "%@n") 0))))
+
+(def *reg-F64* ( (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 
+                                18 19 20 21 22 23 24 26 27 28 29 30)
+                          (REG F64 "%f@n"))))
+(def *reg-F32* ( (foreach @n (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 
+                                18 19 20 21 22 23 24 26 27 28 29 30)
+                          (SUBREG F32 (REG F64 "%f@n") 0))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; SYMTAB entry for library's extern needed when code generation.
+(def *cmplib-xref-symtab*
+     (SYMTAB
+      ;; void *memcpy(void *to, void *from, size_t n)
+      ("memcpy" STATIC UNKNOWN 4 "text" XREF))) ;;;; ??????????
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Register Set clobbered by CALL
+(def *reg-call-clobbers* ( (foreach @n (0 1 2 3 4 5 6 7 8 16 17 18 19 20 21
+                                          22 23 24 25 28)
+				    (REG I64 "%@n"))
+			   (foreach @n (0 1 10 11 12 13 14 15 16 17 18 19
+					  20 21 22 23 24 25 26 27 28 29 30)
+				    (REG F64 "%f@n"))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Register Set saved by CALL
+(def *reg-callee-saves*   ( (foreach @n (9 10 11 12 13 14)
+				     (REG I64 "%@n"))
+			    (foreach @n (2 3 4 5 6 7 8 9)
+				     (REG F64 "%f@n"))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Default register set for each nonterminals.
+(defregset regq *reg-I64*)
+(defregset regl *reg-I32*)
+(defregset regw *reg-I16*)
+(defregset regb *reg-I08*)
+(defregset regd *reg-F64*)
+(defregset regf *reg-F32*)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Default register set for register variables.
+(defregsetvar
+  (I64 *reg-I64*) (I32 *reg-I32*) (I16 *reg-I16*) (I8 *reg-I08*)
+  (F64 *reg-F64*) (F32 *reg-F32*))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Start symbol
+(defstart void)
+  
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; "Nonterminal symbols" for represented registers
+(defrule regq (REG    I64))
+(defrule regq (SUBREG I64))
+(defrule regl (REG    I32))
+(defrule regl (SUBREG I32))
+(defrule regw (REG    I16))
+(defrule regw (SUBREG I16))
+(defrule regb (REG    I8 ))
+(defrule regb (SUBREG I8 ))
+
+(defrule regd (REG    F64))
+(defrule regd (SUBREG F64))
+(defrule regf (REG    F32))
+(defrule regf (SUBREG F32))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Nonterminal symbols
+
+(defrule con05 (INTCONST) (cond "isConstU((LirIconst)$0,  5)"))
+(defrule con08 (INTCONST) (cond "isConstU((LirIconst)$0,  8)"))
+(defrule con16 (INTCONST) (cond "isConstS((LirIconst)$0, 16)"))
+(defrule con64 (INTCONST))
+
+
+(defrule rcs con05)
+(defrule rcs regq)
+(defrule rcs regl)
+
+(defrule rbv con08)
+(defrule rbv regq)
+(defrule rbv regl)
+
+(defrule addr con16)
+(defrule addr regq)
+(defrule addr regl)
+(defrule addr (ADD I64 regq con16) (value (_plus $1 $2)))
+(defrule addr (ADD I64 regl con16) (value (_plus $1 $2)))
+
+(defrule sta (STATIC I64))
+(defrule label (LABEL _))
+
+(defrule reg64 regq)
+(defrule reg64 regl)
+
+(defrule reg64f regd)
+(defrule reg64f regf)
+
+(defrule fun addr)
+(defrule fun asmcon)
+
+(defrule asmcon con64)
+(defrule asmcon sta (value (_static $1)))
+(defrule asmcon (ADD I64 asmcon con64) (value (_plus $1 $2)))
+(defrule asmcon (SUB I64 asmcon con64) (value (_minus $1 $2)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Integer Instructions
+
+(foreach 
+ (@d @op @t @code @s)
+ ((q ADD  I64 addq q) (q SUB I64 subq q)
+  (q BAND I64 and  q) (q BOR I64 or   q) (q BXOR I64 xor q)
+  (l ADD  I32 addl l) (l SUB I32 subl l)
+  (l BAND I32 and  l) (l BOR I32 or   l) (l BXOR I32 xor l))
+ (defrule reg@d (@op @t reg@s rbv) 
+   (code (@code (_r $1) (_r $2) (_r $0))) (cost 1)))
+
+(foreach
+ (@d @op @t @s)
+ ((q BNOT I64 q) (l BNOT I32 l))
+ (defrule reg@d (@op @t reg@s) ;; Rcv = ~Rav;
+   (code (ornot (_r "%31") (_r $1) (_r $0))) (cost 1)))
+
+(foreach
+ (@d @op @t @s)
+ ((q NEG I64 q) (l NEG I32 l))
+ (defrule reg@d (@op @t reg@s) ;; Rcv = -Rav;
+   (code (subq (_r "%31") (_r $1) (_r $0))) (cost 1)))
+
+
+(foreach 
+ (@d @op @t @s @code) 
+ ((q MUL I64 q mulq) (q DIVS I64 q divq)
+  (l MUL I32 l mull) (l DIVS I32 l divl)) ;; (DIVU divu)
+ (defrule reg@d (@op @t reg@s rbv) 
+   (code (@code (_r $1)  (_r $2) (_r $0))) (cost 3)))
+
+
+(foreach
+ (@d @op @t @s @code) 
+ ((l MUL I32 q mulq) (l DIVS I32 q divq)) ;; (DIVU divu)
+ (defrule reg@d (@op @t reg@s rbv) 
+   (code (@code (_r $1)  (_r $2) (_r $0))) (cost 3)))
+
+
+(defrule regq (ADD I64 regl con16) ;; I64 == address
+  (code (lda (_r $0) (_lda (_r $2) (_r $1)))) (cost 2))
+
+(defrule regq (ADD I64 regl rbv)   ;; I64 == address
+  (code (addq (_r $1) (_r $2) (_r $0))) (cost 1))
+
+
+(foreach
+ (@op @lit @code) ((ADD 2 s4addq) (ADD 3 s8addq)
+		   (SUB 2 s4subq) (SUB 3 s8subq))
+ (defrule regq (@op I64 regq (LSHS I32 reg64 (INTCONST I32 @lit)))
+   (code (@code (_r $2) (_r $1) (_r $0))) (cost 1)))
+
+(foreach
+ (@op @lit @code) ((ADD 2 s4addq) (ADD 3 s8addq)
+		   (SUB 2 s4subq) (SUB 3 s8subq))
+ (defrule regq (@op I64 regq (LSHS I64 reg64 (INTCONST I64 @lit)))
+   (code (@code (_r $2) (_r $1) (_r $0))) (cost 1)))
+
+(foreach
+ (@op @lit @code) ((ADD 2 s4addl) (ADD 3 s8addl)
+		   (SUB 2 s4subl) (SUB 3 s8subl))
+ (defrule regl (@op I32 regl (LSHS I32 reg64 (INTCONST I32 @lit)))
+   (code (@code (_r $2) (_r $1) (_r $0))) (cost 1)))
+
+
+(foreach 
+ (@d @op @t @s @code) ((q RSHS I64 q sra) (q LSHS I64 q sll)
+		       (l RSHS I32 l sra) (l LSHS I32 l sll))
+ (defrule reg@d (@op @t reg@s rcs)
+   (code (@code (_r $1) (_r $2) (_r $0))) (cost 1)))
+
+
+(foreach
+ (@op @code) ((RSHS sra) (LSHS sll))
+ (defrule regl (@op I32 regq rcs)
+   (code (@code (_r $1) (_r $2) (_r $0)))
+   (cost 1)))
+
+(foreach
+ (@d @op @t @code @s) ((l RSHU I32 srl l))
+ (defrule reg@d (@op @t reg@s rcs)
+   (code (zapnot (_r $1) 15 (_r $1))
+	 (@code (_r $1) (_r $2) (_r $0)))
+   (cost 1)))
+
+(foreach
+ (@d @op @t @code @s) ((q RSHU I64 srl q))
+ (defrule reg@d (@op @t reg@s rcs)
+   (code (@code (_r $1) (_r $2) (_r $0))) (cost 1)))
+
+(foreach
+ (@d @op @t @s @code) ((q MODS I64 q remq) (q MODU I64 q remqu)
+		       (l MODS I32 l reml) (l MODU I32 l remlu))
+ (defrule reg@d (@op @t reg@s rbv) 
+   (code (@code (_r $1) (_r $2) (_r $0))) (cost 1)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Store memory operation
+
+(foreach 
+ (@t @code @s) ((I64 stq q) (I32 stl l) (I16 stw w) (I8 stb b)
+		(F64 stt d) (F32 sts f))
+ (defrule void (SET @t (MEM @t addr) reg@s)
+   (code (@code (_r $2) (_mem (_r $1)))) (cost 1)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Load memory operations
+;;;;; Wrong Implementation !!!!!
+
+(foreach 
+ (@t @code @s) ((I64 ldq q) (I32 ldl l) (I16 ldw w) (I8 ldb b)
+		(F64 ldt d) (F32 lds f))
+ (defrule void (LIST reg@s (MEM @t addr))
+   (code (@code (_r $1) (_mem (_r $2)))) (cost 1)))
+
+(foreach 
+ (@s @t @code) ((q I64 ldq) (l I32 ldl) (w I16 ldw) (b I8 ldb)
+		(d F64 ldt) (f F32 lds))
+ (defrule reg@s (MEM @t addr)
+   (code (@code (_r $0) (_mem (_r $1)))) (cost 1)))
+
+
+(foreach 
+ (@t @op @code) ((I16 CONVSX ldw) (I16 CONVZX ldw)
+		 (I8  CONVSX ldb) (I8  CONVZX ldb))
+ (defrule regl (@op I32 (MEM @t addr))
+   (code (@code (_r $0) (_mem (_r $1)))) (cost 1)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Jump and Branch Instructions
+
+(defrule void (JUMP label)
+  (code (br (_r "%31") (_jumplabel $1))) (cost 1)) ;;; jmp OK ??
+
+(foreach
+ (@t) ((I64) (I32))
+ (defrule void (JUMPC (TSTNE @t reg64 rbv) label label)
+   (code (cmpeq (_r $1) (_r $2) (_r "%25")) 
+	 (beq (_r "%25") (_jumplabel $3)))
+   (cost 2)))
+
+(foreach 
+ (@op @code) ((TSTLTS cmplt) (TSTLES cmple) (TSTEQ cmpeq)
+	      (TSTLTU cmpult) (TSTLEU cmpule))
+ (defrule void (JUMPC (@op I64 reg64 rbv) label label)
+   (code (@code (_r $1) (_r $2) (_r "%25"))
+	 (bne (_r "%25") (_jumplabel $3)))
+   (cost 2)))
+
+(foreach 
+ (@op @code) ((TSTLTS cmple) (TSTLES cmplt) (TSTEQ cmpne)
+	      (TSTLTU cmpule) (TSTLEU cmpult))
+ (defrule void (JUMPC (@op I64 rbv reg64) label label)
+   (code (@code (_r $2) (_r $1) (_r "%25"))
+	 (beq (_r "%25") (_jumplabel $3)))
+   (cost 2)))
+
+;;;;; TSTLTS cmplt A,B is the same as TSTGTS cmplt B,A
+;;;;; TSTLES cmple A,B is the same as TSTGES cmple B,A
+(foreach 
+ (@op @code) ((TSTGTS cmplt) (TSTGES cmple)
+	      (TSTGTU cmpult) (TSTGEU cmpule))
+ (defrule void (JUMPC (@op I64 rbv reg64) label label)
+   (code (@code (_r $2)  (_r $1) (_r "%25")) 
+	 (bne (_r "%25") (_jumplabel $3)))
+   (cost 2)))
+
+(foreach 
+ (@op @code) ((TSTGTS cmple) (TSTGES cmplt)
+	      (TSTGTU cmpule) (TSTGEU cmpult))
+ (defrule void (JUMPC (@op I64 reg64 rbv) label label)
+   (code (@code (_r $1)  (_r $2) (_r "%25")) 
+	 (beq (_r "%25") (_jumplabel $3)))
+   (cost 2)))
+
+;;;;; floating point
+(defrule void (JUMPC (TSTNE I64 reg64f reg64f) label label)
+  (code 
+   (cmpteq (_r $1) (_r $2) (_r "%f25")) 
+   (fbeq (_r "%f25") (_jumplabel $3)))
+  (cost 2))
+
+(foreach 
+ (@op @code) ((TSTLTS cmptlt) (TSTLES cmptle) (TSTEQ cmpteq))
+ (defrule void (JUMPC (@op I64 reg64f reg64f) label label)
+   (code 
+    (@code (_r $1) (_r $2) (_r "%f25")) 
+    (fbne (_r "%f25") (_jumplabel $3)))
+   (cost 2)))
+
+;;;;; TSTLTS cmptlt A,B is the same as TSTGTS cmptlt B,A
+;;;;; TSTLES cmptle A,B is the same as TSTGES cmptle B,A
+(foreach 
+ (@op @code) ((TSTGTS cmptlt) (TSTGES cmptle))
+ (defrule void (JUMPC (@op I64 reg64f reg64f) label label)
+   (code 
+    (@code (_r $2)  (_r $1) (_r "%f25")) 
+    (fbne (_r "%f25") (_jumplabel $3)))
+   (cost 2)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Floating-Point Instructions
+(foreach 
+ (@op @code) ((ADD addt) (SUB subt) (MUL mult) (DIVS divt))
+ (defrule regd (@op F64 regd regd)
+   (code (@code (_r $1) (_r $2) (_r $0))) (cost 1)))
+
+(foreach 
+ (@op @code) ((ADD adds) (SUB subs) (MUL muls) (DIVS divs))
+ (defrule regf (@op F32 regf regf)
+   (code (@code (_r $1) (_r $2) (_r $0))) (cost 1)))
+
+(foreach
+ (@t @r) ((F64 d) (F32 f))
+ (defrule reg@r (NEG @t reg@r)
+   (code (cpysn (_r $1) (_r $1) (_r $0))) (cost 1)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Register copy operations
+(foreach 
+ @s (q l w b)
+ (defrule reg@s con08 (code (_ldw (_r $0) (_r $1))) (cost 1))
+ (defrule reg@s con16 (code (_ldw (_r $0) (_r $1))) (cost 1))
+ (defrule reg@s con64 (code (_ldw (_r $0) (_r $1))) (cost 1))
+ (defrule reg@s sta   (code (lda  (_r $0) (_static $1))) (cost 1)))
+
+(foreach
+ (@s @t) ((d F64) (f F32))
+ (defrule reg@s (FLOATCONST @t 0.0)
+   (code (fclr (_r $0))) (cost 1)))
+
+(foreach 
+ (@t @s @d) ((I64 q q) (I32 l l) (I16 w w) (I8 b b))
+ (defrule void (SET @t reg@s reg@d)
+   (code (mov (_r $2) (_r $1))) (cost 1)))
+
+
+(foreach 
+ (@t @s @d) ((I64 l l) (I32 q q)
+	     (I64 l q) (I32 q l) (I32 l q) (I8 b q))
+ (defrule void (SET @t reg@s reg@d)
+   (code (mov (_r $2) (_r $1))) (cost 1)))
+
+(foreach
+ (@t @s @d) ((F64 d d) (F32 f f))
+ (defrule void (SET @t reg@s reg@d)
+   (code (fmov (_r $2) (_r $1))) (cost 1)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Type Conversions
+
+(defrule regq (CONVZX I64 regl) ;; I32 -> I64 zero
+  (code (zapnot (_r $1) 15 (_r $0))) (cost 1))
+
+(defrule regl (CONVZX I32 regw) ;; I16 -> I32 zero
+  (code (zapnot (_r $1) 3 (_r $0))) (cost 1))
+
+(defrule regl (CONVZX I32 regb) ;; I8 -> I32 zero
+  (code (zapnot (_r $1) 1 (_r $0))) (cost 1))
+
+
+
+(defrule regq (CONVSX I64 regl)) ;; I32 -> I64
+
+(defrule regl (CONVSX I32 regw) ;; I16 -> I32
+  (code (sll (_r $1) 16 (_r $0)) (sra (_r $0) 16 (_r $0))) (cost 2))
+
+(defrule regq (CONVSX I64 regb) ;; I08 -> I64
+  (code (sll (_r $1) 56 (_r $0)) (sra (_r $0) 56 (_r $0))) (cost 2))
+
+(defrule regl (CONVSX I32 regb) ;; I08 -> I32
+  (code (sll (_r $1) 24 (_r $0)) (sra (_r $0) 24 (_r $0))) (cost 2))
+
+(defrule regw (CONVSX I16 regb) ;; I08 -> I16
+  (code (sll (_r $1) 8 (_r $0))  (sra (_r $0) 8 (_r $0))) (cost 2))
+
+
+
+(defrule regl (CONVIT I32 regq) ;; I64 -> I32
+  (code (addl (_r $1) (_r "%31") (_r $0))) (cost 1))
+
+(defrule regw (CONVIT I16 regq) ;; I64 -> I16
+  (code (sll (_r $1) 48 (_r $0)) (sra (_r $0) 48 (_r $0))) (cost 1))
+
+(defrule regb (CONVIT I08 regq) ;; I64 -> I08
+  (code (sll (_r $1) 56 (_r $0)) (sra (_r $0) 56 (_r $0))) (cost 1))
+
+(defrule regw (CONVIT I16 regl) ;; I32 -> I16
+  (code (sll (_r $1) 48 (_r $0)) (sra (_r $0) 48 (_r $0))) (cost 2))
+
+(defrule regb (CONVIT I08 regl) ;; I32 -> I08
+  (code (sll (_r $1) 56 (_r $0)) (sra (_r $0) 56 (_r $0))) (cost 1))
+
+(defrule regb (CONVIT I08 regw) ;; I16 -> I08
+  (code (sll (_r $1) 56 (_r $0)) (sra (_r $0) 56 (_r $0))) (cost 1))
+
+
+
+(defrule regd (CONVSF F64 regq) ;; I64 -> F64
+  (code (stq (_r $1) (_mem_tmp ".TMP25")) (ldt (_r "%f25") (_mem_tmp ".TMP25"))
+        (cvtqt (_r "%f25") (_r $0))) (cost 3))
+
+(defrule regf (CONVSF F32 regq) ;; I64 -> F32
+  (code (stq (_r $1) (_mem_tmp ".TMP25")) (ldt (_r "%f25") (_mem_tmp ".TMP25"))
+        (cvtqs (_r "%f25") (_r $0))) (cost 3))
+
+(defrule regd (CONVSF F64 regl) ;; I32 -> F64
+  (code (stl (_r $1) (_mem_tmp ".TMP25")) (lds (_r $0) (_mem_tmp ".TMP25"))
+        (cvtlq (_r $0) (_r "%f25")) (cvtqt (_r "%f25") (_r $0))) (cost 4))
+
+(defrule regf (CONVSF F32 regl) ;; I32 -> F32
+  (code (stl (_r $1) (_mem_tmp ".TMP25")) (lds (_r $0) (_mem_tmp ".TMP25"))
+        (cvtlq (_r $0) (_r "%f25")) (cvtqs (_r "%f25") (_r $0))) (cost 4))
+
+
+
+(defrule regd (CONVFX F64 regf) ;; F32 -> F64
+  (code (fmov (_r $1) (_r $0))) (cost 1))
+
+
+
+(defrule regf (CONVFT F32 regd) ;; F64 -> F32
+  (code (cvtts (_r $1) (_r $0))) (cost 1))
+
+
+
+(defrule regq (CONVFS I64 regd) ;; F64 -> I64
+  (code (cvttq (_r $1) (_r "%f25")) (stt (_r "%f25") (_mem_tmp ".TMP25"))
+        (ldq (_r $0) (_mem_tmp ".TMP25"))) (cost 3))
+
+(defrule regq (CONVFS I64 regf) ;; F32 -> I64
+  (code (cvttq (_r $1) (_r "%f25")) (stt (_r "%f25") (_mem_tmp ".TMP25"))
+        (ldq (_r $0) (_mem_tmp ".TMP25"))) (cost 3))
+
+(defrule regl (CONVFS I32 regd) ;; F64 -> I32
+  (code (cvttq (_r $1) (_r "%f25")) (stt (_r "%f25") (_mem_tmp ".TMP25"))
+        (ldq (_r $0) (_mem_tmp ".TMP25"))) (cost 3))
+
+(defrule regl (CONVFS I32 regf) ;; F32 -> I32
+  (code (cvttq (_r $1) (_r "%f25")) (stt (_r "%f25") (_mem_tmp ".TMP25"))
+        (ldq (_r $0) (_mem_tmp ".TMP25"))) (cost 3))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; function returning scaler values
+
+(defrule void (CALL fun)
+  (cond "$1.opCode == Op.STATIC || $1.opCode == Op.MEM")
+  (code	(jsr (_r %26) (_jumplabel $1))
+        (ldgp (_r "%gp") (_lda "0" (_r "%26")))) (cost 2))
+
+(defrule void (CALL fun)
+  (cond "$1.opCode == Op.REG || $1.opCode == Op.INTCONST")
+  (code	(mov (_r $1) (_r "%27"))
+	(jsr (_r %26) (_jumplabel "%27"))
+        (ldgp (_r "%gp") (_lda "0" (_r "%26")))) (cost 2))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PARALLEL with only one instruction
+(defrule void (PARALLEL void))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Tree Rewriting
+
+;; Prologue
+(defrewrite (PROLOGUE) (to (norescan (eval "rewritePrologue($0, post)")))
+  (phase late))
+
+;; Epilogue
+(defrewrite (EPILOGUE) (to (norescan (eval "rewriteEpilogue($0, pre)")))
+  (phase late))
+
+;; Call
+(defrewrite (CALL) (to (eval "rewriteCall($0, pre, post)"))
+  (phase late))
+
+;; Jumpn
+(defrewrite (JUMPN) (to (eval "rewriteJumpn($0, pre)"))
+  (phase late))
+
+;; Aggregate copy
+(defrewrite (SET) (cond "Type.tag($0.type) == Type.AGGREGATE")
+  (to (eval "rewriteAggregateCopy($0, pre)"))
+  (phase late))
+
+;; Floatconst
+(defrewrite (FLOATCONST _ 0.0))
+
+(foreach @t (F64 F32)
+  (defrewrite (FLOATCONST @t)
+    (to (MEM @t (STATIC I64 (eval "module.constToData($0)"))))
+    (phase late)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+%%
+/*************************************************************************/
+/* Target machine description for Alpha, alpha.tmd since 2005-08-24      */
+/* Ver 0.6.2 update 2007-01-12 by Tomohiro TSUKAMOTO and Kenji KISE      */
+
+import coins.backend.sym.Label;
+import coins.backend.Storage;
+import coins.backend.Data;
+import coins.backend.LocalTransformer;
+import coins.backend.Transformer;
+import coins.backend.util.BitMapSet;
+import coins.backend.util.NumberSet;
+import coins.backend.cfg.BasicBlk;
+import coins.backend.lir.LirLabelRef;
+import coins.backend.ana.SaveRegisters;
+import coins.Version;  //##76
+import java.lang.System;
+import java.lang.Integer;
+import java.util.*;
+
+/*************************************************************************/
+%State methods
+
+/*************************************************************************/
+private boolean isConstZero(LirIconst c){ /* Is Constant-Zero ? */
+  return (0 == c.signedValue());
+}
+
+/*************************************************************************/
+private boolean isConstS(LirIconst c, int n){ /* Is Constant-Signed ? */
+  if(n<0 || n>64)
+    throw new CantHappenException("## isConstS() n out of range");
+  long bound = (1<<(n-1));
+  return (-bound <= c.signedValue()) && (c.signedValue() < bound);
+}
+
+/*************************************************************************/
+private boolean isConstU(LirIconst c, int n){ /* Is Constant-Unsigned ? */
+  if(n<0 || n>64)
+    throw new CantHappenException("## isConstU() n out of range");
+  long bound = (1<<n);
+  return (0 <= c.signedValue()) && (c.signedValue() < bound);
+}
+
+/*************************************************************************/
+/*************************************************************************/
+%CodeGenerator methods
+
+ImList regCallClobbers = $def(*reg-call-clobbers*);
+
+/***** system parameters                                             *****/
+/*************************************************************************/
+static final int Regsize        =    8; /* Alpha 64bit(8byte) arch.      */
+static final int FirstArgument  =   16; /* to pass the first argument    */
+static final int NumRegArgument =    6; /* number of register argument   */
+
+/***** Alpha function attribute *****/
+/*************************************************************************/
+static class AlphaAttr extends FunctionAttr {
+  String bitmask;     /* Bitmask String                      */
+  int argc;           /* Number of Argument                  */
+  int numCall;        /* Number of Call                      */
+  int stackRequired;  /* Maximum stack space used by call    */
+  /**********************************************************************/
+  AlphaAttr(Function func) {
+    super(func);
+    bitmask = "0x400fe00"; /* savereg $15($fp), $26($ra) */
+    argc    = 0;
+    numCall = 0;
+  }
+
+}
+
+/***** Rewrite FRAME node to target machine form. *****/
+/*************************************************************************/
+LirNode rewriteFrame(LirNode node) {
+  Symbol fp = func.module.globalSymtab.get("%fp");
+  
+  /***** Placement AGGREGATE on stack frame ????? *****/
+  SymAuto sym = (SymAuto)((LirSymRef)node).symbol;
+  long _off = sym.offset();
+  LirNode ret;
+  ret = lir.node(Op.ADD, node.type, lir.symRef(fp),
+		 lir.iconst(I64, (long)(_off)));
+  return ret;
+}
+
+
+/***** Early-time pre-rewriting sequence *****/
+/*************************************************************************/
+private final Transformer[] myEarlyTransSeq = {
+  AggregateByReference.trig,
+  localEarlyRewritingTrig
+};
+
+/** Return early time pre-rewriting sequence. **/
+/*************************************************************************/
+public Transformer[] earlyRewritingSequence() { return myEarlyTransSeq; }
+
+/***** Late-time pre-rewriting sequence. *****/
+/*************************************************************************/
+private final Transformer[] myLateTransSeq = {
+  localLateRewritingTrig,
+  ProcessFramesTrig
+};
+
+/***** Return late time pre-rewriting sequence. *****/
+/*************************************************************************/
+public Transformer[] lateRewritingSequence() { return myLateTransSeq; }
+
+/** Set register set for REG symbol. **/
+/*************************************************************************/
+void _setRegsetOf(Symbol sym, String regset) {
+  if(regset == null)
+    throw new CantHappenException("regset set to null");
+  sym.setOpt(ImList.list("&regset", regset));
+}
+
+/** Get register set for REG symbol. **/
+/*************************************************************************/
+String _getRegsetOf(Symbol sym) {
+  for (ImList p = sym.opt(); !p.atEnd(); p = p.next()) {
+    if (p.elem() == "&regset")
+      return (String)p.elem2nd();
+  }
+  return null;
+}
+
+/*************************************************************************/
+private LirNode nthArg(int no, int[] types, LirNode sp){
+  if(no<NumRegArgument){
+    switch (Type.tag(types[no])) {
+    case Type.INT:
+    case Type.AGGREGATE:
+      return regnode(types[no], "%"  + (FirstArgument + no));
+    case Type.FLOAT:
+      return regnode(types[no], "%f" + (FirstArgument + no));
+    default:
+      throw new CantHappenException("Error: LirNode nthArg()" + no);
+    }
+  }
+  else{	/***** Use the stack, not registers *****/
+    int offset = (no - NumRegArgument) * Regsize;
+    return lir.node(Op.MEM, types[no],
+		    lir.node(Op.ADD, I64, sp, lir.iconst(I64, offset)));
+  }
+}
+
+/***** Rewrite PROLOGUE *****/
+/*************************************************************************/
+LirNode rewritePrologue(LirNode node, BiList post) {
+  AlphaAttr at = (AlphaAttr)getFunctionAttr(func);
+  int n = node.nKids();
+  LirNode fp = regnode(I64, "%fp");
+
+  at.argc = n - 1;
+
+  int types[] = new int[n];
+  int origArgc = 0;
+  int firstNo = 0;
+  if(func.origEpilogue.nKids() > 1
+     && Type.tag(func.origEpilogue.kid(1).type)==Type.AGGREGATE){
+    firstNo = 1;
+    at.argc++;
+  }
+
+  for(int i=1; i<n; i++){
+    LirNode arg = node.kid(i);
+    types[firstNo+i-1] = arg.type;
+
+    LirNode src = nthArg(firstNo+i-1, types, fp);
+
+    post.add(lir.node(Op.SET, arg.type, arg, src));
+    origArgc++;
+  }
+
+  LirNode[] argv = new LirNode[origArgc+1];
+  argv[0] = node.kid(0);
+  for(int i=0; i<origArgc; i++) argv[i+1] = nthArg(firstNo+i, types, fp);
+  return lir.node(Op.PROLOGUE, Type.UNKNOWN, argv);
+}
+
+/*************************************************************************/
+private LirNode regnode(int type, String name) {
+  LirNode node, nodeI32, nodeI16, nodeI08, nodeF32;
+  int tag = Type.tag(type);
+  node    = lir.symRef(module.globalSymtab.get(name));
+  nodeI32 = lir.node(Op.SUBREG, I32, node, lir.untaggedIconst(I64, 0));
+  nodeI16 = lir.node(Op.SUBREG, I16, node, lir.untaggedIconst(I64, 0));
+  nodeI08 = lir.node(Op.SUBREG, I8,  node, lir.untaggedIconst(I64, 0));
+  nodeF32 = lir.node(Op.SUBREG, F32, node, lir.untaggedIconst(I64, 0));
+
+  if(type == I64)      return node;
+  else if(type == I32) return nodeI32;
+  else if(type == I16) return nodeI16;
+  else if(type == I8 ) return nodeI08;
+  else if(type == F64) return node;
+  else if(type == F32) return nodeF32;
+  return null;
+}
+
+/***** Return the register for value returned. *****/
+/*************************************************************************/
+LirNode returnReg(int type) {
+  switch(Type.tag(type)){
+  case Type.INT:
+    switch(Type.bytes(type)){
+    case 1:
+    case 2:
+    case 4: 
+    case 8: return regnode(type, "%0"); /** why not %0 ????? **/
+    default: return null;
+    }
+  case Type.FLOAT:
+    switch (Type.bytes(type)){
+    case 4:
+    case 8: return regnode(type, "%f0");
+    default: return null;
+    }
+  case Type.AGGREGATE:
+    return regnode(I64, "%0");
+  default: return null;
+  }
+}
+
+/***** Rewrite EPILOGUE *****/
+/*************************************************************************/
+LirNode rewriteEpilogue(LirNode node, BiList pre) {
+  if (node.nKids() < 2) {
+    return node;
+  }
+
+  LirNode ret = node.kid(1);
+  LirNode tmp = func.newTemp(ret.type);
+  LirNode reg = returnReg(ret.type);
+  LirNode fp  = regnode(I64, "%fp");
+
+  switch (Type.tag(ret.type)) {
+  case Type.INT:
+  case Type.FLOAT:
+    if(isComplex(ret)) {
+      pre.add(lir.node(Op.SET, tmp.type, tmp, ret));
+      pre.add(lir.node(Op.SET, reg.type, reg, tmp));
+    } else
+      pre.add(lir.node(Op.SET, reg.type, reg, ret));
+
+    return lir.node(Op.EPILOGUE, Type.UNKNOWN, node.kid(0), reg);
+  case Type.AGGREGATE:
+    pre.add(lir.node
+	    (Op.SET, I64, reg, regnode(I64, "%"+FirstArgument)));
+    pre.add(lir.node
+	    (Op.SET, ret.type, lir.node
+	     (Op.MEM, ret.type, reg), ret));
+    return node;
+  default:
+    throw new CantHappenException("error_in_rewriteEpilogue");
+  }
+}
+
+/***** Return true if node is a complex one *****/
+/*************************************************************************/
+boolean isComplex(LirNode node) {
+  switch(node.opCode){
+  case Op.FLOATCONST:
+  case Op.INTCONST  :
+  case Op.REG       :
+  case Op.STATIC    :
+  case Op.FRAME     : return false;
+  default           : return true;
+  }
+}
+
+/***** Rewrite CALL node. *****/
+/*************************************************************************/
+LirNode rewriteCall(LirNode node, BiList pre, BiList post) {
+  AlphaAttr at = (AlphaAttr)getFunctionAttr(func);
+  BiList list1 = new BiList();
+  BiList list2 = new BiList();
+  LirNode sp   = regnode(I64, "%sp");
+
+  LirNode callee = node.kid(0);
+  LirNode args  = node.kid(1);
+  LirNode ret   = null;
+
+  at.numCall++;
+
+  int paramCount = 0;
+
+  if(node.kid(2).nKids()>0) ret=node.kid(2).kid(0);
+
+  boolean reta = false;
+  if(ret != null && Type.tag(ret.type) == Type.AGGREGATE){
+    LirNode dest = regnode(I64, "%"+FirstArgument);
+    list1.add(lir.node(Op.SET, I64, dest, ret.kid(0)));
+    reta = true;
+    paramCount++;
+  }
+
+  /***** parameters *****/
+
+  int n = args.nKids();
+  int types[] = new int[n+1];
+
+  for(int i=0; i<n; i++){
+    LirNode arg = args.kid(i);
+    types[paramCount] = arg.type;
+
+    LirNode temp = func.newTemp(arg.type);
+    LirNode dest = nthArg(paramCount++, types, sp);
+
+    switch (Type.tag(arg.type)){
+    case Type.INT:
+    case Type.FLOAT:
+      if(dest.opCode == Op.MEM || isComplex(arg)){
+        list1.add(lir.node(Op.SET, temp.type, temp, arg));
+        list2.add(lir.node(Op.SET, dest.type, dest, temp));
+      } else {
+        list2.add(lir.node(Op.SET, dest.type, dest, arg));
+      }
+      break;
+    default:
+      throw new CantHappenException("Unexpected rewriteCALL");
+    }
+  }
+
+  // round up to 8byte boundary
+  int required = ((n - NumRegArgument) * 8 + 7) & -8; 
+  if(at.stackRequired < required) at.stackRequired = required;
+
+  /*************** ????? ************/
+  LirNode[] newargv = new LirNode[n];
+  int j=0;
+  for(BiLink p=list2.first(); !p.atEnd(); p=p.next()){
+    LirNode ins = (LirNode)p.elem();
+    newargv[j++] = ins.kid(0);
+  }
+  try {
+    node = lir.node
+      (Op.PARALLEL, Type.UNKNOWN,
+       noRescan(lir.operator
+       (Op.CALL, Type.UNKNOWN,
+	node.kid(0),
+	lir.node(Op.LIST, Type.UNKNOWN, newargv),
+        node.kid(2),
+        reta ? ImList.list("&reta", new Integer(Type.bytes(ret.type)))
+        : ImList.list())),
+       lir.decodeLir(new ImList("CLOBBER", regCallClobbers), func, module));
+  } catch (SyntaxError e) {
+    throw new CantHappenException();
+  }
+  
+  pre.concatenate(list1);
+  pre.concatenate(list2);
+
+  /***** the function returns value using $0 *****/
+  if(ret!=null && ret.opCode!=Op.FRAME){
+    switch(Type.tag(ret.type)){
+    case Type.INT  :
+    case Type.FLOAT:{
+      LirNode tmp = func.newTemp(ret.type);
+      LirNode reg = returnReg(ret.type);
+      post.add(lir.node(Op.SET, ret.type, tmp, reg));
+      post.add(lir.node(Op.SET, ret.type, ret, tmp));
+      node.kid(0).kid(2).setKid(0, reg);
+      break;
+    }
+    case Type.AGGREGATE:
+      break;
+    }
+  }
+  return node;
+}
+
+/*************************************************************************/
+String segmentForConst() { return ".rdata"; }
+
+/** Return the alignment bytes for specified type. **/
+public int alignForType(int type) {
+  switch (Type.bytes(type)) {
+  case 1: case 3: case 5: case 7: return 1;
+  case 2: case 6:                 return 2;
+  case 4:                         return 4;
+  case 8:                         return 8;
+  default:                        return 8;
+  }
+}
+
+/***** simple functions *****/
+/*************************************************************************/
+void emitComment(PrintWriter out, String comment) { /* do nothing */ }
+void emitBeginningOfModule(PrintWriter out){ /* do nothing */ }
+void emitEndOfModule(PrintWriter out){ /* do nothing */ }
+void emitEndOfSegment(PrintWriter out, String segment){ /* do nothing */ }
+FunctionAttr newFunctionAttr(Function func) { return new AlphaAttr(func);}
+
+/*************************************************************************/
+void emitBeginningOfSegment(PrintWriter out, String segment) {
+  out.println(segment);
+}
+
+/*************************************************************************/
+void emitDataLabel(PrintWriter out, String label) {
+  String name = label;
+  if(name.startsWith("string")) // "string." --> "$LC"
+    name = "$LC" + name.substring(name.indexOf(".")+1);  
+  out.println(name + ":");
+}
+
+/*************************************************************************/
+void emitCodeLabel(PrintWriter out, String label){
+  if(label.charAt(0)!='.') out.println(label + ":");
+  else out.println("$" + label.substring(1) + ":");
+}
+
+/*************************************************************************/
+void emitLinkage(PrintWriter out, SymStatic symbol) {
+  if(symbol.linkage == "XDEF"){
+    out.println("\t.globl\t" + symbol.name);
+    if(symbol.segment == ".text") out.println("\t.ent\t" + symbol.name);
+  } else if (symbol.linkage == "LDEF") {
+    if(symbol.segment == ".text")
+      if(!symbol.name.startsWith("string.") && symbol.type==Type.UNKNOWN)
+        out.println("\t.ent\t" + symbol.name);
+  }
+}
+
+/*************************************************************************/
+void emitZeros(PrintWriter out, int bytes) {
+  if (bytes > 0)
+    out.println("\t.space\t" + bytes);
+}
+
+/*************************************************************************/
+void emitData(PrintWriter out, int type, LirNode node){
+  if(type == I64){
+    String value = lexpConv.convert(node);
+    if(value.startsWith("string")) // "string." --> "$LC"
+      value = "$LC" + value.substring(value.indexOf(".")+1);  
+    out.println("\t.quad\t" + value);
+  }
+  else if(type == I32){
+    out.println("\t.long\t" + lexpConv.convert(node));
+  }
+  else if(type == I16){
+    out.println("\t.word\t" + ((LirIconst)node).signedValue());
+  }
+  else if(type == I8){
+    out.println("\t.byte\t" + ((LirIconst)node).signedValue());
+  }
+  else if(type == F64){
+    out.println("\t.t_floating\t" + ((LirFconst)node).value);
+  }
+  else if(type == F32){
+    int bits = Float.floatToIntBits((float)((LirFconst)node).value);
+    out.println("\t.long\t0x" + Integer.toHexString(bits));
+  }
+  else{
+    throw new CantHappenException("unknown type: " + type);
+  }
+}
+
+/***** Code building macros *****/
+/*************************************************************************/
+/*************************************************************************/
+%defbuild(SUBREG x){ /** ???????????????? **/
+  Symbol reg = ((LirSymRef)x.kid(0)).symbol;
+  int dtype = x.type;
+  int offset = (int)((LirIconst)x.kid(1)).value;
+  if(dtype==F32 && offset==1)
+    return "%f" + (Integer.parseInt(reg.name.substring(2)) + 1);
+  else
+    return reg.name;
+}
+/*************************************************************************/
+%defbuild(_mem_tmp name) {
+  SymAuto sym = reserveFrame((String)name, I64);
+  return sym.offset() + "($fp)";
+}
+
+/***** Code emission macros *****/
+/*************************************************************************/
+/*************************************************************************/
+void emitIdent(PrintWriter out, String str){
+  //##76 out.println("\t# Coins Compiler version 1.4.1");
+  out.println("\t# Coins Compiler version " + Version.version);  //##76
+  out.println("\t# Alpha TMD version 0.6.2");
+  out.println("\t.set noreorder");
+  out.println("\t.set volatile");
+  out.println("\t.set noat");
+  out.println("\t.arch ev4");
+}
+
+/*************************************************************************/
+%defemit(prologue =f){
+  Function func = (Function)f;
+  AlphaAttr at  = (AlphaAttr)getFunctionAttr(func);
+  String str_header  = new String();
+  String str         = new String();
+  int size;
+  int offset = at.stackRequired;
+
+  /*****  *****/
+  if( 0 < at.numCall ) {
+    SaveRegisters saveList = (SaveRegisters)func.require(SaveRegisters.analyzer);
+    NumberSet.Iterator it  = saveList.calleeSave.iterator();
+    while ( it.hasNext() ) {
+      int    reg  = it.next();
+      String dest = machineParams.registerToString(reg);
+      
+      dest = "$" + dest.substring(1);
+
+      if(!dest.startsWith("$f"))
+	str += "\tstq\t" + dest + "," + offset + "($sp)\n";
+      else
+	str += "\tstt\t" + dest + "," + offset + "($sp)\n";
+
+      offset += Regsize;
+    }
+
+    str += "\tstq\t$26," + offset + "($sp)\n";
+    offset += Regsize;
+  }
+
+  /*****  *****/
+  size = frameSize(func) + offset;
+  size = (size + 7) & -8; // round up to 8byte boundary
+
+  if(0<size||0<at.argc-NumRegArgument) {
+    str += "\tstq\t$fp," + offset + "($sp)\n";
+    size += Regsize;
+  }
+
+  if(0<size && size<=255)
+    str_header += "\tsubq\t$sp," + size + ",$sp\n";
+  else if(0<size)
+    str_header += "\tlda\t$sp," + "-" + size + "($sp)\n";
+  
+  if(0<size)
+    str += "\taddq\t$sp," +  size  + ",$fp\n";
+  
+
+  str_header  = "\t.mask\t" + at.bitmask + ",-" + size + "\n"
+              + "\tldgp\t$gp,0($27)\n"
+              + str_header;
+
+  return str_header + str;
+}
+
+/*************************************************************************/
+%defemit(epilogue =f rettype) {
+  Function func = (Function)f;
+  AlphaAttr at  = (AlphaAttr)getFunctionAttr(func);
+  String str = new String();
+  int size;
+  int offset = at.stackRequired;
+
+  /*****  *****/
+  if( 0 < at.numCall ) {
+    SaveRegisters saveList = (SaveRegisters)func.require(SaveRegisters.analyzer);
+    NumberSet.Iterator  it = saveList.calleeSave.iterator();
+    while ( it.hasNext() ) {
+      int    reg  = it.next();
+      String dest = machineParams.registerToString(reg);
+      
+      dest = "$" + dest.substring(1);
+
+      if(!dest.startsWith("$f"))
+	str += "\tldq\t" + dest + "," + offset + "($sp)\n";
+      else
+	str += "\tldt\t" + dest + "," + offset + "($sp)\n";
+
+      offset += Regsize;
+    }
+
+    str += "\tldq\t$26," + offset + "($sp)\n";
+    offset += Regsize;
+
+  }
+
+  /*****  *****/
+  size = frameSize(func) + offset;
+  size = (size + 7) & -8; // round up to 8byte boundary
+
+  if(0<size||0<at.argc-NumRegArgument) {
+    str += "\tldq\t$fp," + offset + "($sp)\n";
+    size += Regsize;
+  }
+
+  if(0<size && size<=255)
+    str += "\taddq\t$sp," + size + ",$sp\n";
+  else if(0<size)
+    str += "\tlda\t$sp," + size + "($sp)\n";
+  
+  str += "\tret\t$31,($26),1\n";
+  str += "\t.end\t" + func.symbol.name + "\n";
+
+  return str;
+}
+
+/*************************************************************************/
+%defemit(_plus x y){
+  if(y.charAt(0) == '-') return x + y;
+  else return x + "+" + y;
+}
+
+/*************************************************************************/
+%defemit(_minus x y){
+  if (y.charAt(0) == '-') return x + "+" + y.substring(1);
+  else return x + "-" + y;
+}
+
+/*************************************************************************/
+%defemit(_r x){ // rename %reg -> $reg
+  if(x.charAt(0)=='%') return "$" + x.substring(1);
+  else return x;
+}
+
+/*************************************************************************/
+%defemit(_jumplabel x){ // rename .LABEL -> $LABEL
+  if(x.charAt(0)=='.')       return "$" + x.substring(1);
+  else if (x.charAt(0)=='%') return "($" + x.substring(1) + "),0";
+  else return x;
+}
+
+/*************************************************************************/
+%defemit(_lda x y){ return x + "(" + y + ")"; }
+
+/*************************************************************************/
+%defemit(_ldw dest src) {
+  long val = Long.parseLong(src.toString());
+  long bound = (1<<15);
+
+  if(0 == val)
+    return "\tclr\t" + dest + "\n";
+  if((-bound <= val) && (val < bound))
+    return "\tmov\t" + val + "," + dest + "\n";
+  return "\tlda\t" + dest + "," + val + "\n";
+
+}
+
+/*************************************************************************/
+%defemit(_mem x){
+  int pos_p = x.indexOf('+'); /* string position of '+' */
+  int pos_m = x.indexOf('-'); /* string position of '-' */
+
+  if(pos_p<=0 && pos_m<=0 && x.charAt(0)=='$'){ /* x is register alone */
+    return "0(" + x + ")";
+  }
+  else if(pos_p<=0 && pos_m<=0) {
+    return x;
+  }
+  else if(pos_p>0 && pos_m<=0 ){ /** $reg + con ->  con($reg) **/
+    return x.substring(pos_p+1) + "(" + x.substring(0, pos_p) + ")";
+  }
+  else if(pos_p<=0 && pos_m>0 ){ /** $reg - con -> -con($reg) **/
+    return x.substring(pos_m) + "(" + x.substring(0, pos_m) + ")";
+  }
+
+  return "wrong_mem";
+}
+
+/*************************************************************************/
+%defemit(deflabel x){ ///// rename .LABEL -> $LABEL:
+  if(x.charAt(0)=='.') return "$" + x.substring(1) + ":";
+  return x + ":";
+}
+
+/*************************************************************************/
+%defemit(_static x) {
+  String name = x;
+  if(x.startsWith("string"))
+    name = "$LC" + x.substring(x.indexOf(".")+1); // "string." --> "$LC"
+  return name;
+}
+
+/*************************************************************************/
+%defemit(line x) { return "\t# line " + x; }

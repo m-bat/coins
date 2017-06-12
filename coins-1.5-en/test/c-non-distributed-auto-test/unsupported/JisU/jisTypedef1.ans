@@ -1,0 +1,11 @@
+*zp 1.500000e+00 2.500000e+00 
+*t1p 6 *t2p 7 
+str1 15 -15 
+clicksp 
+sub 
+f 10 
+sif 10 
+v1 13 
+signal 11 
+fv1 10 
+fv2 13 

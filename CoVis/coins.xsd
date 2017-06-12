@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xsd:schema version="1.0" 
+            xmlns="coins" targetNamespace="coins"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+  <xsd:element name="program">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="module" minOccurs="1" maxOccurs="unbounded"/>
+      </xsd:sequence>
+      <xsd:attribute name="name" type="xsd:string" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+
+
+
+  <xsd:element name="module">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="function" minOccurs="1" maxOccurs="unbounded"/>
+      </xsd:sequence>
+      <xsd:attribute name="name" type="xsd:string" />
+      <xsd:attribute name="src" type="xsd:string" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:element name="function">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="graph" minOccurs="1" maxOccurs="unbounded"/>
+      </xsd:sequence>
+      <xsd:attribute name="name" type="xsd:string"/>
+      <xsd:attribute name="line" type="xsd:int"/>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:element name="graph">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="node" minOccurs="1" maxOccurs="unbounded"/>
+      </xsd:sequence>
+      <xsd:attribute name="displayName" type="xsd:string" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:element name="node">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="id" minOccurs="1"/>
+        <xsd:element ref="next" minOccurs="0"/>
+        <xsd:element ref="prev" minOccurs="0"/>
+        <xsd:element ref="statement" minOccurs="1"/>
+        <xsd:element ref="info" minOccurs="1"/>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:element name="info">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="labelList" minOccurs="0" maxOccurs="unbounded"/>
+        <xsd:element ref="stringList" minOccurs="0" maxOccurs="unbounded"/>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:element name="labelList" type="labelType"/>
+  <xsd:element name="stringList" type="stringType"/>
+
+
+  <xsd:element name="id" type="labelType"/>
+  <xsd:element name="next" type="labelType"/>
+  <xsd:element name="prev" type="labelType"/>
+
+  <xsd:element name="statement">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element ref="hir" minOccurs="0"/>
+        <xsd:element ref="lir" minOccurs="0"/>
+        <xsd:element ref="hir2c" minOccurs="0"/>
+        <xsd:element ref="lir2c" minOccurs="0"/>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:element name="hir" type="stmtType"/>
+  <xsd:element name="lir" type="stmtType"/>
+  <xsd:element name="hir2c" type="stmtType"/>
+  <xsd:element name="lir2c" type="stmtType"/>
+
+  <xsd:complexType name="stmtType">
+    <xsd:sequence>
+      <xsd:element ref="exp" minOccurs="1" maxOccurs="unbounded"/>
+    </xsd:sequence>
+  </xsd:complexType>
+
+  <xsd:element name="exp">
+    <xsd:complexType>
+      <xsd:simpleContent>
+        <xsd:extension base="xsd:string">
+          <xsd:attribute name="line" type="xsd:int"/>
+        </xsd:extension>
+      </xsd:simpleContent>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:complexType name="labelType">
+    <xsd:sequence>
+      <xsd:element ref="elem" minOccurs="1" maxOccurs="unbounded"/>
+    </xsd:sequence>
+    <xsd:attribute name="displayName" type="xsd:string" use="required"/>
+  </xsd:complexType>
+
+  <xsd:complexType name="stringType">
+    <xsd:sequence>
+      <xsd:element ref="elem" minOccurs="1" maxOccurs="unbounded"/>
+    </xsd:sequence>
+    <xsd:attribute name="displayName" type="xsd:string" use="required"/>
+  </xsd:complexType>
+
+  <xsd:element name="elem" type="xsd:string"/>
+
+</xsd:schema>
